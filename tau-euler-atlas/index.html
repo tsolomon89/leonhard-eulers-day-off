@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>τ-Euler Atlas — Sin-Spoke Explorer</title>
+  <meta name="description" content="Interactive Three.js visualization of τ-Euler symmetry atlas: sin-spoke structure with 4-quadrant dimensional filtering on the complex plane.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Three.js viewport -->
+  <div id="container"></div>
+
+  <!-- HUD: top-left glass panel -->
+  <div id="hud" class="glass">
+    <div class="hud-title">
+      <span class="status-dot"></span>
+      τ-Euler Atlas
+    </div>
+    <div class="hud-row">
+      <span class="hud-key">FPS</span>
+      <span class="hud-val" id="fps-display">60</span>
+    </div>
+    <div class="hud-row">
+      <span class="hud-key">Points</span>
+      <span class="hud-val" id="node-display">—</span>
+    </div>
+    <div class="hud-row">
+      <span class="hud-key">k</span>
+      <span class="hud-val" id="k-display">—</span>
+    </div>
+    <div class="hud-row">
+      <span class="hud-key">k₁</span>
+      <span class="hud-val" id="k1-display">—</span>
+    </div>
+    <div class="hud-row">
+      <span class="hud-key">f</span>
+      <span class="hud-val" id="f-display">—</span>
+    </div>
+  </div>
+
+  <!-- Controls panel: right side -->
+  <div id="controls-panel">
+    <!-- Populated by js/controls.js -->
+  </div>
+
+  <!-- Info bar: bottom center -->
+  <div id="info-bar" class="glass">
+    Orbit to rotate · Scroll to zoom · Double-click to reset · f = k₁·e<sup>iτ<sup>k</sup></sup> · sin(n·f)·k₂
+  </div>
+
+  <!-- Three.js import map -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <!-- Application entry -->
+  <script type="module" src="js/main.js"></script>
+
+</body>
+</html>

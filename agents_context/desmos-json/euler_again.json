@@ -1,0 +1,1432 @@
+{
+  "version": 11,
+  "randomSeed": "43e569c2efcc071e22ab46bc0a23c829",
+  "graph": {
+    "viewport": {
+      "xmin": -2.9745496716483113,
+      "ymin": -2.262782428789607,
+      "xmax": 2.9745496716483113,
+      "ymax": 2.262782428789607
+    },
+    "complex": true,
+    "__v12ViewportLatexStash": {
+      "xmin": "-2.9745496716483113",
+      "xmax": "2.9745496716483113",
+      "ymin": "-2.262782428789607",
+      "ymax": "2.262782428789607"
+    }
+  },
+  "expressions": {
+    "list": [
+      {
+        "type": "expression",
+        "id": "1",
+        "color": "#000000",
+        "latex": "f=k_{1}e^{i\\tau^{k}}",
+        "hidden": true,
+        "lineWidth": "4"
+      },
+      {
+        "type": "expression",
+        "id": "69",
+        "color": "#2d70b3",
+        "latex": "k=\\frac{\\log_{l_{func}}\\left(T\\ \\frac{\\tau}{2}\\right)}{\\log_{l_{func}}\\left(\\tau\\right)}",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "21",
+        "color": "#c74440",
+        "latex": "k_{1}=\\left\\{q_{a}=0:q_{1},\\frac{\\tau}{\\frac{q}{2}\\left\\{q_{correction}=0:2,q_{correction}>0:\\left\\{d=0:1,d\\right\\}\\right\\}}\\right\\}",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "animationPeriod": 80000,
+          "min": "1"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "323",
+        "color": "#000000",
+        "latex": "q_{a}=1",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "0",
+          "max": "1",
+          "step": "1"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "50",
+        "color": "#c74440",
+        "latex": "d=\\operatorname{abs}\\left(2\\cos\\left(\\frac{\\tau}{2}T\\right)\\right)",
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "playDirection": -1,
+          "min": "1.99901312073146285",
+          "max": "1.99901312073146287"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "7",
+        "color": "#2d70b3",
+        "latex": "nf",
+        "label": "${n}",
+        "hidden": true,
+        "lines": true
+      },
+      {
+        "type": "folder",
+        "id": "290",
+        "title": "Correction Toggles"
+      },
+      {
+        "type": "expression",
+        "id": "288",
+        "folderId": "290",
+        "color": "#c74440",
+        "latex": "q_{correction}=1",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "0",
+          "max": "1",
+          "step": "1"
+        }
+      },
+      {
+        "type": "folder",
+        "id": "289",
+        "title": "Core Parameters"
+      },
+      {
+        "type": "expression",
+        "id": "11",
+        "folderId": "289",
+        "color": "#c74440",
+        "latex": "Z=710",
+        "hidden": true,
+        "slider": {
+          "min": "-710",
+          "max": "7100"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "4",
+        "folderId": "289",
+        "color": "#6042a6",
+        "latex": "T=1.9999",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "animationPeriod": 80000,
+          "min": "1.9999",
+          "max": "2"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "322",
+        "folderId": "289",
+        "color": "#6042a6",
+        "latex": "k_{1}",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "287",
+        "folderId": "289",
+        "color": "#c74440",
+        "latex": "q=q_{1}\\tau^{q_{2}}",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "42",
+        "folderId": "289",
+        "color": "#c74440",
+        "latex": "q_{1}=\\left\\{Z_{eta}=1:Z_{etaZero}\\left[Z_{etaZeroIndex}\\right],q_{1A}\\right\\}",
+        "slider": {
+          "animationPeriod": 80000,
+          "loopMode": "PLAY_ONCE"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "336",
+        "folderId": "289",
+        "color": "#388c46",
+        "latex": "Z_{eta}=0",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "0",
+          "max": "1",
+          "step": "1"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "337",
+        "folderId": "289",
+        "color": "#6042a6",
+        "latex": "q_{1A}=26.3",
+        "hidden": true,
+        "slider": {
+          "max": "71"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "335",
+        "folderId": "289",
+        "color": "#2d70b3",
+        "latex": "Z_{etaZeroIndex}=5",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "1",
+          "max": "\\operatorname{length}\\left(Z_{etaZero}\\right)",
+          "step": "1"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "334",
+        "folderId": "289",
+        "color": "#c74440",
+        "latex": "Z_{etaZero}=\\left[14.134725141734693790457251983562470270784257115699243175685567460149,21.022039638771554992628479593896902777334340524902781754629520403587,25.010857580145688763213790992562821818659549672557996672496542006745,30.424876125859513210311897530584091320181560023715440180962146036993,32.935061587739189690662368964074903488812715603517039009280003440784,40.918719012147495187398126914633254395726165962777279536161303667253,43.327073280914999519496122165406805782645668371836871446878893685521,48.005150881167159727942472749427516041686844001144425117775312519814,49.773832477672302181916784678563724057723178299676662100781955750433,52.970321477714460644147296608880990063825017888821224779900748140317,56.446247697063394804367759476706127552782264471716631845450969843958,59.347044002602353079653648674992219031098772806466669698122451754746,60.831778524609809844259901824524003802910090451219178257101348824808\\right]"
+      },
+      {
+        "type": "text",
+        "id": "316",
+        "folderId": "289",
+        "text": "something like even though when q_2 is 0 and q is integer do we get a count of spokes but also we get the same count on the log10 values for example 1.7 will give us 17 spokes just as much as 17 will. and i think in between there is a counting up and down of spokes. I should have been paying attention to the k_1 value, natural the rational divisions of tau make the number of spokes. \n\nq=0.01230425 (q_{1}=3.052072 &q_{2}=-3)\nq=0.00201342 (q_{1}=3.138011 & q_{2}=-4) (3 spokes)\nq=0.00201309 (q_{1}=3.1374845000000002&q_{2}=-4) (4spokes)\nq=0.00201288(q_{1}=3.1371689&q_{2}=-4)(5 spokes)\n\nno it is we have spokes 3 spokes a and .3 and .03.\n\nand that means to continously go from 7 to 7.1 we go from 7 spokes to 71. just the same to get to from 7 to 7.1 (71 spokes) we must pass through 7.05 which I can't count but looks like 705 spokes. however this doesn't seem true fro all n though i can be sure"
+      },
+      {
+        "type": "expression",
+        "id": "286",
+        "folderId": "289",
+        "color": "#000000",
+        "latex": "q_{2}=0",
+        "slider": {
+          "hardMax": true,
+          "max": "2",
+          "step": "1"
+        }
+      },
+      {
+        "type": "text",
+        "id": "329",
+        "text": "q_{1}=\\sin\\left(\\frac{\\pi}{4}\\right)=0.707106781187...\nq_{z}=\\operatorname{floor}\\left(\\frac{15548}{q_{1}}\\right)\n\\frac{1}{\\frac{q_{z}}{15548}}=0.707112970711\nk_{1}=0.70710678\n\n15548 was the point closest to zero for when q_{1} is equal to `e`\n\nthis seems generlly true that when q1 is some but only like 4 decimals of accuracy even when q1 is rational"
+      },
+      {
+        "type": "folder",
+        "id": "291",
+        "title": "Scaling Parameters"
+      },
+      {
+        "type": "expression",
+        "id": "20",
+        "folderId": "291",
+        "color": "#000000",
+        "latex": "k_{2}=1",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "min": "0"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "24",
+        "folderId": "291",
+        "color": "#6042a6",
+        "latex": "k_{3}=1",
+        "hidden": true,
+        "slider": {
+          "step": "1"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "292",
+        "folderId": "291",
+        "color": "#388c46",
+        "latex": "l_{base}=10",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "3",
+        "folderId": "291",
+        "color": "#388c46",
+        "latex": "l_{func}=10",
+        "hidden": true
+      },
+      {
+        "type": "folder",
+        "id": "61",
+        "title": "Integers / Prime List",
+        "hidden": true,
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "244",
+        "folderId": "61",
+        "color": "#000000",
+        "latex": "C_{a}=\\left(\\frac{710}{113\\tau}\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "245",
+        "folderId": "61",
+        "color": "#c74440",
+        "latex": "C_{b}=\\frac{1}{C_{a}}"
+      },
+      {
+        "type": "expression",
+        "id": "75",
+        "folderId": "61",
+        "color": "#c74440",
+        "latex": "n_{x}\\left(x\\right)=n+xZ",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "26",
+        "folderId": "61",
+        "color": "#c74440",
+        "latex": "n=\\left[0...Z-1\\right]"
+      },
+      {
+        "type": "expression",
+        "id": "298",
+        "folderId": "61",
+        "color": "#c74440",
+        "latex": "n_{1}=n_{x}\\left(1\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "79",
+        "folderId": "61",
+        "color": "#000000",
+        "latex": "n_{2}=n_{x}\\left(2\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "80",
+        "folderId": "61",
+        "color": "#c74440",
+        "latex": "n_{3}=n_{x}\\left(3\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "81",
+        "folderId": "61",
+        "color": "#2d70b3",
+        "latex": "n_{4}=n_{x}\\left(4\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "310",
+        "folderId": "61",
+        "color": "#2d70b3",
+        "latex": "n_{5}=n_{x}\\left(5\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "311",
+        "folderId": "61",
+        "color": "#2d70b3",
+        "latex": "n_{6}=n_{x}\\left(6\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "312",
+        "folderId": "61",
+        "color": "#2d70b3",
+        "latex": "n_{7}=n_{x}\\left(7\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "313",
+        "folderId": "61",
+        "color": "#2d70b3",
+        "latex": "n_{8}=n_{x}\\left(8\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "314",
+        "folderId": "61",
+        "color": "#2d70b3",
+        "latex": "n_{9}=n_{x}\\left(9\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "328",
+        "folderId": "61",
+        "color": "#2d70b3",
+        "latex": "n_{13}=n_{x}\\left(13\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "333",
+        "folderId": "61",
+        "color": "#c74440",
+        "latex": "n_{14}=n_{x}\\left(14\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "327",
+        "folderId": "61",
+        "color": "#c74440",
+        "latex": "n_{17}=n_{x}\\left(17\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "332",
+        "folderId": "61",
+        "color": "#000000",
+        "latex": "n_{18}=n_{x}\\left(18\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "326",
+        "folderId": "61",
+        "color": "#388c46",
+        "latex": "n_{21}=n_{x}\\left(21\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "40",
+        "folderId": "61",
+        "color": "#388c46",
+        "latex": "n_{p}=p_{join}"
+      },
+      {
+        "type": "expression",
+        "id": "128",
+        "folderId": "61",
+        "color": "#c74440",
+        "latex": "n_{pa}=\\left\\{p_{join}\\le Z:p_{join},p_{join}>Z:0\\right\\}"
+      },
+      {
+        "type": "folder",
+        "id": "59",
+        "title": "Parameter Stepping Control",
+        "hidden": true,
+        "collapsed": true
+      },
+      {
+        "type": "text",
+        "id": "58",
+        "folderId": "59",
+        "text": "s=\\frac{1}{b} is for the stepping function for fine tuning the progressing of scaling variables and seeing behavior at rational intervals "
+      },
+      {
+        "type": "expression",
+        "id": "15",
+        "folderId": "59",
+        "color": "#000000",
+        "latex": "s=\\frac{1}{b}",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "19",
+        "folderId": "59",
+        "color": "#6042a6",
+        "latex": "b=360",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "0",
+          "max": "360",
+          "step": "1"
+        }
+      },
+      {
+        "type": "folder",
+        "id": "122",
+        "title": "Sin Plots"
+      },
+      {
+        "type": "expression",
+        "id": "6",
+        "folderId": "122",
+        "color": "#c74440",
+        "latex": "\\sin\\left(nf\\right)k_{2}",
+        "label": "${n} : 0",
+        "lines": true,
+        "colorLatex": "c_{1}",
+        "lineOpacity": "l_{lineopacity}",
+        "pointSize": "8",
+        "movablePointSize": "8",
+        "lineWidth": "l_{linewidth}"
+      },
+      {
+        "type": "expression",
+        "id": "73",
+        "folderId": "122",
+        "color": "#000000",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(1\\right)\\right)f\\right)k_{2}",
+        "label": "${n_1} : 1",
+        "lines": true,
+        "colorLatex": "c_{2}",
+        "lineOpacity": "l_{lineopacity}",
+        "lineWidth": "l_{linewidth}"
+      },
+      {
+        "type": "expression",
+        "id": "123",
+        "folderId": "122",
+        "color": "#c74440",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(2\\right)\\right)f\\right)k_{2}",
+        "label": "${n_2} : 2",
+        "lines": true,
+        "colorLatex": "c_{3}",
+        "lineOpacity": "l_{lineopacity}",
+        "lineWidth": "l_{linewidth}"
+      },
+      {
+        "type": "expression",
+        "id": "124",
+        "folderId": "122",
+        "color": "#2d70b3",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(3\\right)\\right)f\\right)k_{2}",
+        "label": "${n_3} : 3",
+        "lines": true,
+        "colorLatex": "c_{4}",
+        "lineOpacity": "l_{lineopacity}",
+        "lineWidth": "l_{linewidth}"
+      },
+      {
+        "type": "expression",
+        "id": "125",
+        "folderId": "122",
+        "color": "#388c46",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(4\\right)\\right)f\\right)k_{2}",
+        "label": "${n_4} : 4",
+        "lines": true,
+        "colorLatex": "c_{5}",
+        "lineOpacity": "l_{lineopacity}",
+        "lineWidth": "1l_{linewidth}"
+      },
+      {
+        "type": "expression",
+        "id": "126",
+        "folderId": "122",
+        "color": "#6042a6",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(5\\right)\\right)f\\right)k_{2}",
+        "label": "${n_5} : 5",
+        "lines": true,
+        "colorLatex": "c_{6}",
+        "lineOpacity": "l_{lineopacity}",
+        "lineWidth": "l_{linewidth}"
+      },
+      {
+        "type": "expression",
+        "id": "127",
+        "folderId": "122",
+        "color": "#000000",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(6\\right)\\right)f\\right)k_{2}",
+        "label": "${n_6} : 6",
+        "colorLatex": "c_{9}"
+      },
+      {
+        "type": "expression",
+        "id": "129",
+        "folderId": "122",
+        "color": "#2d70b3",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(7\\right)\\right)f\\right)k_{2}",
+        "label": "${n_7} : 7",
+        "colorLatex": "c_{11}"
+      },
+      {
+        "type": "expression",
+        "id": "130",
+        "folderId": "122",
+        "color": "#388c46",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(8\\right)\\right)f\\right)k_{2}",
+        "label": "${n_8} : 8",
+        "colorLatex": "c_{12}"
+      },
+      {
+        "type": "expression",
+        "id": "131",
+        "folderId": "122",
+        "color": "#6042a6",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(9\\right)\\right)f\\right)k_{2}",
+        "label": "${n_9} : 9",
+        "colorLatex": "c_{13}"
+      },
+      {
+        "type": "expression",
+        "id": "132",
+        "folderId": "122",
+        "color": "#000000",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(10\\right)\\right)f\\right)k_{2}",
+        "label": "${n_10} : 10",
+        "colorLatex": "c_{14}"
+      },
+      {
+        "type": "expression",
+        "id": "133",
+        "folderId": "122",
+        "color": "#c74440",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(11\\right)\\right)f\\right)k_{2}",
+        "label": "${n_11} : 11",
+        "colorLatex": "c_{15}"
+      },
+      {
+        "type": "expression",
+        "id": "134",
+        "folderId": "122",
+        "color": "#2d70b3",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(12\\right)\\right)f\\right)k_{2}",
+        "label": "${n_12} : 12",
+        "colorLatex": "c_{16}"
+      },
+      {
+        "type": "expression",
+        "id": "135",
+        "folderId": "122",
+        "color": "#388c46",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(13\\right)\\right)f\\right)k_{2}",
+        "label": "${n_13} : 13",
+        "colorLatex": "c_{17}"
+      },
+      {
+        "type": "expression",
+        "id": "136",
+        "folderId": "122",
+        "color": "#c74440",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(14\\right)\\right)f\\right)k_{2}",
+        "label": "${n_14} : 14",
+        "colorLatex": "c_{18}"
+      },
+      {
+        "type": "expression",
+        "id": "137",
+        "folderId": "122",
+        "color": "#2d70b3",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(15\\right)\\right)f\\right)k_{2}",
+        "label": "${n_15} : 15",
+        "colorLatex": "c_{19}"
+      },
+      {
+        "type": "expression",
+        "id": "138",
+        "folderId": "122",
+        "color": "#388c46",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(16\\right)\\right)f\\right)k_{2}",
+        "label": "${n}",
+        "colorLatex": "c_{20}"
+      },
+      {
+        "type": "expression",
+        "id": "139",
+        "folderId": "122",
+        "color": "#388c46",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(17\\right)\\right)f\\right)k_{2}",
+        "label": "${n_17} : 17",
+        "colorLatex": "c_{21}"
+      },
+      {
+        "type": "expression",
+        "id": "140",
+        "folderId": "122",
+        "color": "#388c46",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(18\\right)\\right)f\\right)k_{2}",
+        "label": "${n_18} : 18",
+        "colorLatex": "c_{22}"
+      },
+      {
+        "type": "expression",
+        "id": "141",
+        "folderId": "122",
+        "color": "#c74440",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(19\\right)\\right)f\\right)k_{2}",
+        "label": "${n} : 19",
+        "colorLatex": "c_{23}"
+      },
+      {
+        "type": "expression",
+        "id": "142",
+        "folderId": "122",
+        "color": "#2d70b3",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(20\\right)\\right)f\\right)k_{2}",
+        "label": "${n} : 20",
+        "colorLatex": "c_{24}"
+      },
+      {
+        "type": "expression",
+        "id": "143",
+        "folderId": "122",
+        "color": "#388c46",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(21\\right)\\right)f\\right)k_{2}",
+        "label": "${n_21} : 21",
+        "colorLatex": "c_{1}"
+      },
+      {
+        "type": "expression",
+        "id": "144",
+        "folderId": "122",
+        "color": "#6042a6",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(22\\right)\\right)f\\right)k_{2}",
+        "label": "${n}",
+        "colorLatex": "c_{2}"
+      },
+      {
+        "type": "expression",
+        "id": "145",
+        "folderId": "122",
+        "color": "#000000",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(23\\right)\\right)f\\right)k_{2}",
+        "label": "${n}",
+        "colorLatex": "c_{3}"
+      },
+      {
+        "type": "expression",
+        "id": "146",
+        "folderId": "122",
+        "color": "#c74440",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(24\\right)\\right)f\\right)k_{2}",
+        "label": "${n}",
+        "colorLatex": "c_{4}"
+      },
+      {
+        "type": "expression",
+        "id": "147",
+        "folderId": "122",
+        "color": "#2d70b3",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(25\\right)\\right)f\\right)k_{2}",
+        "label": "${n}",
+        "colorLatex": "c_{5}"
+      },
+      {
+        "type": "expression",
+        "id": "148",
+        "folderId": "122",
+        "color": "#388c46",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(26\\right)\\right)f\\right)k_{2}",
+        "label": "${n}",
+        "colorLatex": "c_{6}"
+      },
+      {
+        "type": "expression",
+        "id": "149",
+        "folderId": "122",
+        "color": "#6042a6",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(27\\right)\\right)f\\right)k_{2}",
+        "label": "${n} : 27",
+        "colorLatex": "c_{7}"
+      },
+      {
+        "type": "expression",
+        "id": "34",
+        "folderId": "122",
+        "color": "#000000",
+        "latex": "\\sin\\left(n_{p}f\\right)k_{2}",
+        "label": "${n_p}",
+        "hidden": true,
+        "lines": false,
+        "pointSize": "10",
+        "movablePointSize": "10",
+        "__stashed_V12PointStyle": "PLUS"
+      },
+      {
+        "type": "folder",
+        "id": "281",
+        "title": "Point Sin Plots",
+        "hidden": true,
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "231",
+        "folderId": "281",
+        "color": "#6042a6",
+        "latex": "P=1",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "animationPeriod": 80000,
+          "loopMode": "PLAY_ONCE",
+          "min": "1",
+          "max": "104220"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "294",
+        "folderId": "281",
+        "color": "#2d70b3",
+        "latex": "\\frac{26054.000000048395}{\\tau^{2}}"
+      },
+      {
+        "type": "expression",
+        "id": "279",
+        "folderId": "281",
+        "color": "#000000",
+        "latex": "P_{1}=P\\ \\left(1+\\frac{\\tau}{Z}\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "230",
+        "folderId": "281",
+        "color": "#000000",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(P\\right)\\right)f\\right)k_{2}",
+        "label": "${n} : ${P}",
+        "pointSize": "15",
+        "movablePointSize": "15",
+        "__stashed_V12PointStyle": "STAR"
+      },
+      {
+        "type": "expression",
+        "id": "278",
+        "folderId": "281",
+        "color": "#6042a6",
+        "latex": "\\sin\\left(\\left(n_{x}\\left(P_{1}\\right)\\right)f\\right)k_{2}",
+        "showLabel": true,
+        "label": "${n} : ${P}",
+        "colorLatex": "c_{22}",
+        "__stashed_V12PointStyle": "STAR"
+      },
+      {
+        "type": "expression",
+        "id": "280",
+        "folderId": "281",
+        "color": "#c74440",
+        "latex": "E_{EqualProof}=\\operatorname{total}\\left(\\sin\\left(\\left(n_{x}\\left(P\\right)\\right)f\\right)k_{2}-\\sin\\left(\\left(n_{x}\\left(P_{1}\\right)\\right)f\\right)k_{2}\\right)",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "284",
+        "folderId": "281",
+        "color": "#388c46",
+        "latex": "n_{x}\\left(P\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "285",
+        "folderId": "281",
+        "color": "#6042a6",
+        "latex": "n_{x}\\left(P_{1}\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "257",
+        "folderId": "281",
+        "color": "#000000",
+        "latex": "\\sin\\left(ZP_{1}f\\right)k_{2}",
+        "label": "${n} : ${P}",
+        "hidden": true,
+        "pointSize": "15",
+        "movablePointSize": "15",
+        "__stashed_V12PointStyle": "STAR"
+      },
+      {
+        "type": "expression",
+        "id": "283",
+        "folderId": "281",
+        "color": "#000000",
+        "latex": "\\sin\\left(ZPf\\right)k_{2}",
+        "label": "${n} : ${P}",
+        "colorLatex": "c_{22}",
+        "pointSize": "8",
+        "movablePointSize": "8",
+        "__stashed_V12PointStyle": "STAR"
+      },
+      {
+        "type": "folder",
+        "id": "276",
+        "title": "Special Primes / N",
+        "hidden": true,
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "254",
+        "folderId": "276",
+        "color": "#000000",
+        "latex": "z=710",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "min": "0",
+          "max": "710"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "236",
+        "folderId": "276",
+        "color": "#388c46",
+        "latex": "P_{a}=\\operatorname{floor}\\left(\\frac{z}{\\tau}\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "246",
+        "folderId": "276",
+        "color": "#2d70b3",
+        "latex": "P_{a1}=\\operatorname{floor}\\left(P_{a}\\cdot\\tau\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "243",
+        "folderId": "276",
+        "color": "#6042a6",
+        "latex": "P_{b}=\\operatorname{floor}\\left(\\frac{z\\cdot104220}{\\tau}\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "247",
+        "folderId": "276",
+        "color": "#388c46",
+        "latex": "P_{b1}=\\operatorname{floor}\\left(P_{b}\\cdot\\tau\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "249",
+        "folderId": "276",
+        "color": "#000000",
+        "latex": "N_{a}=\\operatorname{ceil}\\left(P_{a}\\cdot\\tau\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "250",
+        "folderId": "276",
+        "color": "#c74440",
+        "latex": "N_{b}=\\operatorname{ceil}\\left(P_{b}\\cdot\\tau\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "252",
+        "folderId": "276",
+        "color": "#388c46",
+        "latex": "\\frac{N_{a}}{710}"
+      },
+      {
+        "type": "expression",
+        "id": "256",
+        "folderId": "276",
+        "color": "#2d70b3",
+        "latex": "\\frac{\\left(25560\\cdot2\\right)}{z}"
+      },
+      {
+        "type": "folder",
+        "id": "56",
+        "title": "Log Sin Plots",
+        "hidden": true,
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "33",
+        "folderId": "56",
+        "color": "#c74440",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(nf\\right)k_{2}\\right)",
+        "label": "${n}",
+        "pointStyle": "OPEN",
+        "colorLatex": "c_{1}",
+        "pointSize": "8",
+        "movablePointSize": "8"
+      },
+      {
+        "type": "expression",
+        "id": "74",
+        "folderId": "56",
+        "color": "#000000",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(1\\right)f\\right)k_{2}\\right)",
+        "label": "${n_1}",
+        "colorLatex": "c_{2}"
+      },
+      {
+        "type": "expression",
+        "id": "76",
+        "folderId": "56",
+        "color": "#2d70b3",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(2\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{3}"
+      },
+      {
+        "type": "expression",
+        "id": "78",
+        "folderId": "56",
+        "color": "#6042a6",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(3\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{4}"
+      },
+      {
+        "type": "expression",
+        "id": "36",
+        "folderId": "56",
+        "color": "#388c46",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(4\\right)f\\right)k_{2}\\right)",
+        "label": "${n_p}",
+        "colorLatex": "c_{5}",
+        "pointSize": "8",
+        "movablePointSize": "8"
+      },
+      {
+        "type": "expression",
+        "id": "82",
+        "folderId": "56",
+        "color": "#388c46",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(5\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{6}"
+      },
+      {
+        "type": "expression",
+        "id": "83",
+        "folderId": "56",
+        "color": "#6042a6",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(6\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{7}"
+      },
+      {
+        "type": "expression",
+        "id": "84",
+        "folderId": "56",
+        "color": "#000000",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(7\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{9}"
+      },
+      {
+        "type": "expression",
+        "id": "85",
+        "folderId": "56",
+        "color": "#c74440",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(8\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{11}"
+      },
+      {
+        "type": "expression",
+        "id": "86",
+        "folderId": "56",
+        "color": "#2d70b3",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(9\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{12}"
+      },
+      {
+        "type": "expression",
+        "id": "87",
+        "folderId": "56",
+        "color": "#388c46",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(10\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{13}"
+      },
+      {
+        "type": "expression",
+        "id": "88",
+        "folderId": "56",
+        "color": "#6042a6",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(11\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{14}"
+      },
+      {
+        "type": "expression",
+        "id": "89",
+        "folderId": "56",
+        "color": "#000000",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(12\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{15}"
+      },
+      {
+        "type": "expression",
+        "id": "90",
+        "folderId": "56",
+        "color": "#c74440",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(13\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{16}"
+      },
+      {
+        "type": "expression",
+        "id": "91",
+        "folderId": "56",
+        "color": "#2d70b3",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(14\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{17}"
+      },
+      {
+        "type": "expression",
+        "id": "92",
+        "folderId": "56",
+        "color": "#388c46",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(15\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{18}"
+      },
+      {
+        "type": "expression",
+        "id": "93",
+        "folderId": "56",
+        "color": "#6042a6",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(16\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{19}"
+      },
+      {
+        "type": "expression",
+        "id": "94",
+        "folderId": "56",
+        "color": "#000000",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(17\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{20}"
+      },
+      {
+        "type": "expression",
+        "id": "95",
+        "folderId": "56",
+        "color": "#c74440",
+        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(18\\right)f\\right)k_{2}\\right)",
+        "colorLatex": "c_{21}"
+      },
+      {
+        "type": "folder",
+        "id": "55",
+        "title": "Golden / Tau / Log Spirals",
+        "hidden": true,
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "53",
+        "folderId": "55",
+        "color": "#388c46",
+        "latex": "a=1",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "54",
+        "folderId": "55",
+        "color": "#6042a6",
+        "latex": "r\\ =ae^{\\frac{\\left(\\ln\\left(1+\\frac{\\log\\left(\\pi\\right)}{\\log\\left(\\tau\\right)}\\right)\\right)}{\\frac{\\tau}{4}}\\theta}",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "52",
+        "folderId": "55",
+        "color": "#2d70b3",
+        "latex": "r\\ =ae^{\\frac{\\left(\\ln\\left(\\frac{1+\\sqrt{5}}{2}\\right)\\right)}{\\frac{\\tau}{4}}\\theta}",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "66",
+        "folderId": "55",
+        "color": "#6042a6",
+        "latex": "r=ae^{k_{s}\\theta}",
+        "hidden": true,
+        "polarDomain": {
+          "min": "",
+          "max": "c"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "67",
+        "folderId": "55",
+        "color": "#000000",
+        "latex": "k_{s}=0.43",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "playDirection": -1,
+          "min": "0",
+          "max": ".5"
+        }
+      },
+      {
+        "type": "folder",
+        "id": "57",
+        "title": "Primes Data",
+        "hidden": true,
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "28",
+        "folderId": "57",
+        "color": "#2d70b3",
+        "latex": "p_{1}=\\left[2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97,101,103,107,109,113,127,131,137,139,149,151,157,163,167,173,179,181,191,193,197,199,211,223,227,229,233,239,241,251,257,263,269,271,277,281,283,293,307,311,313,317,331,337,347,349,353,359,367,373,379,383,389,397,401,409,419,421,431,433,439,443,449,457,461,463,467,479,487,491,499,503,509,521,523,541,547,557,563,569,571,577,587,593,599,601,607,613,617,619,631,641,643,647,653,659,661,673,677,683,691,701,709,719,727,733,739,743,751,757,761,769,773,787,797,809,811,821,823,827,829,839,853,857,859,863,877,881,883,887,907,911,919,929,937,941,947,953,967,971,977,983,991,997,1009,1013,1019,1021,1031,1033,1039,1049,1051,1061,1063,1069,1087,1091,1093,1097,1103,1109,1117,1123,1129,1151,1153,1163,1171,1181,1187,1193,1201,1213,1217,1223,1229,1231,1237,1249,1259,1277,1279,1283,1289,1291,1297,1301,1303,1307,1319,1321,1327,1361,1367,1373,1381,1399,1409,1423,1427,1429,1433,1439,1447,1451,1453,1459,1471,1481,1483,1487,1489,1493,1499,1511,1523,1531,1543,1549,1553,1559,1567,1571,1579,1583,1597,1601,1607,1609,1613,1619,1621,1627,1637,1657,1663,1667,1669,1693,1697,1699,1709,1721,1723,1733,1741,1747,1753,1759,1777,1783,1787,1789,1801,1811,1823,1831,1847,1861,1867,1871,1873,1877,1879,1889,1901,1907,1913,1931,1933,1949,1951,1973,1979,1987,1993,1997,1999,2003,2011,2017,2027,2029,2039,2053,2063,2069,2081,2083,2087,2089,2099,2111,2113,2129,2131,2137,2141,2143,2153,2161,2179,2203,2207,2213,2221,2237,2239,2243,2251,2267,2269,2273,2281,2287,2293,2297,2309,2311,2333,2339,2341,2347,2351,2357,2371,2377,2381,2383,2389,2393,2399,2411,2417,2423,2437,2441,2447,2459,2467,2473,2477,2503,2521,2531,2539,2543,2549,2551,2557,2579,2591,2593,2609,2617,2621,2633,2647,2657,2659,2663,2671,2677,2683,2687,2689,2693,2699,2707,2711,2713,2719,2729,2731,2741,2749,2753,2767,2777,2789,2791,2797,2801,2803,2819,2833,2837,2843,2851,2857,2861,2879,2887,2897,2903,2909,2917,2927,2939,2953,2957,2963,2969,2971,2999,3001,3011,3019,3023,3037,3041,3049,3061,3067,3079,3083,3089,3109,3119,3121,3137,3163,3167,3169,3181,3187,3191,3203,3209,3217,3221,3229,3251,3253,3257,3259,3271,3299,3301,3307,3313,3319,3323,3329,3331,3343,3347,3359,3361,3371,3373,3389,3391,3407,3413,3433,3449,3457,3461,3463,3467,3469,3491,3499,3511,3517,3527,3529,3533,3539,3541,3547,3557,3559,3571,3581,3583,3593,3607,3613,3617,3623,3631,3637,3643,3659,3671,3673,3677,3691,3697,3701,3709,3719,3727,3733,3739,3761,3767,3769,3779,3793,3797,3803,3821,3823,3833,3847,3851,3853,3863,3877,3881,3889,3907,3911,3917,3919,3923,3929,3931,3943,3947,3967,3989,4001,4003,4007,4013,4019,4021,4027,4049,4051,4057,4073,4079,4091,4093,4099,4111,4127,4129,4133,4139,4153,4157,4159,4177,4201,4211,4217,4219,4229,4231,4241,4243,4253,4259,4261,4271,4273,4283,4289,4297,4327,4337,4339,4349,4357,4363,4373,4391,4397,4409,4421,4423,4441,4447,4451,4457,4463,4481,4483,4493,4507,4513,4517,4519,4523,4547,4549,4561,4567,4583,4591,4597,4603,4621,4637,4639,4643,4649,4651,4657,4663,4673,4679,4691,4703,4721,4723,4729,4733,4751,4759,4783,4787,4789,4793,4799,4801,4813,4817,4831,4861,4871,4877,4889,4903,4909,4919,4931,4933,4937,4943,4951,4957,4967,4969,4973,4987,4993,4999,5003,5009,5011,5021,5023,5039,5051,5059,5077,5081,5087,5099,5101,5107,5113,5119,5147,5153,5167,5171,5179,5189,5197,5209,5227,5231,5233,5237,5261,5273,5279,5281,5297,5303,5309,5323,5333,5347,5351,5381,5387,5393,5399,5407,5413,5417,5419,5431,5437,5441,5443,5449,5471,5477,5479,5483,5501,5503,5507,5519,5521,5527,5531,5557,5563,5569,5573,5581,5591,5623,5639,5641,5647,5651,5653,5657,5659,5669,5683,5689,5693,5701,5711,5717,5737,5741,5743,5749,5779,5783,5791,5801,5807,5813,5821,5827,5839,5843,5849,5851,5857,5861,5867,5869,5879,5881,5897,5903,5923,5927,5939,5953,5981,5987,6007,6011,6029,6037,6043,6047,6053,6067,6073,6079,6089,6091,6101,6113,6121,6131,6133,6143,6151,6163,6173,6197,6199,6203,6211,6217,6221,6229,6247,6257,6263,6269,6271,6277,6287,6299,6301,6311,6317,6323,6329,6337,6343,6353,6359,6361,6367,6373,6379,6389,6397,6421,6427,6449,6451,6469,6473,6481,6491,6521,6529,6547,6551,6553,6563,6569,6571,6577,6581,6599,6607,6619,6637,6653,6659,6661,6673,6679,6689,6691,6701,6703,6709,6719,6733,6737,6761,6763,6779,6781,6791,6793,6803,6823,6827,6829,6833,6841,6857,6863,6869,6871,6883,6899,6907,6911,6917,6947,6949,6959,6961,6967,6971,6977,6983,6991,6997,7001,7013,7019,7027,7039,7043,7057,7069,7079,7103,7109,7121,7127,7129,7151,7159,7177,7187,7193,7207,7211,7213,7219,7229,7237,7243,7247,7253,7283,7297,7307,7309,7321,7331,7333,7349,7351,7369,7393,7411,7417,7433,7451,7457,7459,7477,7481,7487,7489,7499,7507,7517,7523,7529,7537,7541,7547,7549,7559,7561,7573,7577,7583,7589,7591,7603,7607,7621,7639,7643,7649,7669,7673,7681,7687,7691,7699,7703,7717,7723,7727,7741,7753,7757,7759,7789,7793,7817,7823,7829,7841,7853,7867,7873,7877,7879,7883,7901,7907,7919,7927,7933,7937,7949,7951,7963,7993,8009,8011,8017,8039,8053,8059,8069,8081,8087,8089,8093,8101,8111,8117,8123,8147,8161,8167,8171,8179,8191,8209,8219,8221,8231,8233,8237,8243,8263,8269,8273,8287,8291,8293,8297,8311,8317,8329,8353,8363,8369,8377,8387,8389,8419,8423,8429,8431,8443,8447,8461,8467,8501,8513,8521,8527,8537,8539,8543,8563,8573,8581,8597,8599,8609,8623,8627,8629,8641,8647,8663,8669,8677,8681,8689,8693,8699,8707,8713,8719,8731,8737,8741,8747,8753,8761,8779,8783,8803,8807,8819,8821,8831,8837,8839,8849,8861,8863,8867,8887,8893,8923,8929,8933,8941,8951,8963,8969,8971,8999,9001,9007,9011,9013,9029,9041,9043,9049,9059,9067,9091,9103,9109,9127,9133,9137,9151,9157,9161,9173,9181,9187,9199,9203,9209,9221,9227,9239,9241,9257,9277,9281,9283,9293,9311,9319,9323,9337,9341,9343,9349,9371,9377,9391,9397,9403,9413,9419,9421,9431,9433,9437,9439,9461,9463,9467,9473,9479,9491,9497,9511,9521,9533,9539,9547,9551,9587,9601,9613,9619,9623,9629,9631,9643,9649,9661,9677,9679,9689,9697,9719,9721,9733,9739,9743,9749,9767,9769,9781,9787,9791,9803,9811,9817,9829,9833,9839,9851,9857,9859,9871,9883,9887,9901,9907,9923,9929,9931,9941,9949,9967,9973\\right]"
+      },
+      {
+        "type": "expression",
+        "id": "30",
+        "folderId": "57",
+        "color": "#6042a6",
+        "latex": "p_{2}=\\left[10007,10009,10037,10039,10061,10067,10069,10079,10091,10093,10099,10103,10111,10133,10139,10141,10151,10159,10163,10169,10177,10181,10193,10211,10223,10243,10247,10253,10259,10267,10271,10273,10289,10301,10303,10313,10321,10331,10333,10337,10343,10357,10369,10391,10399,10427,10429,10433,10453,10457,10459,10463,10477,10487,10499,10501,10513,10529,10531,10559,10567,10589,10597,10601,10607,10613,10627,10631,10639,10651,10657,10663,10667,10687,10691,10709,10711,10723,10729,10733,10739,10753,10771,10781,10789,10799,10831,10837,10847,10853,10859,10861,10867,10883,10889,10891,10903,10909,10937,10939,10949,10957,10973,10979,10987,10993,11003,11027,11047,11057,11059,11069,11071,11083,11087,11093,11113,11117,11119,11131,11149,11159,11161,11171,11173,11177,11197,11213,11239,11243,11251,11257,11261,11273,11279,11287,11299,11311,11317,11321,11329,11351,11353,11369,11383,11393,11399,11411,11423,11437,11443,11447,11467,11471,11483,11489,11491,11497,11503,11519,11527,11549,11551,11579,11587,11593,11597,11617,11621,11633,11657,11677,11681,11689,11699,11701,11717,11719,11731,11743,11777,11779,11783,11789,11801,11807,11813,11821,11827,11831,11833,11839,11863,11867,11887,11897,11903,11909,11923,11927,11933,11939,11941,11953,11959,11969,11971,11981,11987,12007,12011,12037,12041,12043,12049,12071,12073,12097,12101,12107,12109,12113,12119,12143,12149,12157,12161,12163,12197,12203,12211,12227,12239,12241,12251,12253,12263,12269,12277,12281,12289,12301,12323,12329,12343,12347,12373,12377,12379,12391,12401,12409,12413,12421,12433,12437,12451,12457,12473,12479,12487,12491,12497,12503,12511,12517,12527,12539,12541,12547,12553,12569,12577,12583,12589,12601,12611,12613,12619,12637,12641,12647,12653,12659,12671,12689,12697,12703,12713,12721,12739,12743,12757,12763,12781,12791,12799,12809,12821,12823,12829,12841,12853,12889,12893,12899,12907,12911,12917,12919,12923,12941,12953,12959,12967,12973,12979,12983,13001,13003,13007,13009,13033,13037,13043,13049,13063,13093,13099,13103,13109,13121,13127,13147,13151,13159,13163,13171,13177,13183,13187,13217,13219,13229,13241,13249,13259,13267,13291,13297,13309,13313,13327,13331,13337,13339,13367,13381,13397,13399,13411,13417,13421,13441,13451,13457,13463,13469,13477,13487,13499,13513,13523,13537,13553,13567,13577,13591,13597,13613,13619,13627,13633,13649,13669,13679,13681,13687,13691,13693,13697,13709,13711,13721,13723,13729,13751,13757,13759,13763,13781,13789,13799,13807,13829,13831,13841,13859,13873,13877,13879,13883,13901,13903,13907,13913,13921,13931,13933,13963,13967,13997,13999,14009,14011,14029,14033,14051,14057,14071,14081,14083,14087,14107,14143,14149,14153,14159,14173,14177,14197,14207,14221,14243,14249,14251,14281,14293,14303,14321,14323,14327,14341,14347,14369,14387,14389,14401,14407,14411,14419,14423,14431,14437,14447,14449,14461,14479,14489,14503,14519,14533,14537,14543,14549,14551,14557,14561,14563,14591,14593,14621,14627,14629,14633,14639,14653,14657,14669,14683,14699,14713,14717,14723,14731,14737,14741,14747,14753,14759,14767,14771,14779,14783,14797,14813,14821,14827,14831,14843,14851,14867,14869,14879,14887,14891,14897,14923,14929,14939,14947,14951,14957,14969,14983,15013,15017,15031,15053,15061,15073,15077,15083,15091,15101,15107,15121,15131,15137,15139,15149,15161,15173,15187,15193,15199,15217,15227,15233,15241,15259,15263,15269,15271,15277,15287,15289,15299,15307,15313,15319,15329,15331,15349,15359,15361,15373,15377,15383,15391,15401,15413,15427,15439,15443,15451,15461,15467,15473,15493,15497,15511,15527,15541,15551,15559,15569,15581,15583,15601,15607,15619,15629,15641,15643,15647,15649,15661,15667,15671,15679,15683,15727,15731,15733,15737,15739,15749,15761,15767,15773,15787,15791,15797,15803,15809,15817,15823,15859,15877,15881,15887,15889,15901,15907,15913,15919,15923,15937,15959,15971,15973,15991,16001,16007,16033,16057,16061,16063,16067,16069,16073,16087,16091,16097,16103,16111,16127,16139,16141,16183,16187,16189,16193,16217,16223,16229,16231,16249,16253,16267,16273,16301,16319,16333,16339,16349,16361,16363,16369,16381,16411,16417,16421,16427,16433,16447,16451,16453,16477,16481,16487,16493,16519,16529,16547,16553,16561,16567,16573,16603,16607,16619,16631,16633,16649,16651,16657,16661,16673,16691,16693,16699,16703,16729,16741,16747,16759,16763,16787,16811,16823,16829,16831,16843,16871,16879,16883,16889,16901,16903,16921,16927,16931,16937,16943,16963,16979,16981,16987,16993,17011,17021,17027,17029,17033,17041,17047,17053,17077,17093,17099,17107,17117,17123,17137,17159,17167,17183,17189,17191,17203,17207,17209,17231,17239,17257,17291,17293,17299,17317,17321,17327,17333,17341,17351,17359,17377,17383,17387,17389,17393,17401,17417,17419,17431,17443,17449,17467,17471,17477,17483,17489,17491,17497,17509,17519,17539,17551,17569,17573,17579,17581,17597,17599,17609,17623,17627,17657,17659,17669,17681,17683,17707,17713,17729,17737,17747,17749,17761,17783,17789,17791,17807,17827,17837,17839,17851,17863,17881,17891,17903,17909,17911,17921,17923,17929,17939,17957,17959,17971,17977,17981,17987,17989,18013,18041,18043,18047,18049,18059,18061,18077,18089,18097,18119,18121,18127,18131,18133,18143,18149,18169,18181,18191,18199,18211,18217,18223,18229,18233,18251,18253,18257,18269,18287,18289,18301,18307,18311,18313,18329,18341,18353,18367,18371,18379,18397,18401,18413,18427,18433,18439,18443,18451,18457,18461,18481,18493,18503,18517,18521,18523,18539,18541,18553,18583,18587,18593,18617,18637,18661,18671,18679,18691,18701,18713,18719,18731,18743,18749,18757,18773,18787,18793,18797,18803,18839,18859,18869,18899,18911,18913,18917,18919,18947,18959,18973,18979,19001,19009,19013,19031,19037,19051,19069,19073,19079,19081,19087,19121,19139,19141,19157,19163,19181,19183,19207,19211,19213,19219,19231,19237,19249,19259,19267,19273,19289,19301,19309,19319,19333,19373,19379,19381,19387,19391,19403,19417,19421,19423,19427,19429,19433,19441,19447,19457,19463,19469,19471,19477,19483,19489,19501,19507,19531,19541,19543,19553,19559,19571,19577,19583,19597,19603,19609,19661,19681,19687,19697,19699,19709,19717,19727,19739,19751,19753,19759,19763,19777,19793,19801,19813,19819,19841,19843,19853,19861,19867,19889,19891,19913,19919,19927,19937,19949,19961,19963,19973,19979,19991,19993,19997\\right]"
+      },
+      {
+        "type": "expression",
+        "id": "41",
+        "folderId": "57",
+        "color": "#6042a6",
+        "latex": "p_{join}=\\operatorname{join}\\left(p_{1},p_{2}\\right)"
+      },
+      {
+        "type": "folder",
+        "id": "60",
+        "title": "Notes",
+        "hidden": true,
+        "collapsed": true
+      },
+      {
+        "type": "text",
+        "id": "70",
+        "folderId": "60",
+        "text": "c=2\\tau; T=2; c_{correction}=0 ; then f&k= 1"
+      },
+      {
+        "type": "text",
+        "id": "44",
+        "folderId": "60",
+        "text": "k_{1}=\\frac{\\log_{l_{base}}\\left(c\\ \\frac{\\tau}{2}\\right)}{\\log_{l_{base}}\\left(\\tau\\right)} \n\nc=1.6580222; 0.89796829= k_{1}\nc=1.883 ; 0.96720078\nc=1.973 ; 0.99260454\nc=2.183098 ; 1.04766249\n\nthis leads to find that as we scale k1 that k1 is actually k_{1}=\\frac{\\tau}{c}... though it's slightly off need d=1.9990131207314627 to correct . k_{1}=\\frac{\\tau}{\\frac{c}{2}d}"
+      },
+      {
+        "type": "text",
+        "id": "27",
+        "folderId": "60",
+        "text": "k_1 important! 1.5694444444444444"
+      },
+      {
+        "type": "text",
+        "id": "72",
+        "folderId": "60",
+        "text": "k_{1}= now has the c_{correction}=bool, \nthis not controls if we correct the fucntion but what does that mean? "
+      },
+      {
+        "type": "text",
+        "id": "228",
+        "folderId": "60",
+        "text": "Adding in groups of 710 we find that we add in 72 of those groups on the 73rd they pass each other this might be important but if we take T back to approaching integer we see no different behavior"
+      },
+      {
+        "type": "text",
+        "id": "233",
+        "folderId": "60",
+        "text": "i think the key thing is when the disk or ring of points goes from be elliptical to circular as if you go out far enough in n each strand goes from some area on the real to some point that makes a circle"
+      },
+      {
+        "type": "text",
+        "id": "261",
+        "folderId": "60",
+        "text": "P=1.00221230795*710 we've gone 1/4 around\nP=1.0044247 were back to about zero \nand indeed if we just do P*1.00221230795 as `\\sin\\left(\\left(\\left[710\\right]\\left(P1.00221230795\\right)\\right)f\\right)k_{2}` then we going around just about perfect per interger\n\nLater we find that \n\n\n\n### Examples with $Z=710$\n\n* quarter turn $\\phi=\\pi/2$: $\\Delta P=\\dfrac{\\pi/2}{710}\\approx 0.00221238938$\n* half turn $\\phi=\\pi$: $\\Delta P=\\dfrac{\\pi}{710}\\approx 0.00442477876$\n* full turn $\\phi=2\\pi$: $\\Delta P=\\dfrac{2\\pi}{710}\\approx 0.00884955751$\n\n(Those match your measured constants; your `1.00221230795` is simply $1+\\Delta P(\\pi/2)$ to machine precision.)\n\n---\n\nP_{1}=P\\ \\left(1+\\frac{\\tau}{Z}\\right)"
+      },
+      {
+        "type": "folder",
+        "id": "96",
+        "title": "colors",
+        "hidden": true,
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "97",
+        "folderId": "96",
+        "color": "#6042a6",
+        "latex": "c_{1}=\\operatorname{rgb}\\left(255,0,0\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "98",
+        "folderId": "96",
+        "color": "#000000",
+        "latex": "c_{2}=\\operatorname{rgb}\\left(255,64,0\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "99",
+        "folderId": "96",
+        "color": "#c74440",
+        "latex": "c_{3}=\\operatorname{rgb}\\left(255,128,0\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "100",
+        "folderId": "96",
+        "color": "#2d70b3",
+        "latex": "c_{4}=\\operatorname{rgb}\\left(255,192,0\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "101",
+        "folderId": "96",
+        "color": "#388c46",
+        "latex": "c_{5}=\\operatorname{rgb}\\left(225,225,0\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "102",
+        "folderId": "96",
+        "color": "#6042a6",
+        "latex": "c_{6}=\\operatorname{rgb}\\left(192,255,0\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "103",
+        "folderId": "96",
+        "color": "#000000",
+        "latex": "c_{7}=\\operatorname{rgb}\\left(128,255,0\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "104",
+        "folderId": "96",
+        "color": "#c74440",
+        "latex": "c_{8}=\\operatorname{rgb}\\left(64,255,0\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "105",
+        "folderId": "96",
+        "color": "#2d70b3",
+        "latex": "c_{9}=\\operatorname{rgb}\\left(0,255,0\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "106",
+        "folderId": "96",
+        "color": "#388c46",
+        "latex": "c_{10}=\\operatorname{rgb}\\left(0,255,64\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "107",
+        "folderId": "96",
+        "color": "#6042a6",
+        "latex": "c_{11}=\\operatorname{rgb}\\left(0,255,128\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "108",
+        "folderId": "96",
+        "color": "#000000",
+        "latex": "c_{12}=\\operatorname{rgb}\\left(0,255,192\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "109",
+        "folderId": "96",
+        "color": "#c74440",
+        "latex": "c_{13}=\\operatorname{rgb}\\left(0,255,255\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "110",
+        "folderId": "96",
+        "color": "#2d70b3",
+        "latex": "c_{14}=\\operatorname{rgb}\\left(0,192,255\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "111",
+        "folderId": "96",
+        "color": "#388c46",
+        "latex": "c_{15}=\\operatorname{rgb}\\left(0,128,255\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "112",
+        "folderId": "96",
+        "color": "#6042a6",
+        "latex": "c_{16}=\\operatorname{rgb}\\left(0,64,255\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "113",
+        "folderId": "96",
+        "color": "#000000",
+        "latex": "c_{17}=\\operatorname{rgb}\\left(0,0,255\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "114",
+        "folderId": "96",
+        "color": "#c74440",
+        "latex": "c_{18}=\\operatorname{rgb}\\left(64,0,255\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "115",
+        "folderId": "96",
+        "color": "#2d70b3",
+        "latex": "c_{19}=\\operatorname{rgb}\\left(128,0,255\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "116",
+        "folderId": "96",
+        "color": "#388c46",
+        "latex": "c_{20}=\\operatorname{rgb}\\left(192,0,255\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "117",
+        "folderId": "96",
+        "color": "#6042a6",
+        "latex": "c_{21}=\\operatorname{rgb}\\left(255,0,255\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "118",
+        "folderId": "96",
+        "color": "#000000",
+        "latex": "c_{22}=\\operatorname{rgb}\\left(255,0,192\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "119",
+        "folderId": "96",
+        "color": "#c74440",
+        "latex": "c_{23}=\\operatorname{rgb}\\left(255,0,128\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "120",
+        "folderId": "96",
+        "color": "#2d70b3",
+        "latex": "c_{24}=\\operatorname{rgb}\\left(255,0,64\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "121",
+        "folderId": "96",
+        "color": "#388c46",
+        "latex": "c_{25}=\\operatorname{rgb}\\left(255,128,128\\right)"
+      },
+      {
+        "type": "expression",
+        "id": "338",
+        "color": "#c74440",
+        "latex": "l_{linewidth}=.5"
+      },
+      {
+        "type": "expression",
+        "id": "339",
+        "color": "#2d70b3",
+        "latex": "l_{lineopacity}=.5"
+      }
+    ]
+  },
+  "includeFunctionParametersInRandomSeed": true,
+  "doNotMigrateMovablePointStyle": true
+}
