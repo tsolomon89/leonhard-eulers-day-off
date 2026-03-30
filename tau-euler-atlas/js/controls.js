@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { TAU, QUADS } from './complex.js';
-import { generateAllPoints, generateStrandPaths, generateAlphaTrace, generateTauTrace, setPointBudget, H_LABELS } from './generators.js';
+import { generateAllPoints, generateStrandPaths, generateAtlasPaths, generateAlphaTrace, generateTauTrace, setPointBudget, H_LABELS } from './generators.js';
 import {
   updatePointCloud, updateStrandPaths, updateGhostTraces, updateOrbitCircle,
   setBloomStrength, setBloomRadius, setBloomThreshold, setToneExposure, setFogDensity,
@@ -185,8 +185,9 @@ export function regenerate(isHeavy = false) {
     }
 
     if (linesEnabled && state.showLines && state.lineOpacity > 0.01) {
-      const paths = generateStrandPaths(state);
-      updateStrandPaths(paths, state.lineWidth, state.lineOpacity * state.vis.A.vals[1], true);
+      const primaryPaths = generateStrandPaths(state);
+      const atlasPaths   = generateAtlasPaths(state);
+      updateStrandPaths([...primaryPaths, ...atlasPaths], state.lineWidth, state.lineOpacity * state.vis.A.vals[1], true);
     } else {
       updateStrandPaths(null, 0, 0, false);
     }

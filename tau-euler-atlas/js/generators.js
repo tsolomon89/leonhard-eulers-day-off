@@ -360,3 +360,155 @@ export function generateStrandPaths(params) {
 
   return paths;
 }
+
+// ── Atlas path generator — connected curves per expression ────
+//
+//  For each active (gi, fIdx, hIdx, di, ci, bi) combination,
+//  iterates through n=[0...Z] per strand and outputs a connected
+//  Float32Array path segment. Mirrors the atlas overlay loop in
+//  generateAllPoints() but connection-first instead of point-first.
+
+function getEIndexForH(hIdx) {
+  if (hIdx <= 3) return 0; // F (point) geometry
+  if (hIdx <= 5) return 1; // V (vector) geometry
+  return 2;                 // C (curve) geometry
+}
+
+function computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil) {
+  const { f1, f2 } = quadF(quad, kVal);
+  const f = fIdx === 0 ? f1 : f2;
+
+  // J-scale factor (only valid in the early range)
+  const atJ = nv < kCeil && kVal !== 0 && nv !== 0;
+  const jScale = atJ ? nv / kVal : null;
+
+  // Curve variants
+  const safeNv = nv === 0 ? 0.001 : nv;
+  const { c1, c2 } = quadC(quad, kVal, safeNv);
+  const c = fIdx === 0 ? c1 : c2;
+
+  switch (hIdx) {
+    case 0: return f;
+    case 1: return kVal !== 0 ? cScl(f, kVal) : null;
+    case 2: return cScl(f, nv);
+    case 3: return cInv(f);
+    case 4: return (jScale !== null) ? cScl(f, jScale)     : null;
+    case 5: return (jScale !== null) ? cScl(f, 1 / jScale) : null;
+    case 6: return ok(c) ? c : null;
+    case 7: return (ok(c) && kVal !== 0) ? cScl(c, -kVal) : null;
+    default: return null;
+  }
+}
+
+const ATLAS_PATH_BUDGET = 200; // max connected path segments from the atlas
+
+export function generateAtlasPaths(params) {
+  const { n: Z, k, k2, numStrands, vis } = params;
+  const kVal = k;
+  const kCeil = Math.max(1, Math.floor(Math.abs(kVal) + 1));
+  const paths = [];
+
+  // Early-out if lines axis (A₂) is off — caller checks this,
+  // but guard here too
+  if (!vis.G.vals.some(v => v > 0)) return paths;
+
+  // Collect candidate combinations, sorted by totalOp descending
+  // so that if we hit the budget we keep the most visible ones
+  const combos = [];
+
+  for (let gi = 0; gi < 4; gi++) {
+    if (vis.G.vals[gi] <= 0) continue;
+    for (let fIdx = 0; fIdx < 2; fIdx++) {
+      if (vis.F.vals[fIdx] <= 0) continue;
+      for (let hIdx = 0; hIdx < 8; hIdx++) {
+        if (vis.H.vals[hIdx] <= 0) continue;
+        const eIdx = getEIndexForH(hIdx);
+        if (vis.E.vals[eIdx] <= 0) continue;
+        for (let di = 0; di < 4; di++) {
+          if (vis.D.vals[di] <= 0) continue;
+          for (let ci = 0; ci < 2; ci++) {
+            if (vis.C.vals[ci] <= 0) continue;
+            for (let bi = 0; bi < 2; bi++) {
+              if (vis.B.vals[bi] <= 0) continue;
+              const totalOp = vis.G.vals[gi] * vis.E.vals[eIdx] * vis.F.vals[fIdx]
+                * vis.H.vals[hIdx] * vis.D.vals[di] * vis.C.vals[ci] * vis.B.vals[bi];
+              if (totalOp <= 0.01) continue;
+              combos.push({ gi, fIdx, hIdx, eIdx, di, ci, bi, totalOp });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Sort highest opacity first so budget preserves the most visible paths
+  combos.sort((a, b) => b.totalOp - a.totalOp);
+
+  const perCombo = numStrands; // paths per combo = one per strand
+  let pathCount = 0;
+
+  for (const { gi, fIdx, hIdx, di, ci, bi, totalOp } of combos) {
+    if (pathCount >= ATLAS_PATH_BUDGET) break;
+
+    const quad = QUADS[gi];
+    const br = Math.min(1, totalOp * 0.85);
+    const color = [quad.color[0] * br, quad.color[1] * br, quad.color[2] * br];
+
+    for (let strand = 0; strand < numStrands; strand++) {
+      if (pathCount >= ATLAS_PATH_BUDGET) break;
+      const offset = strand * Z;
+
+      // Accumulate connected points for this (combo, strand)
+      let segment = [];
+
+      const flushSeg = () => {
+        if (segment.length >= 2) {
+          const pos = new Float32Array(segment.length * 3);
+          for (let j = 0; j < segment.length; j++) {
+            pos[j * 3]     = segment[j][0];
+            pos[j * 3 + 1] = segment[j][1];
+            pos[j * 3 + 2] = 0;
+          }
+          paths.push({
+            positions: pos,
+            color,
+            pointCount: segment.length,
+            tag: { gi, fIdx, hIdx, di, ci, bi }
+          });
+          pathCount++;
+        }
+        segment = [];
+      };
+
+      for (let i = 0; i < Z; i++) {
+        const nv = i + offset;
+
+        const baseZ = computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil);
+        if (!baseZ || !ok(baseZ)) { flushSeg(); continue; }
+
+        const nBase    = cScl(baseZ, nv);
+        const sinVal   = cSin(nBase);
+        const spoke    = cScl(sinVal, k2);
+        if (!ok(spoke)) { flushSeg(); continue; }
+
+        const afterTrig = TRIG[di].fn(spoke);
+        if (!ok(afterTrig)) { flushSeg(); continue; }
+
+        const afterLog  = ci === 0 ? afterTrig : cLog(afterTrig);
+        if (!ok(afterLog)) { flushSeg(); continue; }
+
+        const final = bi === 0 ? afterLog : cNeg(afterLog);
+        if (!ok(final) || Math.abs(final[0]) > 100 || Math.abs(final[1]) > 100) {
+          flushSeg(); continue;
+        }
+
+        segment.push(final);
+      }
+
+      flushSeg();
+    }
+  }
+
+  return paths;
+}
+
