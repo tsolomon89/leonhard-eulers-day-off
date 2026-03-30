@@ -1,225 +1,292 @@
 // ═══════════════════════════════════════════════════════════════
-//  generators.js — Mathematical point generation
-//  Applies Model2 sin-spoke formula through Model1's
-//  full dimensional pipeline (G×E×D×B×C)
+//  generators.js — Mathematical point generation (v6)
+//  τ-Euler Atlas · Leonhard Euler's Day Off
+//
+//  The driving function in τ-native form:
+//    f = k₁ · τ^{i · τ^k / ln(τ)}  ≡  k₁ · e^{iτ^k}
+//
+//  α-comparison:  α^{i · nα / ln(α)} closes at n=1  ⟺  α = τ
+//
+//  Visibility system (8-axis Desmos parity):
+//    visible(item) = A[a]·B[b]·C[c]·D[d]·E[e]·F[f]·G[g]·H[h]
+//    A = render primitive (handled in controls.js regenerate)
+//    B–H = mathematical axes (handled here in generation loop)
+//    Each group also has ptScale, lineW, lineOp multipliers.
+//    When a group has all vals=0, its entire loop is skipped.
 // ═══════════════════════════════════════════════════════════════
 
 import {
-  TAU, ZETA_ZEROS, QUADS, TRIG,
-  cExp, cLog, cSin, cCos, cTan, cScl, cNeg, cInv, cDiv, cMul,
-  cAbs, cArg, ok
+  TAU, LN_TAU, QUADS, TRIG,
+  cExp, cLog, cSin, cScl, cNeg, cInv, cTauPow, cAlphaPow, ok
 } from './complex.js';
 
-// ── Model2 core computations ──────────────────────────────────
+// ── Core τ-native computation ────────────────────────────────
 
-/** k = log_l(T·τ/2) / log_l(τ) */
-export function computeK(T, lFunc) {
-  const logL = x => Math.log(x) / Math.log(lFunc);
-  return logL(T * TAU / 2) / logL(TAU);
-}
-
-/** f = k₁ · e^{iτ^k} — base complex frequency */
 export function computeF(k1, k) {
   const tauK = Math.pow(TAU, k);
-  return cScl(cExp([0, tauK]), k1);
+  const tauNativeExp = [0, tauK / LN_TAU];
+  return cScl(cTauPow(tauNativeExp), k1);
 }
 
-/** Full k₁ derivation from q-system */
-export function computeK1(params) {
-  const { qA, q1Mode, q1A, q2, zetaIdx, qCorr, T } = params;
-  const q1 = q1Mode === 1 ? ZETA_ZEROS[zetaIdx] : q1A;
-  const q = q1 * Math.pow(TAU, q2);
-  const d = Math.abs(2 * Math.cos(TAU / 2 * T));
+// ── α-base trace (the proof) ─────────────────────────────────
 
-  let k1;
-  if (qA === 0) {
-    k1 = q1;
-  } else {
-    const corrFactor = qCorr === 0 ? 2 : (d === 0 ? 1 : d);
-    k1 = TAU / ((q / 2) * corrFactor);
+export function generateAlphaTrace(alpha, N, k) {
+  const pts = [];
+  const lnA = Math.log(alpha);
+  if (lnA === 0 || !isFinite(lnA)) return pts;
+  const alphaK = Math.pow(alpha, k);
+  for (let i = 0; i <= N; i++) {
+    const n = i / N;
+    const theta = n * alphaK / lnA;
+    const z = cAlphaPow(alpha, [0, theta]);
+    if (ok(z)) pts.push(z);
   }
-  return { k1, q, q1, d };
+  return pts;
 }
 
-// ── Model1 quadrant generators ────────────────────────────────
+export function generateTauTrace(N, k) {
+  const pts = [];
+  const tauK = Math.pow(TAU, k);
+  for (let i = 0; i <= N; i++) {
+    const n = i / N;
+    const theta = n * tauK / LN_TAU;
+    const z = cTauPow([0, theta]);
+    if (ok(z)) pts.push(z);
+  }
+  return pts;
+}
 
-/** Compute base F for a quadrant at given k (half-1 / half-2 pairs) */
+// ── Quadrant generators (τ-native form) ──────────────────────
+
 function quadF(quad, kv) {
-  const angle1 = quad.iS * Math.pow(TAU, kv);
-  const z1 = cExp([0, angle1]);
+  const theta1 = quad.iS * Math.pow(TAU, kv);
+  const z1 = cTauPow([0, theta1 / LN_TAU]);
   const f1 = quad.s === -1 ? cNeg(z1) : z1;
-
-  const angle2 = -quad.iS * Math.pow(TAU, -kv);
-  const z2 = cExp([0, angle2]);
+  const theta2 = -quad.iS * Math.pow(TAU, -kv);
+  const z2 = cTauPow([0, theta2 / LN_TAU]);
   const f2 = quad.s === -1 ? z2 : cNeg(z2);
   return { f1, f2 };
 }
 
-/** Curve variant C: uses (τ/n)^k instead of τ^k */
 function quadC(quad, kv, nv) {
   if (nv === 0) return { c1: [NaN, NaN], c2: [NaN, NaN] };
-  const angle1 = quad.iS * Math.pow(TAU / nv, kv);
-  const z1 = cExp([0, angle1]);
-  const c1 = quad.s === -1 ? cNeg(z1) : z1;
-
-  const angle2 = -quad.iS * Math.pow(TAU / nv, -kv);
-  const z2 = cExp([0, angle2]);
-  const c2 = quad.s === -1 ? z2 : cNeg(z2);
+  const theta1 = quad.iS * Math.pow(TAU / nv, kv);
+  const c1z = cTauPow([0, theta1 / LN_TAU]);
+  const c1 = quad.s === -1 ? cNeg(c1z) : c1z;
+  const theta2 = -quad.iS * Math.pow(TAU / nv, -kv);
+  const c2z = cTauPow([0, theta2 / LN_TAU]);
+  const c2 = quad.s === -1 ? c2z : cNeg(c2z);
   return { c1, c2 };
 }
 
-// ── Unified point generator ──────────────────────────────────
+// ── HSL hue → RGB ────────────────────────────────────────────
 
-/**
- * Generates all visualization points by applying the Model1 dimensional
- * pipeline to Model2's sin-spoke output.
- *
- * The pipeline is: for each quadrant G × expression E × trig D × log C × sign B:
- *   1. Compute base values from quadrant (f1/f2 halves, scaled variants, curve variants)
- *   2. Apply model2 formula: sin(n · baseZ) · k₂
- *   3. Apply trig function (id/sin/cos/tan)
- *   4. Apply log wrapping (raw/log)
- *   5. Apply sign (positive/negative)
- *   6. Output point with color from quadrant, opacity from dimension weights
- *
- * @param {Object} params - All visualization parameters
- * @returns {{ positions: Float32Array, colors: Float32Array, sizes: Float32Array, count: number }}
- */
+function hueToRGB(hue, satMul = 0.9, litAdd = 0.1) {
+  const hr = hue * 6;
+  const x = 1 - Math.abs(hr % 2 - 1);
+  let r, g, b;
+  if (hr < 1)      { r = 1; g = x; b = 0; }
+  else if (hr < 2) { r = x; g = 1; b = 0; }
+  else if (hr < 3) { r = 0; g = 1; b = x; }
+  else if (hr < 4) { r = 0; g = x; b = 1; }
+  else if (hr < 5) { r = x; g = 0; b = 1; }
+  else              { r = 1; g = 0; b = x; }
+  return [r * satMul + litAdd, g * satMul + litAdd, b * satMul + litAdd];
+}
+
+// ── Point budget ─────────────────────────────────────────────
+
+let _pointBudget = 200_000;
+export function setPointBudget(n) { _pointBudget = n; }
+
+// ── Variant labels (H group) ────────────────────────────────
+//  H0: raw f/c
+//  H1: k-scaled
+//  H2: n-scaled
+//  H3: inverted (1/f)
+//  H4: J-scaled (nv/kVal)
+//  H5: J-inv-scaled (kVal/nv)
+//  H6: c raw
+//  H7: c k-scaled / neg-k-scaled
+
+export const H_LABELS = [
+  'raw',        // H0
+  'k-scaled',   // H1
+  'n-scaled',   // H2
+  'inverted',   // H3
+  'J-scaled',   // H4
+  'J-inv',      // H5
+  'curve-raw',  // H6
+  'curve-k',    // H7
+];
+
+// ── Main generator ───────────────────────────────────────────
+//
+//  params.vis = { A, B, C, D, E, F, G, H }
+//  Each group: { vals: number[], ptScale: number, lineW: number, lineOp: number }
+//  A-group (Point/Line) is handled in controls.js regenerate() for perf skip.
+//  B–H groups are handled here in the inner generation loops.
+
 export function generateAllPoints(params) {
+  const t0 = performance.now();
   const {
-    Z, T, lFunc, k2,
-    qA, q1Mode, q1A, q2, zetaIdx, qCorr,
-    numStrands,
-    dG, dD, dE, dB, dC,
-    ptSize, lBase, showLogPlot
+    n: Z, k, k1, k2,
+    numStrands, vis, ptSize
   } = params;
 
-  const k = computeK(T, lFunc);
-  const { k1, q, q1, d } = computeK1(params);
   const f = computeF(k1, k);
   const kVal = k;
+  const kCeil = Math.max(1, Math.floor(Math.abs(kVal) + 1));
 
-  // Pre-allocate generous buffers (we'll trim at the end)
-  // Max possible points: numStrands * Z * 4quads * ~14variants * 4trig * 2log * 2sign
-  // But most dimension opacities are 0, so true count is much smaller
-  const maxPts = numStrands * Z * 4 * 20 * 4 * 2 * 2;
-  const estPts = Math.min(maxPts, 2_000_000); // cap for sanity
+  // Check if any atlas dimensions are active
+  const atlasActive = vis.G.vals.some(v => v > 0) &&
+    vis.D.vals.some(v => v > 0) && vis.E.vals.some(v => v > 0) &&
+    vis.B.vals.some(v => v > 0) && vis.C.vals.some(v => v > 0);
 
-  let positions = new Float32Array(estPts * 3);
-  let colors = new Float32Array(estPts * 3);
-  let sizes = new Float32Array(estPts);
+  // Budget: split between pure strand and atlas
+  const purebudget = Math.min(numStrands * Z * 2, _pointBudget);
+  const atlasBudget = atlasActive ? Math.min(_pointBudget - Math.min(purebudget, _pointBudget * 0.4), _pointBudget * 0.6) : 0;
+
+  const maxPts = purebudget + atlasBudget;
+  let positions = new Float32Array(maxPts * 3);
+  let colors    = new Float32Array(maxPts * 3);
+  let sizes     = new Float32Array(maxPts);
   let count = 0;
 
-  const kCeil = Math.max(1, Math.floor(kVal + 1));
-
-  // For each strand
+  // ── Pure strand points (primary sin(n·f)·k₂ visual) ────
   for (let strand = 0; strand < numStrands; strand++) {
     const offset = strand * Z;
+    const [sr, sg, sb] = hueToRGB(strand / Math.max(1, numStrands));
 
-    // For each quadrant G
-    for (let gi = 0; gi < 4; gi++) {
-      const gOpacity = dG[gi];
-      if (gOpacity <= 0) continue;
-      const quad = QUADS[gi];
+    for (let i = 0; i < Z; i++) {
+      if (count >= purebudget) break;
+      const nv = i + offset;
+      const nf = cScl(f, nv);
+      const sinNf = cSin(nf);
+      const val = cScl(sinNf, k2);
 
-      // Compute quadrant base values
-      const { f1, f2 } = quadF(quad, kVal);
+      if (!ok(val) || Math.abs(val[0]) > 100 || Math.abs(val[1]) > 100) continue;
 
-      // For each n value in this strand
-      for (let i = 0; i < Z; i++) {
-        const nv = i + offset;
-        const nIdx = i; // index within strand for J-scaling
+      const idx3 = count * 3;
+      positions[idx3] = val[0];
+      positions[idx3 + 1] = val[1];
+      positions[idx3 + 2] = 0;
+      colors[idx3] = sr;
+      colors[idx3 + 1] = sg;
+      colors[idx3 + 2] = sb;
+      sizes[count] = ptSize * 0.8;
+      count++;
+    }
+  }
 
-        // Compute curve variant
-        const { c1, c2 } = quadC(quad, kVal, nv === 0 ? 0.001 : nv);
+  // ── Atlas dimensional overlay points ────────────────────
+  //  Each item is tagged: (B, C, D, E, F, G, H)
+  //  visible(item) = Π group.vals[index]
+  //  size(item) = ptSize × Π group.ptScale
 
-        // J scaling
-        const jScale = (nIdx < kCeil && kVal !== 0) ? nv / kVal : null;
+  if (atlasActive) {
+    for (let strand = 0; strand < numStrands && count < maxPts; strand++) {
+      const offset = strand * Z;
 
-        // Build all expression variants (E dimension)
-        const variants = [];
+      for (let gi = 0; gi < 4 && count < maxPts; gi++) {
+        if (vis.G.vals[gi] <= 0) continue;
+        const quad = QUADS[gi];
+        const { f1, f2 } = quadF(quad, kVal);
 
-        // Half 1 (τ^k forms)
-        variants.push([f1, 0]);
-        if (kVal !== 0) variants.push([cScl(f1, kVal), 0]);
-        variants.push([cScl(f1, nv), 0]);
-        variants.push([cInv(f1), 0]);
-        if (jScale !== null) {
-          variants.push([cScl(f1, jScale), 1]);
-          variants.push([cScl(f1, 1 / jScale), 1]);
-        }
-        if (ok(c1)) {
-          variants.push([c1, 2]);
-          if (kVal !== 0) variants.push([cScl(c1, -kVal), 2]);
-          variants.push([cInv(c1), 2]);
-        }
+        for (let i = 0; i < Z && count < maxPts; i++) {
+          const nv = i + offset;
+          const { c1, c2 } = quadC(quad, kVal, nv === 0 ? 0.001 : nv);
+          const jScale = (i < kCeil && kVal !== 0) ? nv / kVal : null;
 
-        // Half 2 (τ^{-k} forms)
-        variants.push([f2, 0]);
-        if (kVal !== 0) variants.push([cScl(f2, kVal), 0]);
-        variants.push([cScl(f2, nv), 0]);
-        variants.push([cInv(f2), 0]);
-        if (jScale !== null) {
-          variants.push([cScl(f2, jScale), 1]);
-          variants.push([cScl(f2, 1 / jScale), 1]);
-        }
-        if (ok(c2)) {
-          variants.push([c2, 2]);
-          if (kVal !== 0) variants.push([cScl(c2, kVal), 2]);
-          variants.push([cInv(c2), 2]);
-        }
+          // Build tagged variants: [z, eIdx, fIdx, hIdx]
+          //   eIdx = E group index (0=F point, 1=V vector, 2=C curve)
+          //   fIdx = F group index (0=branch A/f1, 1=branch B/f2)
+          //   hIdx = H group index (variant type)
+          const variants = [];
 
-        // Now apply Model2 sin-spoke to each variant, then full pipeline
-        for (const [baseZ, eIdx] of variants) {
-          if (!ok(baseZ)) continue;
-          const eOp = dE[eIdx];
-          if (eOp <= 0) continue;
+          // ── Branch A (f₁) — F=0 ──
+          variants.push([f1, 0, 0, 0]);                              // H0: raw
+          if (kVal !== 0) variants.push([cScl(f1, kVal), 0, 0, 1]); // H1: k-scaled
+          variants.push([cScl(f1, nv), 0, 0, 2]);                   // H2: n-scaled
+          variants.push([cInv(f1), 0, 0, 3]);                       // H3: inverted
+          if (jScale !== null && jScale !== 0) {
+            variants.push([cScl(f1, jScale), 1, 0, 4]);             // H4: J-scaled (V)
+            variants.push([cScl(f1, 1 / jScale), 1, 0, 5]);         // H5: J-inv (V)
+          }
+          if (ok(c1)) {
+            variants.push([c1, 2, 0, 6]);                           // H6: curve raw (C)
+            if (kVal !== 0) variants.push([cScl(c1, -kVal), 2, 0, 7]); // H7: curve k (C)
+            variants.push([cInv(c1), 2, 0, 6]);                     // H6 again: curve inv
+          }
 
-          // Apply model2 formula: sin(n · baseZ) · k₂
-          const nBase = cScl(baseZ, nv);
-          const sinVal = cSin(nBase);
-          const spokePoint = cScl(sinVal, k2);
-          if (!ok(spokePoint)) continue;
+          // ── Branch B (f₂) — F=1 ──
+          variants.push([f2, 0, 1, 0]);
+          if (kVal !== 0) variants.push([cScl(f2, kVal), 0, 1, 1]);
+          variants.push([cScl(f2, nv), 0, 1, 2]);
+          variants.push([cInv(f2), 0, 1, 3]);
+          if (jScale !== null && jScale !== 0) {
+            variants.push([cScl(f2, jScale), 1, 1, 4]);
+            variants.push([cScl(f2, 1 / jScale), 1, 1, 5]);
+          }
+          if (ok(c2)) {
+            variants.push([c2, 2, 1, 6]);
+            if (kVal !== 0) variants.push([cScl(c2, kVal), 2, 1, 7]);
+            variants.push([cInv(c2), 2, 1, 6]);
+          }
 
-          // D: trig pipeline
-          for (let di = 0; di < 4; di++) {
-            if (dD[di] <= 0) continue;
-            const afterTrig = TRIG[di].fn(spokePoint);
-            if (!ok(afterTrig)) continue;
+          for (const [baseZ, eIdx, fIdx, hIdx] of variants) {
+            if (count >= maxPts) break;
+            if (!ok(baseZ)) continue;
 
-            // C: base / log
-            for (let ci = 0; ci < 2; ci++) {
-              if (dC[ci] <= 0) continue;
-              const afterLog = ci === 0 ? afterTrig : cLog(afterTrig);
-              if (!ok(afterLog)) continue;
+            // E and F filter
+            if (vis.E.vals[eIdx] <= 0) continue;
+            if (vis.F.vals[fIdx] <= 0) continue;
+            // H filter
+            if (vis.H.vals[hIdx] <= 0) continue;
 
-              // B: positive / negative
-              for (let bi = 0; bi < 2; bi++) {
-                if (dB[bi] <= 0) continue;
-                const final = bi === 0 ? afterLog : cNeg(afterLog);
+            const nBase = cScl(baseZ, nv);
+            const sinVal = cSin(nBase);
+            const spokePoint = cScl(sinVal, k2);
+            if (!ok(spokePoint)) continue;
 
-                const totalOp = gOpacity * eOp * dD[di] * dC[ci] * dB[bi];
-                if (totalOp <= 0.01) continue;
+            for (let di = 0; di < 4; di++) {
+              if (count >= maxPts) break;
+              if (vis.D.vals[di] <= 0) continue;
+              const afterTrig = TRIG[di].fn(spokePoint);
+              if (!ok(afterTrig)) continue;
 
-                // Bounds check
-                if (Math.abs(final[0]) > 100 || Math.abs(final[1]) > 100) continue;
+              for (let ci = 0; ci < 2; ci++) {
+                if (count >= maxPts) break;
+                if (vis.C.vals[ci] <= 0) continue;
+                const afterLog = ci === 0 ? afterTrig : cLog(afterTrig);
+                if (!ok(afterLog)) continue;
 
-                // Emit point
-                if (count >= estPts) break;
+                for (let bi = 0; bi < 2; bi++) {
+                  if (count >= maxPts) break;
+                  if (vis.B.vals[bi] <= 0) continue;
+                  const final = bi === 0 ? afterLog : cNeg(afterLog);
 
-                const idx3 = count * 3;
-                positions[idx3]     = final[0];     // Re → X
-                positions[idx3 + 1] = final[1];     // Im → Y
-                positions[idx3 + 2] = 0;            // flat complex plane
+                  // Product of all group opacities
+                  const totalOp = vis.G.vals[gi] * vis.E.vals[eIdx] * vis.F.vals[fIdx]
+                    * vis.H.vals[hIdx] * vis.D.vals[di] * vis.C.vals[ci] * vis.B.vals[bi];
+                  if (totalOp <= 0.01) continue;
+                  if (Math.abs(final[0]) > 100 || Math.abs(final[1]) > 100) continue;
 
-                // Color from quadrant, modulated by opacity
-                const brightness = Math.min(1, totalOp * 0.8);
-                colors[idx3]     = quad.color[0] * brightness;
-                colors[idx3 + 1] = quad.color[1] * brightness;
-                colors[idx3 + 2] = quad.color[2] * brightness;
+                  // Product of all group ptScale multipliers
+                  const ptMul = vis.G.ptScale * vis.E.ptScale * vis.F.ptScale
+                    * vis.H.ptScale * vis.D.ptScale * vis.C.ptScale * vis.B.ptScale;
 
-                sizes[count] = ptSize * (0.6 + Math.random() * 0.4);
-                count++;
+                  const idx3 = count * 3;
+                  positions[idx3] = final[0];
+                  positions[idx3 + 1] = final[1];
+                  positions[idx3 + 2] = 0;
+                  const br = Math.min(1, totalOp * 0.8);
+                  colors[idx3] = quad.color[0] * br;
+                  colors[idx3 + 1] = quad.color[1] * br;
+                  colors[idx3 + 2] = quad.color[2] * br;
+                  sizes[count] = ptSize * ptMul * (0.5 + Math.random() * 0.3);
+                  count++;
+                }
               }
             }
           }
@@ -228,98 +295,32 @@ export function generateAllPoints(params) {
     }
   }
 
-  // Also generate the "pure model2" strand points (the sin-spoke without atlas pipeline)
-  // These are the primary visual — the atlas pipeline adds dimensional overlays
-  const pureF = f;
-  for (let strand = 0; strand < numStrands; strand++) {
-    const offset = strand * Z;
-    // Rainbow hue for this strand
-    const hue = (strand / Math.max(1, numStrands));
-    const hr = hue * 6;
-    const hx = 1 - Math.abs(hr % 2 - 1);
-    let sr, sg, sb;
-    if (hr < 1)      { sr = 1; sg = hx; sb = 0; }
-    else if (hr < 2) { sr = hx; sg = 1; sb = 0; }
-    else if (hr < 3) { sr = 0; sg = 1; sb = hx; }
-    else if (hr < 4) { sr = 0; sg = hx; sb = 1; }
-    else if (hr < 5) { sr = hx; sg = 0; sb = 1; }
-    else              { sr = 1; sg = 0; sb = hx; }
-    // Boost saturation/lightness
-    sr = sr * 0.9 + 0.1;
-    sg = sg * 0.9 + 0.1;
-    sb = sb * 0.9 + 0.1;
+  const computeMs = performance.now() - t0;
 
-    for (let i = 0; i < Z; i++) {
-      const nv = i + offset;
-      const nf = cScl(pureF, nv);
-      const sinNf = cSin(nf);
-      const val = cScl(sinNf, k2);
-
-      if (!ok(val)) continue;
-      if (Math.abs(val[0]) > 100 || Math.abs(val[1]) > 100) continue;
-      if (count >= estPts) break;
-
-      const idx3 = count * 3;
-      positions[idx3]     = val[0];
-      positions[idx3 + 1] = val[1];
-      positions[idx3 + 2] = 0;
-
-      colors[idx3]     = sr;
-      colors[idx3 + 1] = sg;
-      colors[idx3 + 2] = sb;
-
-      sizes[count] = ptSize * 0.8;
-      count++;
-
-      // Optional log overlay
-      if (showLogPlot) {
-        const lg = cLog(val);
-        const scaled = cScl(lg, 1 / Math.log(lBase));
-        if (ok(scaled) && Math.abs(scaled[0]) < 100 && Math.abs(scaled[1]) < 100) {
-          if (count < estPts) {
-            const li3 = count * 3;
-            positions[li3]     = scaled[0];
-            positions[li3 + 1] = scaled[1];
-            positions[li3 + 2] = 0;
-            colors[li3]     = sr * 0.4;
-            colors[li3 + 1] = sg * 0.4;
-            colors[li3 + 2] = sb * 0.4;
-            sizes[count] = ptSize * 0.5;
-            count++;
-          }
-        }
-      }
-    }
-  }
-
-  // Trim to actual count
   return {
-    positions: positions.slice(0, count * 3),
-    colors: colors.slice(0, count * 3),
-    sizes: sizes.slice(0, count),
+    positions: positions.subarray(0, count * 3),
+    colors: colors.subarray(0, count * 3),
+    sizes: sizes.subarray(0, count),
     count,
-    // Expose computed values for HUD
-    meta: { k, k1, f, q: q1 * Math.pow(TAU, q2), d, q1 }
+    meta: { k, k1, f, computeMs },
+    budget: _pointBudget
   };
 }
 
-/**
- * Generate line segments for model2's strand connectivity.
- * Returns pairs of points for THREE.LineSegments.
- */
-export function generateLineSegments(params) {
-  const { Z, T, lFunc, k2, numStrands } = params;
-  const k = computeK(T, lFunc);
-  const { k1 } = computeK1(params);
+// ── Strand paths for Line2 rendering ─────────────────────────
+
+export function generateStrandPaths(params) {
+  const { n: Z, k, k1, k2, numStrands } = params;
   const f = computeF(k1, k);
 
-  const segments = [];
+  const paths = [];
 
   for (let strand = 0; strand < numStrands; strand++) {
     const offset = strand * Z;
     const hue = strand / Math.max(1, numStrands);
+    const [r, g, b] = hueToRGB(hue);
 
-    let prev = null;
+    const allPts = [];
     for (let i = 0; i < Z; i++) {
       const nv = i + offset;
       const nf = cScl(f, nv);
@@ -327,20 +328,35 @@ export function generateLineSegments(params) {
       const val = cScl(sinNf, k2);
 
       if (!ok(val) || Math.abs(val[0]) > 100 || Math.abs(val[1]) > 100) {
-        prev = null;
-        continue;
+        allPts.push(null);
+      } else {
+        allPts.push(val);
       }
-
-      if (prev) {
-        segments.push({
-          x1: prev[0], y1: prev[1],
-          x2: val[0],  y2: val[1],
-          hue
-        });
-      }
-      prev = val;
     }
+
+    let segment = [];
+    const flushSegment = () => {
+      if (segment.length >= 2) {
+        const pos = new Float32Array(segment.length * 3);
+        for (let j = 0; j < segment.length; j++) {
+          pos[j * 3] = segment[j][0];
+          pos[j * 3 + 1] = segment[j][1];
+          pos[j * 3 + 2] = 0;
+        }
+        paths.push({ strandIdx: strand, positions: pos, color: [r, g, b], pointCount: segment.length });
+      }
+      segment = [];
+    };
+
+    for (let i = 0; i < allPts.length; i++) {
+      if (allPts[i]) {
+        segment.push(allPts[i]);
+      } else {
+        flushSegment();
+      }
+    }
+    flushSegment();
   }
 
-  return segments;
+  return paths;
 }

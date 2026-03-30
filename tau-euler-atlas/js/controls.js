@@ -1,461 +1,626 @@
 // ═══════════════════════════════════════════════════════════════
-//  controls.js — UI state management & DOM control binding
-//  τ-Euler Atlas · Three.js Edition
+//  controls.js — Unified UI with Polymorphic Builder & Portable Animation
+//  τ-Euler Atlas · Leonhard Euler's Day Off
 // ═══════════════════════════════════════════════════════════════
 
-import { TAU, ZETA_ZEROS, QUADS } from './complex.js';
-import { generateAllPoints, generateLineSegments } from './generators.js';
+import { TAU, QUADS } from './complex.js';
+import { generateAllPoints, generateStrandPaths, generateAlphaTrace, generateTauTrace, setPointBudget, H_LABELS } from './generators.js';
 import {
-  updatePointCloud, updateLines,
-  setBloomStrength, setBloomRadius, resetCamera
+  updatePointCloud, updateStrandPaths, updateGhostTraces, updateOrbitCircle,
+  setBloomStrength, setBloomRadius, setBloomThreshold, setToneExposure, setFogDensity,
+  resetCamera, captureScreenshot,
+  setExternalUpdate, cinematic, setStarVisibility, setStarOpacity
 } from './scene.js';
+import { animation } from './animation.js';
+import {
+  getTheme, getRenderMode, getViewMode, isCollapsed,
+  setTheme, setRenderMode, setViewMode, toggleCollapse,
+  isPerformance
+} from './modes.js';
+
+// ── Visibility group factory ─────────────────────────────────
+
+function visGroup(vals, defaults = {}) {
+  return {
+    vals: [...vals],
+    ptScale: defaults.ptScale ?? 1,
+    lineW: defaults.lineW ?? 1,
+    lineOp: defaults.lineOp ?? 1,
+  };
+}
 
 // ── State ────────────────────────────────────────────────────
-const state = {
-  // Core (Model2)
-  Z: 710,
-  T: 1.9999,
-  lFunc: 10,
-  lBase: 10,
-  k2: 1,
 
-  // q system
-  qA: 1,
-  q1Mode: 0,
-  q1A: 26.3,
-  q2: 0,
-  zetaIdx: 0,
-  qCorr: 1,
-
-  // Strands
+export const state = {
+  n: 710, k: 1, k1: 1, k2: 1,
+  alpha: TAU, showAlpha: true,
   numStrands: 6,
-  showLogPlot: false,
-
-  // Rendering
-  lineWidth: 0.8,
-  lineOpacity: 0.5,
-  ptSize: 1.5,
-  ptOpacity: 0.7,
-
-  // Stepping
-  stepB: 360,
-
-  // Bloom
+  showLines: true, lineWidth: 2.0, lineOpacity: 0.5, ptSize: 1.5, ptOpacity: 0.7,
+  // Bloom & post-processing
   bloomStrength: 0.45,
+  bloomRadius: 0.45,
+  bloomThreshold: 0.8,
+  toneExposure: 1.05,
+  fogDensity: 0.0008,
 
-  // Dimensions (Model1)
-  dG: [1, 0, 0, 0],       // Quadrants: only RED active by default
-  dD: [1, 0, 0, 0],       // Trig: only identity
-  dE: [1, 0, 0],           // Expression: only F(point)
-  dB: [1, 0],              // Sign: only positive
-  dC: [1, 0],              // Log: only raw
+  vis: {
+    A: visGroup([1, 1]),              
+    B: visGroup([1, 0]),              
+    C: visGroup([1, 0]),              
+    D: visGroup([1, 0, 0, 0]),        
+    E: visGroup([1, 0, 0]),           
+    F: visGroup([1, 1]),              
+    G: visGroup([1, 0, 0, 0]),        
+    H: visGroup([1, 1, 1, 1, 1, 1, 1, 1]), 
+  },
 };
+
+const GROUP_META = {
+  A: { name: 'A: Render Primitive', labels: ['A₁: Points', 'A₂: Lines'], colors: [null, null] },
+  B: { name: 'B: Sign Family', labels: ['B₁: Positive (+f)', 'B₂: Negative (−f)'], colors: [null, null] },
+  C: { name: 'C: Representation', labels: ['C₁: Base (raw)', 'C₂: Log-wrapped'], colors: [null, null] },
+  D: { name: 'D: Transform', labels: ['D₁: identity', 'D₂: sin', 'D₃: cos', 'D₄: tan'], colors: [null, null, null, null] },
+  E: { name: 'E: Geometry', labels: ['E₁: F (point)', 'E₂: V (vector)', 'E₃: C (curve)'], colors: [null, null, null] },
+  F: { name: 'F: Branch', labels: ['F₁: Branch A (f₁)', 'F₂: Branch B (f₂)'], colors: [null, null] },
+  G: { name: 'G: Color Family', labels: ['G₁: Red', 'G₂: Green', 'G₃: Blue', 'G₄: Purple'], colors: [QUADS[0].hex, QUADS[1].hex, QUADS[2].hex, QUADS[3].hex] },
+  H: { name: 'H: Variant', labels: H_LABELS.map((l, i) => `H${i}: ${l}`), colors: Array(8).fill(null) },
+};
+
+// ── Regenerate ───────────────────────────────────────────────
 
 let regenerateTimeout = null;
 
-// ── Regenerate on state change ───────────────────────────────
-function regenerate() {
-  // Debounce for rapid slider changes
+export function regenerate(isHeavy = false) {
   clearTimeout(regenerateTimeout);
+  const delay = isHeavy ? 50 : 16;
+
   regenerateTimeout = setTimeout(() => {
-    const data = generateAllPoints(state);
-    updatePointCloud(data);
+    setPointBudget(isPerformance() ? 50_000 : 200_000);
 
-    // Lines
-    if (state.lineOpacity > 0.01) {
-      const segs = generateLineSegments(state);
-      updateLines(segs, state.lineWidth, state.lineOpacity);
+    const pointsEnabled = state.vis.A.vals[0] > 0;
+    const linesEnabled  = state.vis.A.vals[1] > 0;
+
+    if (pointsEnabled) {
+      const data = generateAllPoints(state);
+      updatePointCloud(data, state.ptSize, state.ptOpacity * state.vis.A.vals[0]);
+      if (data.meta) {
+        const m = data.meta;
+        setText('k-display', m.k.toFixed(6));
+        setText('k1-display', m.k1.toFixed(6));
+        setText('f-display', `(${m.f[0].toFixed(3)}, ${m.f[1].toFixed(3)}i)`);
+        setText('compute-display', `${m.computeMs.toFixed(0)}ms`);
+        setText('budget-display', `${data.count.toLocaleString()} / ${data.budget.toLocaleString()}`);
+      }
     } else {
-      updateLines(null, 0, 0);
+      updatePointCloud({ positions: new Float32Array(0), colors: new Float32Array(0), sizes: new Float32Array(0), count: 0 }, 0, 0);
     }
 
-    // Update HUD
-    if (data.meta) {
-      const m = data.meta;
-      const kDisp = document.getElementById('k-display');
-      const k1Disp = document.getElementById('k1-display');
-      const fDisp = document.getElementById('f-display');
-      if (kDisp) kDisp.textContent = m.k.toFixed(6);
-      if (k1Disp) k1Disp.textContent = m.k1.toFixed(6);
-      if (fDisp) fDisp.textContent = `(${m.f[0].toFixed(3)}, ${m.f[1].toFixed(3)}i)`;
+    if (linesEnabled && state.showLines && state.lineOpacity > 0.01) {
+      const paths = generateStrandPaths(state);
+      updateStrandPaths(paths, state.lineWidth, state.lineOpacity * state.vis.A.vals[1], true);
+    } else {
+      updateStrandPaths(null, 0, 0, false);
     }
-  }, 16);
+
+    const tauTrace = generateTauTrace(256, state.k);
+    const alphaNotTau = Math.abs(state.alpha - TAU) > 0.001;
+    const alphaTrace = alphaNotTau ? generateAlphaTrace(state.alpha, 256, state.k) : null;
+    updateGhostTraces(tauTrace, alphaTrace, state.showAlpha && alphaNotTau);
+    updateOrbitCircle(state.k);
+
+    const stepsToClose = (TAU / state.alpha).toFixed(4);
+    setText('closure-display', alphaNotTau ? `α: ${stepsToClose} steps` : 'α = τ → 1 step = 1 turn');
+  }, delay);
 }
 
-// ── Build control panel DOM ──────────────────────────────────
-
-function createSection(title) {
-  const sec = document.createElement('div');
-  sec.className = 'ctrl-section';
-
-  const header = document.createElement('div');
-  header.className = 'ctrl-section-header';
-  header.textContent = title;
-
-  const body = document.createElement('div');
-  body.className = 'ctrl-section-body';
-
-  // Collapsible
-  header.addEventListener('click', () => {
-    body.classList.toggle('collapsed');
-    header.classList.toggle('collapsed');
-  });
-
-  sec.appendChild(header);
-  sec.appendChild(body);
-  return { sec, body };
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
 }
 
-function createSlider(parent, label, key, min, max, step, fmt) {
-  const row = document.createElement('div');
-  row.className = 'slider-row';
+// ── Polymorphic UI Builder ───────────────────────────────────
 
-  const lbl = document.createElement('span');
-  lbl.className = 'slider-label';
-  lbl.textContent = label;
-
-  const input = document.createElement('input');
-  input.type = 'range';
-  input.min = min;
-  input.max = max;
-  input.step = step;
-  input.value = state[key];
-  input.className = 'slider-input';
-
-  const val = document.createElement('span');
-  val.className = 'slider-value';
-  const formatVal = () => {
-    if (fmt) return fmt(parseFloat(input.value));
-    const v = parseFloat(input.value);
-    return Number.isInteger(step) || step >= 1 ? v : v.toFixed(Math.max(1, -Math.floor(Math.log10(step))));
-  };
-  val.textContent = formatVal();
-
-  input.addEventListener('input', () => {
-    state[key] = parseFloat(input.value);
-    val.textContent = formatVal();
-    regenerate();
-  });
-
-  row.appendChild(lbl);
-  row.appendChild(input);
-  row.appendChild(val);
-  parent.appendChild(row);
-
-  return input;
-}
-
-function createDimSlider(parent, label, getter, setter, color) {
-  const row = document.createElement('div');
-  row.className = 'dim-slider-row';
-
-  if (color) {
-    const dot = document.createElement('span');
-    dot.className = 'dim-dot';
-    dot.style.background = color;
-    dot.style.opacity = getter();
-    row.appendChild(dot);
-    // Update dot opacity on change
-    row._dot = dot;
+class UIBuilder {
+  constructor(container) {
+    this.container = container;
+    this.currentBody = container;
+    this.activeChildWrapper = null;
   }
 
-  const lbl = document.createElement('span');
-  lbl.className = 'dim-label';
-  lbl.textContent = label;
-
-  const input = document.createElement('input');
-  input.type = 'range';
-  input.min = 0;
-  input.max = 1;
-  input.step = 0.05;
-  input.value = getter();
-  input.className = 'slider-input';
-
-  const val = document.createElement('span');
-  val.className = 'slider-value';
-  val.textContent = getter().toFixed(1);
-
-  input.addEventListener('input', () => {
-    setter(parseFloat(input.value));
-    val.textContent = parseFloat(input.value).toFixed(1);
-    if (row._dot) row._dot.style.opacity = parseFloat(input.value);
-    regenerate();
-  });
-
-  row.appendChild(lbl);
-  row.appendChild(input);
-  row.appendChild(val);
-  parent.appendChild(row);
-}
-
-function createToggle(parent, label, key) {
-  const btn = document.createElement('button');
-  btn.className = 'toggle-pill' + (state[key] ? ' active' : '');
-  btn.innerHTML = `<span class="pill-dot"></span>${label}`;
-
-  btn.addEventListener('click', () => {
-    state[key] = !state[key];
-    btn.classList.toggle('active', state[key]);
-    regenerate();
-  });
-
-  parent.appendChild(btn);
-  return btn;
-}
-
-function createToggleValue(parent, label, key, value) {
-  const btn = document.createElement('button');
-  btn.className = 'toggle-pill' + (state[key] === value ? ' active' : '');
-  btn.innerHTML = `<span class="pill-dot"></span>${label}`;
-
-  btn.addEventListener('click', () => {
-    state[key] = value;
-    // Deactivate siblings
-    parent.querySelectorAll('.toggle-pill').forEach(b => {
-      b.classList.remove('active');
+  section(title, startCollapsed = false) {
+    const sec = document.createElement('div');
+    sec.className = 'accordion-panel';
+    const header = document.createElement('div');
+    header.className = 'accordion-header' + (startCollapsed ? ' collapsed' : '');
+    header.textContent = title;
+    const body = document.createElement('div');
+    body.className = 'accordion-body' + (startCollapsed ? ' collapsed' : '');
+    
+    header.addEventListener('click', () => {
+      body.classList.toggle('collapsed');
+      header.classList.toggle('collapsed');
     });
-    btn.classList.add('active');
-    regenerate();
-  });
+    
+    sec.appendChild(header);
+    sec.appendChild(body);
+    this.container.appendChild(sec);
+    this.currentBody = body;
+    this.activeChildWrapper = null;
+    return this;
+  }
 
-  parent.appendChild(btn);
-  return btn;
+  childSection(title, startCollapsed = true) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'accordion-child-panel';
+    const header = document.createElement('div');
+    header.className = 'accordion-child-header' + (startCollapsed ? ' collapsed' : '');
+    header.textContent = title;
+    const body = document.createElement('div');
+    body.className = 'accordion-child-body' + (startCollapsed ? ' collapsed' : '');
+    
+    header.addEventListener('click', (e) => {
+      e.stopPropagation();
+      body.classList.toggle('collapsed');
+      header.classList.toggle('collapsed');
+    });
+    
+    wrapper.appendChild(header);
+    wrapper.appendChild(body);
+    this.currentBody.appendChild(wrapper);
+    this.activeChildWrapper = body;
+    return this;
+  }
+
+  _getParent() {
+    return this.activeChildWrapper || this.currentBody;
+  }
+
+  // Polymorphic slider supporting Portable Scroll-Animation NumberParam binding
+  slider(label, obj, key, min, max, step, props = {}) {
+    const { index = null, isHeavy = false, fmt, color, onChange } = props;
+    const parent = this._getParent();
+    
+    // Register param for global playback targeting
+    const link = animation.registerLink(obj, key, index);
+    
+    const row = document.createElement('div');
+    row.className = 'slider-row anim-ready';
+    
+    // Link Toggle
+    const linkBtn = document.createElement('button');
+    linkBtn.className = 'link-toggle';
+    linkBtn.innerHTML = '⚯'; // Link icon
+    linkBtn.title = 'Link to animation playback';
+    
+    if (color) {
+      const dot = document.createElement('span');
+      dot.className = 'dim-dot';
+      dot.style.background = color;
+      dot.style.opacity = link.baseValue;
+      row.appendChild(dot);
+      row._dot = dot;
+    }
+    
+    const lbl = document.createElement('span');
+    lbl.className = 'slider-label';
+    lbl.textContent = label;
+
+    const trackWrap = document.createElement('div');
+    trackWrap.className = 'slider-track-wrap';
+
+    // Base value input
+    const inputStr = '<input type="range" class="slider-input base-thumb" min="'+min+'" max="'+max+'" step="'+step+'">';
+    trackWrap.innerHTML = inputStr;
+    const inputBase = trackWrap.querySelector('.base-thumb');
+    inputBase.value = link.baseValue;
+    
+    // Target value input (for animation)
+    const inputTarget = document.createElement('input');
+    inputTarget.type = 'range'; inputTarget.className = 'slider-input target-thumb hidden';
+    inputTarget.min = min; inputTarget.max = max; inputTarget.step = step;
+    trackWrap.appendChild(inputTarget);
+    
+    const valSpan = document.createElement('span');
+    valSpan.className = 'slider-value';
+    
+    const formatVal = (v) => {
+      if (fmt) return fmt(v);
+      return Number.isInteger(step) || step >= 1 ? v : v.toFixed(Math.max(1, -Math.floor(Math.log10(step))));
+    };
+
+    const updateUI = () => {
+      // Sync internal engine outputs to the DOM
+      const targetVal = obj === state && key === 'bloomStrength' ? state.bloomStrength : (index !== null ? obj[key][index] : obj[key]);
+      inputBase.value = targetVal;
+      valSpan.textContent = formatVal(parseFloat(targetVal));
+      if (row._dot) row._dot.style.opacity = targetVal;
+      linkBtn.classList.toggle('active', link.isLinked);
+      if (link.endValue !== null) {
+        inputTarget.classList.remove('hidden');
+        inputTarget.value = link.endValue;
+      } else {
+        inputTarget.classList.add('hidden');
+      }
+    };
+    updateUI();
+    
+    // Interaction Handlers (Authoring Semantic Contract)
+    const handleInput = (e, isTarget) => {
+      const v = parseFloat(e.target.value);
+      if (isTarget) {
+        link.endValue = v;
+      } else {
+        if (e.shiftKey) {
+           link.endValue = v;
+           e.target.value = link.baseValue; // Reject shift drag on base thumb visually
+        } else {
+           link.baseValue = v;
+           if (index !== null) obj[key][index] = v;
+           else obj[key] = v;
+        }
+      }
+      
+      if (onChange) onChange(v);
+      updateUI();
+      regenerate(isHeavy);
+    };
+
+    inputBase.addEventListener('input', e => handleInput(e, false));
+    inputTarget.addEventListener('input', e => handleInput(e, true));
+
+    linkBtn.addEventListener('click', () => {
+      link.isLinked = !link.isLinked;
+      if (link.isLinked && link.endValue === null) {
+         link.endValue = Math.min(max, link.baseValue + (max - min) * 0.2); // Default target offset
+      }
+      if (!link.isLinked) link.endValue = null; // Clear intent
+      updateUI();
+    });
+
+    // Store updateUI on the link so buildControls can batch-register after all sliders are created
+    link._updateUI = updateUI;
+
+    row.appendChild(linkBtn);
+    row.appendChild(lbl);
+    row.appendChild(trackWrap);
+    row.appendChild(valSpan);
+    parent.appendChild(row);
+    
+    return this;
+  }
+
+  toggle(label, obj, key, onChange) {
+    const parent = this._getParent();
+    const btn = document.createElement('button');
+    btn.className = 'toggle-pill ctrl-interactive' + (obj[key] ? ' active' : '');
+    btn.innerHTML = `<span class="pill-dot"></span>${label}`;
+    btn.addEventListener('click', () => {
+      obj[key] = !obj[key];
+      btn.classList.toggle('active', obj[key]);
+      if (onChange) onChange(obj[key]);
+      regenerate();
+    });
+    parent.appendChild(btn);
+    return this;
+  }
+
+  modeToggle(label, getter, setter, valueA, valueB, labelA, labelB) {
+    const parent = this._getParent();
+    const row = document.createElement('div');
+    row.className = 'mode-toggle-row';
+    const lbl = document.createElement('span');
+    lbl.className = 'mode-label';
+    lbl.textContent = label;
+    row.appendChild(lbl);
+
+    const group = document.createElement('div');
+    group.className = 'toggle-group-inline';
+
+    const btnA = document.createElement('button');
+    btnA.className = 'toggle-pill ctrl-interactive' + (getter() === valueA ? ' active' : '');
+    btnA.innerHTML = `<span class="pill-dot"></span>${labelA}`;
+
+    const btnB = document.createElement('button');
+    btnB.className = 'toggle-pill ctrl-interactive' + (getter() === valueB ? ' active' : '');
+    btnB.innerHTML = `<span class="pill-dot"></span>${labelB}`;
+
+    btnA.addEventListener('click', () => { setter(valueA); btnA.classList.add('active'); btnB.classList.remove('active'); regenerate(); });
+    btnB.addEventListener('click', () => { setter(valueB); btnB.classList.add('active'); btnA.classList.remove('active'); regenerate(); });
+
+    group.appendChild(btnA); group.appendChild(btnB);
+    row.appendChild(group);
+    parent.appendChild(row);
+    return this;
+  }
+
+  presetGroup(buttons) {
+    const parent = this._getParent();
+    const row = document.createElement('div');
+    row.className = 'preset-row';
+    buttons.forEach(b => {
+      const btn = document.createElement('button');
+      btn.className = 'preset-btn ctrl-interactive';
+      btn.textContent = b.label;
+      btn.addEventListener('click', () => {
+        b.action();
+        regenerate();
+        buildControls(); // Rebuild UI state fully
+      });
+      row.appendChild(btn);
+    });
+    parent.appendChild(row);
+    return this;
+  }
+
+  info(htmlContent) {
+    const parent = this._getParent();
+    const div = document.createElement('div');
+    div.className = 'ctrl-info';
+    div.innerHTML = htmlContent;
+    parent.appendChild(div);
+    return this;
+  }
+
+  html(htmlContent) {
+    const parent = this._getParent();
+    const div = document.createElement('div');
+    div.innerHTML = htmlContent;
+    parent.appendChild(div);
+    return this;
+  }
+
+  // Polymorphic generator for Vis Groups (A-H)
+  visGroup(groupKey, collapsed = true) {
+    const meta = GROUP_META[groupKey];
+    const group = state.vis[groupKey];
+    
+    this.section(meta.name, collapsed);
+    
+    // Bulk Toggles
+    const toggleRow = document.createElement('div');
+    toggleRow.className = 'parent-toggle-row';
+    const allOn = document.createElement('button');
+    allOn.className = 'parent-toggle-btn on ctrl-interactive'; allOn.textContent = 'All On';
+    allOn.addEventListener('click', () => { group.vals.fill(1); regenerate(true); buildControls(); });
+    const allOff = document.createElement('button');
+    allOff.className = 'parent-toggle-btn off ctrl-interactive'; allOff.textContent = 'All Off';
+    allOff.addEventListener('click', () => { group.vals.fill(0); regenerate(true); buildControls(); });
+    toggleRow.appendChild(allOn); toggleRow.appendChild(allOff);
+    this.currentBody.appendChild(toggleRow);
+
+    // Dynamic sliders — pass the group object + 'vals' key, with index prop
+    for (let i = 0; i < group.vals.length; i++) {
+      this.slider(meta.labels[i], group, 'vals', 0, 1, 0.05, { index: i, color: meta.colors[i] });
+    }
+
+    // Group modifiers
+    this.childSection('⚙ Group Render', true);
+    this.slider('Point scale', group, 'ptScale', 0.1, 3, 0.05);
+    this.slider('Line width ×', group, 'lineW', 0.1, 3, 0.05);
+    this.slider('Line opacity ×', group, 'lineOp', 0, 1, 0.05);
+    
+    return this;
+  }
 }
 
-function createPresetButton(parent, label, presetFn) {
-  const btn = document.createElement('button');
-  btn.className = 'preset-btn';
-  btn.textContent = label;
+// ── Build control panel ──────────────────────────────────────
 
-  btn.addEventListener('click', () => {
-    presetFn();
-    regenerate();
-    // Rebuild controls to reflect new values
-    buildControls();
-  });
-
-  parent.appendChild(btn);
-}
-
-// ── Master control builder ───────────────────────────────────
 let controlsContainer = null;
 
 function buildControls() {
-  if (!controlsContainer) {
-    controlsContainer = document.getElementById('controls-panel');
-  }
+  if (!controlsContainer) controlsContainer = document.getElementById('controls-panel');
   controlsContainer.innerHTML = '';
+  animation.clearLinks(); // Reset bindings
 
-  // ── Core Parameters ──
-  const { sec: coreSec, body: coreBody } = createSection('Core Parameters');
-  createSlider(coreBody, 'Z', 'Z', 1, 2000, 1);
-  createSlider(coreBody, 'T', 'T', 0.01, 4, 0.0001, v => v.toFixed(4));
-  createSlider(coreBody, 'log base (l)', 'lFunc', 2, 100, 0.1);
-  createSlider(coreBody, 'k₂ (scale)', 'k2', 0.01, 5, 0.01);
-  controlsContainer.appendChild(coreSec);
+  // Collapse UI
+  const collapseBtn = document.createElement('button');
+  collapseBtn.className = 'collapse-btn ctrl-interactive';
+  collapseBtn.innerHTML = '✕';
+  collapseBtn.addEventListener('click', toggleCollapse);
+  controlsContainer.appendChild(collapseBtn);
 
-  // ── k₁ System ──
-  const { sec: k1Sec, body: k1Body } = createSection('k₁ System');
+  const b = new UIBuilder(controlsContainer);
 
-  const qaRow = document.createElement('div');
-  qaRow.className = 'toggle-group-inline';
-  createToggleValue(qaRow, 'qₐ=0 (k₁=q₁)', 'qA', 0);
-  createToggleValue(qaRow, 'qₐ=1 (k₁=τ/…)', 'qA', 1);
-  k1Body.appendChild(qaRow);
+  b.section('Mode')
+   .modeToggle('Theme', getTheme, setTheme, 'dark', 'light', 'Dark', 'Light')
+   .modeToggle('Render', getRenderMode, setRenderMode, 'cinematic', 'performance', 'Cinematic', 'Performance')
+   .modeToggle('View', getViewMode, setViewMode, '3d', '2d', '3D', '2D');
 
-  const q1Row = document.createElement('div');
-  q1Row.className = 'toggle-group-inline';
-  createToggleValue(q1Row, 'Manual q₁', 'q1Mode', 0);
-  createToggleValue(q1Row, 'Zeta zero', 'q1Mode', 1);
-  k1Body.appendChild(q1Row);
+  b.section('τ-Native Parameters')
+   .slider('k (exponent)', state, 'k', -3, 3, 0.01)
+   .slider('k₁ (amplitude)', state, 'k1', 0.01, 50, 0.01)
+   .slider('k₂ (spoke scale)', state, 'k2', 0.01, 5, 0.01)
+   .slider('n (points)', state, 'n', 1, 2000, 1, { isHeavy: true, fmt: v => v.toString() });
 
-  if (state.q1Mode === 0) {
-    createSlider(k1Body, 'q₁', 'q1A', 0.01, 100, 0.001);
-  } else {
-    createSlider(k1Body, 'ζ zero #', 'zetaIdx', 0, 12, 1,
-      v => `${v + 1}: ${ZETA_ZEROS[v].toFixed(4)}`);
+  b.section('α-Base Comparison')
+   .info('α<sup>i·nα/ln(α)</sup> closes at n=1 ⟺ α = τ')
+   .slider('α (base)', state, 'alpha', 1, 20, 0.001, {
+     fmt: v => {
+       if (Math.abs(v - TAU) < 0.01) return `τ ≈ ${TAU.toFixed(3)}`;
+       if (Math.abs(v - Math.E) < 0.01) return `e ≈ ${Math.E.toFixed(3)}`;
+       if (Math.abs(v - Math.PI) < 0.01) return `π ≈ ${Math.PI.toFixed(3)}`;
+       return v.toFixed(3);
+     }
+   })
+   .toggle('Show α trace', state, 'showAlpha')
+   .html('<div class="hud-row"><span class="hud-key">Closure</span><span class="hud-val" id="closure-display">—</span></div>');
+
+  b.section('Strands')
+   .slider('# strands', state, 'numStrands', 1, 28, 1, { isHeavy: true, fmt: v => v.toString() })
+   .info('sin(n·f)·k₂, strands offset by n');
+
+  // Groups
+  b.visGroup('A', false)
+   .visGroup('G', true)
+   .visGroup('D', true)
+   .visGroup('E', true)
+   .visGroup('B', true)
+   .visGroup('C', true)
+   .visGroup('F', true)
+   .visGroup('H', true);
+
+  b.section('Rendering')
+   .slider('point size', state, 'ptSize', 0.1, 6, 0.1)
+   .slider('point opacity', state, 'ptOpacity', 0, 1, 0.05)
+   .toggle('Show lines', state, 'showLines')
+   .slider('line width', state, 'lineWidth', 0.5, 8, 0.25)
+   .slider('line opacity', state, 'lineOpacity', 0, 1, 0.05)
+   .childSection('✦ Post Processing')
+   .slider('bloom strength', state, 'bloomStrength', 0, 2, 0.05, { onChange: v => setBloomStrength(v) })
+   .slider('bloom radius', state, 'bloomRadius', 0, 1, 0.05, { onChange: v => setBloomRadius(v) })
+   .slider('bloom threshold', state, 'bloomThreshold', 0, 1, 0.05, { onChange: v => setBloomThreshold(v) })
+   .slider('tone exposure', state, 'toneExposure', 0.5, 3, 0.05, { onChange: v => setToneExposure(v) })
+   .slider('fog density', state, 'fogDensity', 0, 0.01, 0.0001, { onChange: v => setFogDensity(v), fmt: v => v.toFixed(4) });
+
+  b.section('Cinematic', isPerformance())
+   .info('✦ Stars')
+   .toggle('Stars visible', cinematic, 'starsEnabled', setStarVisibility)
+   .slider('rotation Y', cinematic, 'starRotY', 0, 0.002, 0.0001)
+   .slider('rotation X', cinematic, 'starRotX', 0, 0.001, 0.00005)
+   .slider('opacity', cinematic, 'starOpacity', 0, 1, 0.05, { onChange: v => setStarOpacity(v) })
+   .slider('drift speed', cinematic, 'starDrift', 0, 1, 0.05);
+
+  b.section('Playback Control')
+   .info('Click ⚯ on any slider to link it. Shift+drag sets its animation target value.')
+   .html(`<div class="slider-row" style="margin-top:6px">
+     <span class="slider-label">Duration</span>
+     <input type="range" class="slider-input" style="flex:1" min="1" max="120" step="1" value="${animation.duration}" oninput="this.nextElementSibling.textContent=this.value+'s'; this.dispatchEvent(new CustomEvent('dur',{detail:+this.value,bubbles:true}))">
+     <span class="slider-value">${animation.duration}s</span></div>`);
+  // Wire duration input
+  (() => {
+    const el = b.container.querySelector('[type=range]:last-of-type');
+    if (el) el.addEventListener('dur', e => { animation.duration = e.detail; });
+  })();
+
+  b.section('View')
+   .presetGroup([
+     { label: '↻ Reset Camera', action: resetCamera },
+     { label: '📷 Screenshot', action: captureScreenshot }
+   ]);
+
+  b.section('Presets')
+   .presetGroup([
+     { label: 'τ = 1 turn', action: () => { Object.assign(state, { k: 1, k1: 1, k2: 1, alpha: TAU, numStrands: 6, n: 710 }); state.vis.G.vals = [1, 0, 0, 0]; } },
+     { label: 'The Proof', action: () => Object.assign(state, { k: 1, k1: 1, k2: 1, alpha: Math.E, showAlpha: true, numStrands: 1, n: 710 }) },
+     { label: 'Concentric', action: () => Object.assign(state, { k: 0.5, k1: 1, k2: 1, alpha: TAU, numStrands: 6 }) },
+     { label: 'Full Atlas', action: () => {
+         state.vis.A.vals = [1, 1]; state.vis.G.vals = [1, 1, 1, 1];
+         state.vis.D.vals = [1, 1, 1, 1]; state.vis.E.vals = [1, 1, 1];
+         state.vis.B.vals = [1, 1]; state.vis.C.vals = [1, 1];
+         state.vis.F.vals = [1, 1]; state.vis.H.vals = [1, 1, 1, 1, 1, 1, 1, 1];
+     }},
+     { label: 'All 28', action: () => Object.assign(state, { numStrands: 28, lineWidth: 1.0, lineOpacity: 0.3, ptSize: 0.5 }) }
+   ]);
+
+  b.section('The Axiom', true)
+   .html(`
+    <div class="ctrl-info arch-info">
+      <div>f = k₁ · τ<sup>i · τ<sup>k</sup> / ln(τ)</sup></div>
+      <div>&nbsp; ≡ k₁ · e<sup>iτ<sup>k</sup></sup></div>
+      <div class="arch-spacer"></div>
+      <div>α<sup>i·nα/ln(α)</sup> closes at n=1 ⟺ α = τ</div>
+      <div class="arch-spacer"></div>
+      <div>τ is the substrate. e is infrastructure.</div>
+      <div class="arch-spacer"></div>
+      <div>Each strand: sin(n·f) · k₂</div>
+      <div>Atlas: A(2) × G(4) × E(3) × D(4) × B(2) × C(2) × F(2) × H(8)</div>
+      <div>visible(item) = A[a] × B[b] × … × H[h]</div>
+    </div>
+  `);
+
+  // ── Register single stateChange callback after all sliders are built ──
+  // Each link has an _updateUI closure stored by the slider builder.
+  animation.onStateChange(() => {
+    for (const link of animation.links) {
+      if (link._updateUI) link._updateUI();
+    }
+    updateTransportUI();
+  });
+}
+
+// ── Transport bar (persistent) ─────────────────────────────────
+
+function buildTransportBar() {
+  const bar = document.getElementById('transport-bar');
+  if (!bar) return;
+  bar.innerHTML = '';
+
+  const playBtn = document.createElement('button');
+  playBtn.className = 'transport-btn-mini ctrl-interactive';
+  playBtn.textContent = animation.playing ? '⏸' : '▶';
+  playBtn.addEventListener('click', () => { animation.toggle(); updateTransportUI(); });
+  
+  const stopBtn = document.createElement('button');
+  stopBtn.className = 'transport-btn-mini ctrl-interactive'; stopBtn.textContent = '⏹';
+  stopBtn.addEventListener('click', () => { animation.stop(); regenerate(true); updateTransportUI(); });
+  
+  const scrub = document.createElement('input');
+  scrub.type = 'range'; scrub.className = 'slider-input transport-scrub';
+  scrub.min = 0; scrub.max = 1000; scrub.step = 1;
+  scrub.value = animation.progress * 1000;
+  scrub.addEventListener('input', () => {
+    animation.seek((parseFloat(scrub.value) / 1000));
+    regenerate();
+  });
+  
+  const gearBtn = document.createElement('button');
+  gearBtn.className = 'transport-gear ctrl-interactive'; gearBtn.textContent = '⚙';
+  gearBtn.title = 'Expand panels (Tab)';
+  gearBtn.addEventListener('click', toggleCollapse);
+  
+  bar.appendChild(playBtn); bar.appendChild(stopBtn);
+  bar.appendChild(scrub); bar.appendChild(gearBtn);
+}
+
+function updateTransportUI() {
+  const tScrub = document.querySelector('.transport-scrub');
+  if (tScrub) tScrub.value = animation.progress * 1000;
+  
+  const mProg = document.getElementById('master-progress');
+  if (mProg) mProg.textContent = (animation.progress * 100).toFixed(1) + '%';
+
+  document.querySelectorAll('.transport-btn-mini').forEach(btn => {
+    if (btn.textContent === '▶' || btn.textContent === '⏸') {
+      btn.textContent = animation.playing ? '⏸' : '▶';
+    }
+  });
+}
+
+// ── Animation integration ────────────────────────────────────
+
+function animationFrame() {
+  const changed = animation.update();
+  if (changed) {
+    // Sync all slider UIs if engine wrote new values
+    for (const link of animation.links) {
+      if (link._updateUI) link._updateUI();
+    }
+    regenerate();
+    updateTransportUI();
   }
+}
 
-  createSlider(k1Body, 'q₂ (τ^q₂)', 'q2', -5, 2, 1, v => v.toString());
+// ── Keyboard shortcuts ───────────────────────────────────────
 
-  if (state.qA === 1) {
-    const corrRow = document.createElement('div');
-    corrRow.className = 'toggle-group-inline';
-    createToggleValue(corrRow, 'No correction', 'qCorr', 0);
-    createToggleValue(corrRow, 'd-correction', 'qCorr', 1);
-    k1Body.appendChild(corrRow);
-  }
-  controlsContainer.appendChild(k1Sec);
-
-  // ── Strands ──
-  const { sec: strandSec, body: strandBody } = createSection('Strands');
-  createSlider(strandBody, '# strands', 'numStrands', 1, 28, 1, v => v.toString());
-
-  const strandInfo = document.createElement('div');
-  strandInfo.className = 'ctrl-info';
-  strandInfo.textContent = `n = [0..${state.Z - 1}], bands offset by Z`;
-  strandBody.appendChild(strandInfo);
-
-  createToggle(strandBody, 'Show log overlay', 'showLogPlot');
-  if (state.showLogPlot) {
-    createSlider(strandBody, 'log base', 'lBase', 2, 100, 0.1);
-  }
-  controlsContainer.appendChild(strandSec);
-
-  // ── G: Quadrants ──
-  const { sec: gSec, body: gBody } = createSection('G: Quadrants');
-  QUADS.forEach((q, i) => {
-    createDimSlider(gBody,
-      `${q.name} (${q.s < 0 ? '−' : '+'})(${q.iS < 0 ? '−i' : '+i'})`,
-      () => state.dG[i],
-      v => { state.dG[i] = v; },
-      q.hex
-    );
+function setupKeyboard() {
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    switch (e.key) {
+      case ' ': e.preventDefault(); animation.toggle(); updateTransportUI(); break;
+      case 'Tab': e.preventDefault(); toggleCollapse(); buildTransportBar(); break;
+      case 'Escape': animation.stop(); regenerate(true); updateTransportUI(); break;
+      case 'r': case 'R': resetCamera(); break;
+    }
   });
-  controlsContainer.appendChild(gSec);
-
-  // ── D: Trig ──
-  const { sec: dSec, body: dBody } = createSection('D: Trig Function');
-  ['identity', 'sin', 'cos', 'tan'].forEach((l, i) => {
-    createDimSlider(dBody, l,
-      () => state.dD[i],
-      v => { state.dD[i] = v; }
-    );
-  });
-  controlsContainer.appendChild(dSec);
-
-  // ── E: Expression type ──
-  const { sec: eSec, body: eBody } = createSection('E: Expression Type');
-  ['F (point)', 'V (vector: J·F)', 'C (curve: (τ/n)ᵏ)'].forEach((l, i) => {
-    createDimSlider(eBody, l,
-      () => state.dE[i],
-      v => { state.dE[i] = v; }
-    );
-  });
-  controlsContainer.appendChild(eSec);
-
-  // ── B×C: Sign × Log ──
-  const { sec: bcSec, body: bcBody } = createSection('B×C: Sign × Log');
-  createDimSlider(bcBody, 'B₁: positive (+f)', () => state.dB[0], v => { state.dB[0] = v; });
-  createDimSlider(bcBody, 'B₂: negative (−f)', () => state.dB[1], v => { state.dB[1] = v; });
-  createDimSlider(bcBody, 'C₁: base (raw)', () => state.dC[0], v => { state.dC[0] = v; });
-  createDimSlider(bcBody, 'C₂: log-wrapped', () => state.dC[1], v => { state.dC[1] = v; });
-  controlsContainer.appendChild(bcSec);
-
-  // ── Rendering ──
-  const { sec: renSec, body: renBody } = createSection('Rendering');
-  createSlider(renBody, 'point size', 'ptSize', 0.1, 6, 0.25);
-  createSlider(renBody, 'line opacity', 'lineOpacity', 0, 1, 0.05);
-  createSlider(renBody, 'bloom', 'bloomStrength', 0, 1.5, 0.05);
-
-  // Bloom listener
-  const bloomInput = renBody.querySelector('input[type="range"]:last-of-type');
-  if (bloomInput) {
-    bloomInput.addEventListener('input', () => {
-      setBloomStrength(state.bloomStrength);
-    });
-  }
-  controlsContainer.appendChild(renSec);
-
-  // ── View ──
-  const { sec: viewSec, body: viewBody } = createSection('View');
-  const viewRow = document.createElement('div');
-  viewRow.className = 'preset-row';
-
-  const resetBtn = document.createElement('button');
-  resetBtn.className = 'preset-btn';
-  resetBtn.textContent = 'Reset Camera';
-  resetBtn.addEventListener('click', resetCamera);
-  viewRow.appendChild(resetBtn);
-  viewBody.appendChild(viewRow);
-  controlsContainer.appendChild(viewSec);
-
-  // ── Presets ──
-  const { sec: presetSec, body: presetBody } = createSection('Presets');
-  const presetRow = document.createElement('div');
-  presetRow.className = 'preset-row';
-
-  createPresetButton(presetRow, 'Default (Z=710)', () => {
-    Object.assign(state, {
-      Z: 710, T: 1.9999, q1A: 26.3, q2: 0, qA: 1, qCorr: 1,
-      numStrands: 6, lFunc: 10
-    });
-  });
-
-  createPresetButton(presetRow, 'Zeta ζ₁=14.13', () => {
-    Object.assign(state, {
-      Z: 710, T: 1.9999, q1Mode: 1, zetaIdx: 0, qA: 1, qCorr: 1
-    });
-  });
-
-  createPresetButton(presetRow, '3 spokes', () => {
-    Object.assign(state, {
-      Z: 710, q1A: 3.052072, q2: -3, qA: 1, qCorr: 1
-    });
-  });
-
-  createPresetButton(presetRow, '4 spokes', () => {
-    Object.assign(state, {
-      Z: 710, q1A: 3.1374845, q2: -4, qA: 1, qCorr: 1
-    });
-  });
-
-  createPresetButton(presetRow, '5 spokes', () => {
-    Object.assign(state, {
-      Z: 710, q1A: 3.1371689, q2: -4, qA: 1, qCorr: 1
-    });
-  });
-
-  createPresetButton(presetRow, 'All 28 strands', () => {
-    Object.assign(state, {
-      numStrands: 28, lineWidth: 0.3, lineOpacity: 0.3, ptSize: 0.5
-    });
-  });
-
-  createPresetButton(presetRow, 'Full Atlas', () => {
-    Object.assign(state, {
-      dG: [1, 1, 1, 1], dD: [1, 1, 1, 1], dE: [1, 1, 1],
-      dB: [1, 1], dC: [1, 1]
-    });
-  });
-
-  createPresetButton(presetRow, 'Sin only', () => {
-    Object.assign(state, {
-      dG: [0, 0, 0, 1], dD: [0, 1, 0, 0], dE: [1, 0, 0],
-      dB: [1, 0], dC: [1, 0]
-    });
-  });
-
-  presetBody.appendChild(presetRow);
-  controlsContainer.appendChild(presetSec);
-
-  // ── Architecture Info ──
-  const { sec: archSec, body: archBody } = createSection('Architecture');
-  const archInfo = document.createElement('div');
-  archInfo.className = 'ctrl-info arch-info';
-  archInfo.innerHTML = `
-    <div>f = k₁ · e<sup>iτ<sup>k</sup></sup></div>
-    <div>k = log<sub>l</sub>(T·τ/2) / log<sub>l</sub>(τ)</div>
-    <div class="arch-spacer"></div>
-    <div>qₐ=0: k₁ = q₁ directly</div>
-    <div>qₐ=1: k₁ = τ / (q/2 · corr)</div>
-    <div class="arch-spacer"></div>
-    <div>q = q₁ · τ<sup>q₂</sup></div>
-    <div>d = |2cos(τT/2)| correction</div>
-    <div class="arch-spacer"></div>
-    <div>C_a = 710/(113τ) ≈ ${(710 / (113 * TAU)).toFixed(6)}</div>
-    <div class="arch-spacer"></div>
-    <div>Each strand: sin((n + j·Z) · f) · k₂</div>
-    <div>Spoke count ↔ rational divisions of τ via k₁</div>
-    <div class="arch-spacer"></div>
-    <div>Atlas: G(4 quadrants) × E(3 expr) × D(4 trig) × B(2 sign) × C(2 log)</div>
-  `;
-  archBody.appendChild(archInfo);
-  controlsContainer.appendChild(archSec);
 }
 
 // ── Public init ──────────────────────────────────────────────
+
 export function initControls() {
   buildControls();
+  buildTransportBar();
+  setupKeyboard();
+  setExternalUpdate(animationFrame);
+  animation.onStateChange(() => updateTransportUI());
   regenerate();
 }

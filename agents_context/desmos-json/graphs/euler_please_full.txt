@@ -1,0 +1,644 @@
+"# Core Values and Logic
+""##   Understanding Square Brackets in Mathematical Expressions and Desmos
+ A detailed explanation of how square brackets `[]` work in mathematical expressions, particularly in the context of Desmos.
+## Square Brackets in Desmos: Creating and Manipulating Lists
+In Desmos, square brackets `[]` serve a special purpose - they're used to create and manipulate lists of values. Here's a comprehensive explanation of how they work:
+### 1. Creating Lists
+Square brackets in Desmos are used to create lists of values. There are several ways to define a list:
+- **Explicit lists**: Directly enumerate values separated by commas
+
+  ```
+  [1, 3, 4, 7]
+  ```
+- **Sequential lists using ellipsis**: Generate evenly spaced sequences
+  ```
+  [1...10]    // Creates [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  ```
+- **Arithmetic progressions**: Define first two terms and end value
+  ```
+  [1, 3...11]  // Creates [1, 3, 5, 7, 9, 11] with step size 2
+  ```
+### 2. Indexing and Accessing Elements
+Desmos uses 1-based indexing (unlike many programming languages that use 0-based indexing):
+- **Access single element**: Use square brackets with the index
+  ```
+  N[2]    // Returns the 2nd element of list N
+  ```
+- **Access multiple elements**: Create a subset of elements
+  ```
+  N[1, 3, 5]    // Returns elements at positions 1, 3, and 5
+  ```
+- **Access range of elements**: Use ellipsis for ranges
+  ```
+  N[3...7]    // Returns elements from position 3 to 7
+  N[3...]     // Returns elements from position 3 to the end
+  ```
+### 3. List Operations and Element-wise Calculations
+When you perform operations between lists or between a list and a scalar, Desmos applies the operations element-wise:
+- **Element-wise operations**: Operations between lists of the same length
+  ```
+  [1, 2, 3] + [4, 5, 6]    // Results in [5, 7, 9]
+  [1, 2, 3] * [4, 5, 6]    // Results in [4, 10, 18]
+  ```
+- **Scalar operations**: Operations between a list and a single value
+  ```
+  2 * [1, 2, 3]    // Results in [2, 4, 6]
+  [1, 2, 3] + 5    // Results in [6, 7, 8]
+  ```
+### 4. Conditional Filtering
+You can filter lists based on conditions:
+```
+N[N > 0]    // Returns only positive elements from list N
+N[mod(N, 2) EQUALS 0]    // Returns only even elements from list N
+```
+### 5. Using Lists with Indices
+A powerful feature is using one list to index into another:
+```
+L EQUALS [10, 20, 30, 40, 50]
+M EQUALS [1, 3, 5]
+L[M]    // Returns [10, 30, 50] (elements at positions in M)
+```
+### 6. In Your Expressions
+In your original expressions, you defined sequences like:
+```
+N EQUALS [0...Z]    // A sequence from 0 to Z
+```
+And referenced elements like:
+```
+J EQUALS n[01...(k+1)]/k
+```
+This means J is calculated by taking elements 1 through k+1 from list n, and dividing each by k.
+When you have element-wise operations between lists, Desmos automatically aligns the elements by position and performs the operation on each pair.
+This system allows for powerful mathematical expressions that can handle multiple values simultaneously, making it ideal for visualizing patterns and relationships across sets of values.
+For interactive examples and more detailed explanations, you can check out the Desmos Help Center's article on lists or explore sample graphs that demonstrate these concepts.""
+```
+N=\left[0...Z\right]
+P=\left[0,1,2,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97\right]
+n=\left\{n_{IsPrimeOnly}=0:N,n_{IsPrimeOnly}>0:P\right\}\cdot U_{unit}
+k=\left\{k_{StepsInAlignments}=0:n_{value},k_{StepsInAlignments}>0:\frac{\log\left(k_{value}\pi\right)}{\log\left(2\pi\right)}\right\}
+X=\left\{n_{LogXisIndependantVar}=0:k,n_{LogXisIndependantVar}>0:X_{n}\right\}
+\tau=2\pi
+r=k
+J=\frac{n\left[01...\left(k+1\right)\right]}{k}
+# Parameters
+k_{StepsInAlignments}=0
+n_{IsPrimeOnly}=0
+k_{LogXisIndependantVar}=0
+Z=20
+X_{n}=1
+U_{unit}=1
+k_{value}=1
+## Set Red
+### RED - Group 7
+#### Core Expressions
+F_{NeNitk}=-e^{-i\tau^{k}}
+F_{NeitkR}=F_{Neitk}^{-1}
+#### Vector Group A
+V_{NeNitk}=JF_{NeNitk}
+V_{RNeNitk}=J^{-1}F_{NeNitk}
+#### Vector Group B
+V_{NeNitk}=JF_{NeNitk}
+V_{RNeNitk}=J^{-1}F_{NeNitk}
+#### Circle Group
+C_{eitn}=e^{i\tau^{n}}
+C_{NkeNitnk}=-k\ e^{-i\ \frac{\tau}{n}^{k}}
+C_{NkeitnkR}=C_{Nkeitnk}^{-1}
+### RED - Group 2
+#### Core Expressions
+F_{eitNk}=e^{i\tau^{-k}}
+F_{eNitNkR}=F_{eNitNk}^{-1}
+#### Vector Group A
+V_{eitNk}=JF_{eitNk}
+V_{eNitNkR}=J^{-1}F_{eNitNkR}
+#### Vector Group B
+\ V_{neitNk}=nF_{eitNk}
+V_{keitNk}=kF_{eitNk}
+#### Circle Group
+C_{keitnNk}=k\ e^{i\ \frac{\tau}{n}^{-k}}
+C_{keNitnNkR}=C_{keNitnNk}^{-1}
+C_{eitNn}=e^{i\tau^{-n}}
+C_{eNitNnR}=C_{eNitNn}^{-1}
+\sin\left(F_{eitNk}\right)
+\sin\left(F_{eNitNkR}\right)
+\sin\left(V_{eitNk}\right)
+\sin\left(V_{eNitNkR}\right)
+S_{LeafRed}=\sin\left(C_{keitnNk}\right)
+S_{RLeafRed}=\sin\left(C_{keNitnNkR}\right)
+S_{PathRedA}=\sin\left(C_{eitNn}\right)
+S_{PathRedB}=\sin\left(C_{eNitNnR}\right)
+## SET  GREEN 
+### GREEN - Group 5
+F_{Neitk}=-e^{i\tau^{k}}
+F_{NeNitkR}=F_{NeNitk}^{-1}
+V_{Neitk}=JF_{Neitk}
+V_{RNeitk}=J^{-1}F_{Neitk}
+C_{eNitn}=e^{-i\tau^{n}}
+C_{Nkeitnk}=-k\ e^{i\ \frac{\tau}{n}^{k}}
+C_{NkeNitnR}=C_{NkeNitnk}^{-1}
+### GREEN - Group 4
+F_{eNitNk}=e^{-i\tau^{-k}}
+F_{eitNkR}=F_{eitNk}^{-1}
+V_{eNitNk}=JF_{eNitNk}
+V_{ReNitNk}=J^{-1}F_{eNitNk}
+C_{eitNnR}=C_{eitNn}^{-1}
+C_{eNitNn}=e^{-i\tau^{-n}}
+C_{keNitnNk}=k\ e^{-i\ \frac{\tau}{n}^{-k}}
+C_{keitnNkR}=C_{keitnNk}^{-1}
+## SET BLUE
+### BLUE - Group 3
+F_{eNitk}=e^{-i\tau^{k}}
+F_{eitkR}=F_{eitk}^{-1}
+V_{eNitk}=JF_{eNitk}
+V_{ReNitk}=J^{-1}F_{eNitk}
+C_{Neitn}=-e^{i\tau^{n}}
+C_{keNitnk}=k\ e^{-i\ \frac{\tau}{n}^{k}}
+C_{keitnkR}=C_{keitnk}^{-1}
+### BLUE - Group 6
+F_{NeitNk}=-e^{i\tau^{-k}}
+F_{NeNitNkR}=F_{NeNitNk}^{-1}
+V_{NeitNk}=JF_{NeitNk}
+V_{RNeitNk}=J^{-1}F_{NeitNk}
+C_{NeitNn}=-e^{i\tau^{-n}}
+C_{NeNitNnR}=C_{NeNitNn}^{-1}
+C_{NkeitnNk}=-k\ e^{i\ \frac{\tau}{n}^{-k}}
+C_{NkeNitnNkR}=C_{NkeNitnNk}^{-1}
+## SET PURPLE
+### PURPLE - Group 1
+F_{eitk}=e^{i\tau^{k}}
+F_{eNitkR}=F_{eNitk}^{-1}
+V_{eitk}=JF_{eitk}
+V_{ReitkR}=J^{-1}F_{eNitkR}
+C_{NeNitn}=-e^{-i\tau^{n}}
+C_{keitnk}=k\ e^{i\ \frac{\tau}{n}^{k}}
+C_{keNitnkR}=C_{keNitnk}^{-1}
+### PURPLE - Group 8
+F_{NeNitNk}=-e^{-i\tau^{-k}}
+F_{NeitNkR}=F_{NeitNk}^{-1}
+V_{NeNitNk}=JF_{NeNitNk}
+V_{RNeNitNk}=J^{-1}F_{NeNitNk}
+C_{NeNitNn}=-e^{-i\tau^{-n}}
+C_{NkeNitnNk}=-k\ e^{-i\ \frac{\tau}{n}^{-k}}
+C_{NeitNnR}=C_{NeitNn}^{-1}
+C_{NkeitnNkR}=C_{NkeitnNk}^{-1}
+```
+from these core expressions
+were are going to to then also calculate for each 'base' expression.
+Base
+sin(Base)
+cos(Base)
+tan(Base)
+Log_{X}(Base)
+Log_{X}(Base)
+Log_{X}(Base)
+Log_{X}(Base)
+-Base
+-sin(Base)
+-cos(Base)
+-tan(Base)
+-Log_{X}(Base)
+-Log_{X}(Base)
+-Log_{X}(Base)
+-Log_{X}(Base)
+
+
+with all of this we have the multidimensional controllers that controls the visibility by establish tracking between expressions."	Geo Code
+# Core	
+"##   Understanding Square Brackets in Mathematical Expressions and Desmos
+
+ A detailed explanation of how square brackets `[]` work in mathematical expressions, particularly in the context of Desmos.
+
+## Square Brackets in Desmos: Creating and Manipulating Lists
+
+In Desmos, square brackets `[]` serve a special purpose - they're used to create and manipulate lists of values. Here's a comprehensive explanation of how they work:
+
+### 1. Creating Lists
+
+Square brackets in Desmos are used to create lists of values. There are several ways to define a list:
+
+- **Explicit lists**: Directly enumerate values separated by commas
+  ```
+  [1, 3, 4, 7]
+  ```
+
+- **Sequential lists using ellipsis**: Generate evenly spaced sequences
+  ```
+  [1...10]    // Creates [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  ```
+
+- **Arithmetic progressions**: Define first two terms and end value
+  ```
+  [1, 3...11]  // Creates [1, 3, 5, 7, 9, 11] with step size 2
+  ```
+
+### 2. Indexing and Accessing Elements
+
+Desmos uses 1-based indexing (unlike many programming languages that use 0-based indexing):
+
+- **Access single element**: Use square brackets with the index
+  ```
+  N[2]    // Returns the 2nd element of list N
+  ```
+
+- **Access multiple elements**: Create a subset of elements
+  ```
+  N[1, 3, 5]    // Returns elements at positions 1, 3, and 5
+  ```
+
+- **Access range of elements**: Use ellipsis for ranges
+  ```
+  N[3...7]    // Returns elements from position 3 to 7
+  N[3...]     // Returns elements from position 3 to the end
+  ```
+
+### 3. List Operations and Element-wise Calculations
+
+When you perform operations between lists or between a list and a scalar, Desmos applies the operations element-wise:
+
+- **Element-wise operations**: Operations between lists of the same length
+  ```
+  [1, 2, 3] + [4, 5, 6]    // Results in [5, 7, 9]
+  [1, 2, 3] * [4, 5, 6]    // Results in [4, 10, 18]
+  ```
+
+- **Scalar operations**: Operations between a list and a single value
+  ```
+  2 * [1, 2, 3]    // Results in [2, 4, 6]
+  [1, 2, 3] + 5    // Results in [6, 7, 8]
+  ```
+
+### 4. Conditional Filtering
+
+You can filter lists based on conditions:
+
+```
+N[N > 0]    // Returns only positive elements from list N
+N[mod(N, 2) EQUALS 0]    // Returns only even elements from list N
+```
+
+### 5. Using Lists with Indices
+
+A powerful feature is using one list to index into another:
+
+```
+L EQUALS [10, 20, 30, 40, 50]
+M EQUALS [1, 3, 5]
+L[M]    // Returns [10, 30, 50] (elements at positions in M)
+```
+
+### 6. In Your Expressions
+
+In your original expressions, you defined sequences like:
+
+```
+N EQUALS [0...Z]    // A sequence from 0 to Z
+```
+
+And referenced elements like:
+
+```
+J EQUALS n[01...(k+1)]/k
+```
+
+This means J is calculated by taking elements 1 through k+1 from list n, and dividing each by k.
+
+When you have element-wise operations between lists, Desmos automatically aligns the elements by position and performs the operation on each pair.
+
+This system allows for powerful mathematical expressions that can handle multiple values simultaneously, making it ideal for visualizing patterns and relationships across sets of values.
+
+For interactive examples and more detailed explanations, you can check out the Desmos Help Center's article on lists or explore sample graphs that demonstrate these concepts."	
+N=\left[0...Z\right]	
+P=\left[2,3,5,7,11,13,17,19,23,29,31,37...P\right]	
+n=\left\{n_{IsPrimeOnly}=0:N,n_{IsPrimeOnly}>0:P\right\}\cdot U_{unit}	
+X=\left\{n_{LogXisIndependantVar}=0:k,n_{LogXisIndependantVar}>0:X_{n}\right\}	
+J=\frac{n\left[01...\left(k+1\right)\right]}{k}	
+\left(\frac{\log\left(\frac{1}{2}\tau^{2}\right)}{\log\left(\tau\right)}\right)=\left(2-\frac{\log\left(2\right)}{\log\left(\tau\right)}\right)=\left(2-\frac{\log\left(2\right)}{\log\left(2\pi\right)}\right)=\left(1+\frac{\log\left(\pi\right)}{\log\left(2\pi\right)}\right)	
+\left(\frac{\log\left(N\right)}{\log\left(\tau\right)}\right)-\left(\frac{\log\left(N\frac{1}{2}\tau^{2}\right)}{\log\left(\tau\right)}\right)+\left(2-\frac{\log\left(2\right)}{\log\left(2\pi\right)}\right)=0	
+"#### Expression Groupings Key
+G_{A}=	[Line, Point]
+G_{B}=	[Positive, Negative]
+G_{C}=	[Base,Log]
+G_{D}=	[Base, Sin, Cos, Tan]
+G_{E}=	[Point, Vector, Curve]
+G_{F}=	[A,B]; relates to the functions in some way.
+G_{G}=	[Red,Green,Blue,Purple]; relates to the functions in some way.
+G_{H}=	[1...]; depending on different factors but up to 8 currently."	
+# Parameters	
+## Booleans	
+n_{IsPrimeOnly}=0	
+n_{LogXisIndependantVar}=0	
+k_{StepsInAlignments}=0	
+Z=2	
+U_{unit}=1	
+X_{n}=10	
+k=\left\{k_{StepsInAlignments}=0:k_{value},k_{StepsInAlignments}>0:\operatorname{real}\left(\frac{\log\left(k_{value}\pi\right)}{\log\left(2\pi\right)}\right)\right\}	
+k_{value}=6	
+"#### NOTES :
+
+when k steps  in alignments and k =0.494653205463 (ie 0.239859094461) 5 point on the vector plot falls on (4,3) relating to 3:4:5 triangle
+
+when k steps  in alignments and k =0.4052847345738(ie 0.131436688393) 5 point on the vector blue group 0 plot falls is on the x,y line this seems pretty close to 4/pi^2 ie 16/tau^2"	
+# SET Positive BASE	
+## RED Positive BASE	
+### RED Positive BASE  7	
+#### Core Expressions	
+#####  0I_{B}+0I_{C}+0I_{D}+0I_{E}+0I_{F}+0I_{G}	0I_{E}
+F_{NeNitk}=-e^{-i\tau^{k}}	0I_{E}
+F_{NeitkR}=F_{Neitk}^{-1}	0I_{E}
+F_{kNeNitk}=kF_{NeNitk}	0I_{E}
+#### Vector Group	
+#####  0I_{B}+0I_{C}+0I_{D}+1I_{E}+0I_{F}+0I_{G}	
+V_{NeNitk}=JF_{NeNitk}	1I_{E}
+V_{RNeNitk}=J^{-1}F_{NeNitk}	1I_{E}
+V_{nNeNitk}=nF_{NeNitk}	1I_{E}
+#### Circle Group	
+#####  0I_{B}+0I_{C}+0I_{D}+2I_{E}+0I_{F}+0I_{G}	
+C_{eitn}=e^{i\tau^{n}}	2I_{E}
+C_{NkeNitnk}=-k\ e^{-i\ \frac{\tau}{n}^{k}}	2I_{E}
+C_{NkeitnkR}=C_{Nkeitnk}^{-1}	2I_{E}
+### REd Group 2	
+#### Core Expression	
+#####  0I_{B}+0I_{C}+0I_{D}+0I_{E}+1I_{F}+0I_{G}	
+F_{eitNk}=e^{i\tau^{-k}}	0I_{E}
+F_{eNitNkR}=F_{eNitNk}^{-1}	0I_{E}
+F_{keitNk}=kF_{eitNk}	0I_{E}
+#### Vector Group A	
+#####  0I_{B}+0I_{C}+0I_{D}+1I_{E}+1I_{F}+0I_{G}	
+V_{eitNk}=JF_{eitNk}	1I_{E}
+V_{eNitNkR}=J^{-1}F_{eNitNkR}	1I_{E}
+V_{neitNk}=nF_{eitNk}	1I_{E}
+#### Circles	
+#####  0I_{B}+0I_{C}+0I_{D}+2I_{E}+1I_{F}+0I_{G}	
+C_{keitnNk}=k\ e^{i\ \frac{\tau}{n}^{-k}}	2I_{E}
+C_{keNitnNkR}=C_{keNitnNk}^{-1}	2I_{E}
+C_{eitNn}=e^{i\tau^{-n}}	2I_{E}
+C_{eNitNnR}=C_{eNitNn}^{-1}	2I_{E}
+## GREEN Positive BASE	
+### Green 4	
+#### Core Expressions	
+#####  0I_{B}+0I_{C}+0I_{D}+0I_{E}+0I_{F}+1I_{G}	
+F_{Neitk}=-e^{i\tau^{k}}	0I_{E}
+F_{NeNitkR}=F_{NeNitk}^{-1}	0I_{E}
+F_{kNeitk}=kF_{Neitk}	0I_{E}
+#### Vector Group A	
+#####  0I_{B}+0I_{C}+0I_{D}+1I_{E}+0I_{F}+1I_{G}	
+V_{Neitk}=JF_{Neitk}	1I_{E}
+V_{RNeitk}=J^{-1}F_{Neitk}	1I_{E}
+V_{nNeitk}=nF_{Neitk}	1I_{E}
+#### Circle Group	
+#####  0I_{B}+0I_{C}+0I_{D}+2I_{E}+0I_{F}+1I_{G}	
+C_{eNitn}=e^{-i\tau^{n}}	2I_{E}
+C_{Nkeitnk}=-k\ e^{i\ \frac{\tau}{n}^{k}}	2I_{E}
+C_{NkeNitnR}=C_{NkeNitnk}^{-1}	2I_{E}
+### Green Group 5	
+#### Core Expression	
+#####  0I_{B}+0I_{C}+0I_{D}+0I_{E}+1I_{F}+1I_{G}	
+F_{eNitNk}=e^{-i\tau^{-k}}	0I_{E}
+F_{eitNkR}=F_{eitNk}^{-1}	0I_{E}
+F_{keNitNk}=kF_{eNitNk}	0I_{E}
+#### Vector Group A	
+#####  0I_{B}+0I_{C}+0I_{D}+1I_{E}+1I_{F}+1I_{G}	
+V_{eNitNk}=JF_{eNitNk}	1I_{E}
+V_{ReNitNk}=J^{-1}F_{eNitNk}	1I_{E}
+V_{neNitNk}=nF_{eNitNk}	1I_{E}
+#### Circles	
+#####  0I_{B}+0I_{C}+0I_{D}+2I_{E}+1I_{F}+1I_{G}	
+C_{eitNnR}=C_{eitNn}^{-1}	2I_{E}
+C_{eNitNn}=e^{-i\tau^{-n}}	2I_{E}
+C_{keNitnNk}=k\ e^{-i\ \frac{\tau}{n}^{-k}}	2I_{E}
+C_{keitnNkR}=C_{keitnNk}^{-1}	2I_{E}
+##BLUE Positive BASE	
+### Blue 3	
+#### Core Expressions	
+#####  0I_{B}+0I_{C}+0I_{D}+0I_{E}+0I_{F}+2I_{G}	
+F_{eNitk}=e^{-i\tau^{k}}	0I_{E}
+F_{eitkR}=F_{eitk}^{-1}	0I_{E}
+F_{keNitk}=kF_{eNitk}	0I_{E}
+#### Vector Group A	
+#####  0I_{B}+0I_{C}+0I_{D}+1I_{E}+0I_{F}+2I_{G}	
+V_{eNitk}=JF_{eNitk}	1I_{E}
+V_{ReNitk}=J^{-1}F_{eNitk}	1I_{E}
+V_{neNitk}=nF_{eNitk}	1I_{E}
+#### Circle Group	
+#####  0I_{B}+0I_{C}+0I_{D}+2I_{E}+0I_{F}+2I_{G}	
+C_{Neitn}=-e^{i\tau^{n}}	2I_{E}
+C_{keNitnk}=k\ e^{-i\ \frac{\tau}{n}^{k}}	2I_{E}
+C_{keitnkR}=C_{keitnk}^{-1}	2I_{E}
+### Blue 6	
+#### Core Expression	
+#####  0I_{B}+0I_{C}+0I_{D}+0I_{E}+1I_{F}+2I_{G}	
+F_{NeitNk}=-e^{i\tau^{-k}}	0I_{E}
+F_{NeNitNkR}=F_{NeNitNk}^{-1}	0I_{E}
+F_{kNeitNk}=kF_{NeitNk}	0I_{E}
+#### Vector Group A	
+#####  0I_{B}+0I_{C}+0I_{D}+1I_{E}+1I_{F}+2I_{G}	
+V_{NeitNk}=JF_{NeitNk}	1I_{E}
+V_{RNeitNk}=J^{-1}F_{NeitNk}	1I_{E}
+V_{nNeitNk}=nF_{NeitNk}	1I_{E}
+#### Circles	
+#####  0I_{B}+0I_{C}+0I_{D}+2I_{E}+1I_{F}+2I_{G}	
+C_{NeitNn}=-e^{i\tau^{-n}}	2I_{E}
+C_{NeNitNnR}=C_{NeNitNn}^{-1}	2I_{E}
+C_{NkeitnNk}=-k\ e^{i\ \frac{\tau}{n}^{-k}}	2I_{E}
+C_{NkeNitnNkR}=C_{NkeNitnNk}^{-1}	2I_{E}
+## PURPLE Positive BASE	
+### Purple 1	
+#### Core Expressions	
+#####  0I_{B}+0I_{C}+0I_{D}+0I_{E}+0I_{F}+3I_{G}	
+F_{eitk}=e^{i\tau^{k}}	0I_{E}
+F_{eNitkR}=F_{eNitk}^{-1}	0I_{E}
+F_{keitk}=kF_{eitk}	0I_{E}
+#### Vector Group A	
+#####  0I_{B}+0I_{C}+0I_{D}+1I_{E}+0I_{F}+3I_{G}	
+V_{eitk}=JF_{eitk}	1I_{E}
+V_{ReitkR}=J^{-1}F_{eNitkR}	1I_{E}
+V_{neitk}=nF_{eitk}	1I_{E}
+#### Circle Group	
+#####  0I_{B}+0I_{C}+0I_{D}+2I_{E}+0I_{F}+3I_{G}	
+C_{NeNitn}=-e^{-i\tau^{n}}	2I_{E}
+C_{keitnk}=k\ e^{i\ \frac{\tau}{n}^{k}}	2I_{E}
+C_{keNitnkR}=C_{keNitnk}^{-1}	2I_{E}
+### Purple Group 8	
+#### Core Expression	
+#####  0I_{B}+0I_{C}+0I_{D}+0I_{E}+1I_{F}+3I_{G}	
+F_{NeNitNk}=-e^{-i\tau^{-k}}	0I_{E}
+F_{NeitNkR}=F_{NeitNk}^{-1}	0I_{E}
+F_{kNeNitNk}=kF_{NeNitNk}	0I_{E}
+#### Vector Group A	
+#####  0I_{B}+0I_{C}+0I_{D}+1I_{E}+1I_{F}+3I_{G}	
+V_{NeNitNk}=JF_{NeNitNk}	1I_{E}
+V_{RNeNitNk}=J^{-1}F_{NeNitNk}	1I_{E}
+V_{nNeNitNk}=nF_{NeNitNk}	1I_{E}
+#### Circles	
+#####  0I_{B}+0I_{C}+0I_{D}+2I_{E}+1I_{F}+3I_{G}	
+C_{NeNitNn}=-e^{-i\tau^{-n}}	2I_{E}
+C_{NkeNitnNk}=-k\ e^{-i\ \frac{\tau}{n}^{-k}}	2I_{E}
+C_{NeitNnR}=C_{NeitNn}^{-1}	2I_{E}
+C_{NkeitnNkR}=C_{NkeitnNk}^{-1}	2I_{E}
+# Base Style Controllers & Logic	
+## Style : Colors	
+c_{colorMod}=c_{colorScale}\cdot255	
+c_{colorScale}=0	
+c_{red}=0	
+c_{blue}=0	
+c_{green}=0	
+S_{styleColor0}=\operatorname{rgb}\left(c_{red}+\left(75+c_{colorMod}\right),c_{green}+\left(0+c_{colorMod}\right),c_{blue}+\left(130+c_{colorMod}\right)\right)	
+S_{styleColor1}=\operatorname{rgb}\left(c_{red}+\left(0+c_{colorMod}\right),c_{green}+\left(0+c_{colorMod}\right),c_{blue}+\left(255+c_{colorMod}\right)\right)	
+S_{styleColor2}=\operatorname{rgb}\left(c_{red}+\left(0+c_{colorMod}\right),c_{green}+\left(191+c_{colorMod}\right),c_{blue}+\left(255+c_{colorMod}\right)\right)	
+S_{styleColor3}=\operatorname{rgb}\left(c_{red}+\left(0+c_{colorMod}\right),c_{green}+\left(205+c_{colorMod}\right),c_{blue}+\left(0+c_{colorMod}\right)\right)	
+S_{styleColor4}=\operatorname{rgb}\left(c_{red}+\left(195+c_{colorMod}\right),c_{green}+\left(195+c_{colorMod}\right),c_{blue}+\left(0+c_{colorMod}\right)\right)	
+S_{styleColor5}=\operatorname{rgb}\left(c_{red}+\left(255+c_{colorMod}\right),c_{green}+\left(165+c_{colorMod}\right),c_{blue}+\left(0+c_{colorMod}\right)\right)	
+S_{styleColor6}=\operatorname{rgb}\left(c_{red}+\left(255+c_{colorMod}\right),c_{green}+\left(0+c_{colorMod}\right),c_{blue}+\left(0+c_{colorMod}\right)\right)	
+S_{styleColor7}=\operatorname{rgb}\left(c_{red}+\left(255+c_{colorMod}\right),c_{green}+\left(105+c_{colorMod}\right),c_{blue}+\left(180+c_{colorMod}\right)\right)	
+S_{styleColor}=\left[S_{styleColor0},S_{styleColor1},S_{styleColor2},S_{styleColor3},S_{styleColor4},S_{styleColor5},S_{styleColor6},S_{styleColor7}\right]	
+##  Style :  Labels	
+S_{styleLabelSize}=1	
+## Style : Opacity Controllers	
+### Group A 'G_{A}`=`[Point,Line]`	
+c_{A1}=1	
+c_{A2}=0	
+### Group B 'G_{B}`=`[Positive,Negative]`	
+c_{B1}=1	
+c_{B2}=0	
+### Group C 'G_{C}`=`[Base,Log]`	
+c_{C1}=1	
+c_{C2}=0	
+### Group D 'G_{D}`=`[Base,Sin,Cos,Tan]`	
+c_{D1}=1	
+c_{D2}=0	
+c_{D3}=0	
+c_{D4}=0	
+### Group E 'G_{E}`=`[Point,Vector,Curve]`	
+c_{E1}=0	
+c_{E2}=0	
+c_{E3}=1	
+### Group F 'G_{F}`=`[?A?,?B?]`	
+c_{F1}=1	
+c_{F2}=1	
+### Group G 'G_{G}`=`[Red,Green,Blue,Purple]`	
+c_{G1}=1	
+c_{G2}=1	
+c_{G3}=1	
+c_{G4}=1	
+### Group H 'G_{H}`=`[1,2,3...8]`	
+c_{H1}=1	
+c_{H2}=1	
+c_{H3}=1	
+c_{H4}=1	
+c_{H5}=1	
+c_{H6}=1	
+c_{H7}=1	
+c_{H8}=1	
+## Style : Size Controllers	
+### Group A 'G_{A}`=`[Point,Line]`	
+s_{A1}=1	
+s_{A2}=0	
+### Group B 'G_{B}`=`[Positive,Negative]`	
+s_{B1}=1	
+s_{B2}=0	
+### Group C 'G_{C}`=`[Base,Log]`	
+s_{C1}=1	
+s_{C2}=0	
+### Group D 'G_{D}`=`[Base,Sin,Cos,Tan]`	
+s_{D1}=1	
+s_{D2}=0	
+s_{D3}=0	
+s_{D4}=0	
+### Group E 'G_{E}`=`[Point,Vector,Curve]`	
+s_{E1}=0	
+s_{E2}=0	
+s_{E3}=1	
+### Group F 'G_{F}`=`[?A?,?B?]`	
+s_{F1}=1	
+s_{F2}=1	
+### Group G 'G_{G}`=`[Red,Green,Blue,Purple]`	
+s_{G1}=1	
+s_{G2}=1	
+s_{G3}=1	
+s_{G4}=1	
+### Group H 'G_{H}`=`[1,2,3...8]`	
+s_{H1}=1	
+s_{H2}=1	
+s_{H3}=1	
+s_{H4}=1	
+s_{H5}=1	
+s_{H6}=1	
+s_{H7}=1	
+s_{H8}=1	
+##Style : Helper Functions	
+### Style : Group Settings	
+#### CAUTION Change requires updates to the the helper functions	
+G_{A}=2	
+G_{B}=2	
+G_{C}=2	
+G_{D}=4	
+G_{E}=3	
+G_{F}=2	
+G_{G}=4	
+G_{H}=8	
+### Style : Helpers Part 1	
+G_{items}=G_{A}\cdot G_{B}\cdot G_{C}\cdot G_{D}\cdot G_{E}\cdot G_{F}\cdot G_{G}\cdot G_{H}	
+G_{list}=[1...G_{items}]	
+f_{getCoord}(d)=[\operatorname{floor}((d-1)/(G_{B}\cdot G_{C}\cdot G_{D}\cdot G_{E}\cdot G_{F}\cdot G_{G}\cdot G_{H}))+1,\operatorname{floor}(\operatorname{mod}((d-1),(G_{B}\cdot G_{C}\cdot G_{D}\cdot G_{E}\cdot G_{F}\cdot G_{G}\cdot G_{H}))/(G_{C}\cdot G_{D}\cdot G_{E}\cdot G_{F}\cdot G_{G}\cdot G_{H}))+1,\operatorname{floor}(\operatorname{mod}((d-1),(G_{C}\cdot G_{D}\cdot G_{E}\cdot G_{F}\cdot G_{G}\cdot G_{H}))/(G_{D}\cdot G_{E}\cdot G_{F}\cdot G_{G}\cdot G_{H}))+1,\operatorname{floor}(\operatorname{mod}((d-1),(G_{D}\cdot G_{E}\cdot G_{F}\cdot G_{G}\cdot G_{H}))/(G_{E}\cdot G_{F}\cdot G_{G}\cdot G_{H}))+1,\operatorname{floor}(\operatorname{mod}((d-1),(G_{E}\cdot G_{F}\cdot G_{G}\cdot G_{H}))/(G_{F}\cdot G_{G}\cdot G_{H}))+1,\operatorname{floor}(\operatorname{mod}((d-1),(G_{F}\cdot G_{G}\cdot G_{H}))/(G_{G}\cdot G_{H}))+1,\operatorname{floor}(\operatorname{mod}((d-1),(G_{G}\cdot G_{H}))/G_{H})+1,\operatorname{mod}((d-1),G_{H})+1]	
+F_{groupByA}=f_{getCoord}\left(I_{index}\right)\left[1\right]\ \operatorname{for}I_{index}=G_{list}	
+F_{groupByB}=f_{getCoord}\left(I_{index}\right)\left[2\right]\ \operatorname{for}I_{index}=G_{list}	
+F_{groupByC}=f_{getCoord}\left(I_{index}\right)\left[3\right]\ \operatorname{for}I_{index}=G_{list}	
+F_{groupByD}=f_{getCoord}\left(I_{index}\right)\left[4\right]\ \operatorname{for}I_{index}=G_{list}	
+F_{groupByE}=f_{getCoord}\left(I_{index}\right)\left[5\right]\ \operatorname{for}I_{index}=G_{list}	
+F_{groupByF}=f_{getCoord}\left(I_{index}\right)\left[6\right]\ \operatorname{for}I_{index}=G_{list}	
+F_{groupByG}=f_{getCoord}\left(I_{index}\right)\left[7\right]\ \operatorname{for}I_{index}=G_{list}	
+F_{groupByH}=f_{getCoord}\left(I_{index}\right)\left[8\right]\ \operatorname{for}I_{index}=G_{list}	
+m_{baseA}=\frac{[1...G_{A}]}{[1...G_{A}]}	
+m_{baseB}=\frac{[1...G_{B}]}{[1...G_{B}]}	
+m_{baseC}=\frac{[1...G_{C}]}{[1...G_{C}]}	
+m_{baseD}=\frac{[1...G_{D}]}{[1...G_{D}]}	
+m_{baseE}=\frac{[1...G_{E}]}{[1...G_{E}]}	
+m_{baseF}=\frac{[1...G_{F}]}{[1...G_{F}]}	
+m_{baseG}=\frac{[1...G_{G}]}{[1...G_{G}]}	
+m_{baseH}=\frac{[1...G_{H}]}{[1...G_{H}]}	
+### Style : Helpers Part 2	
+f_{getControlA}(n)=\left\{n=1:c_{A1},n=2:c_{A2},m_{baseA}[n]\right\}	
+f_{getControlB}(n)=\left\{n=1:c_{B1},n=2:c_{B2},m_{baseB}[n]\right\}	
+f_{getControlC}(n)=\left\{n=1:c_{C1},n=2:c_{C2},m_{baseC}[n]\right\}	
+f_{getControlD}(n)=\left\{n=1:c_{D1},n=2:c_{D2},n=3:c_{D3},n=4:c_{D4},m_{baseD}[n]\right\}	
+f_{getControlE}(n)=\left\{n=1:c_{E1},n=2:c_{E2},n=3:c_{E3},m_{baseE}[n]\right\}	
+f_{getControlF}(n)=\left\{n=1:c_{F1},n=2:c_{F2},m_{baseF}[n]\right\}	
+f_{getControlG}(n)=\left\{n=1:c_{G1},n=2:c_{G2},n=3:c_{G3},n=4:c_{G4},m_{baseG}[n]\right\}	
+f_{getControlH}(n)=\left\{n=1:c_{H1},n=2:c_{H2},n=3:c_{H3},n=4:c_{H4},n=5:c_{H5},n=6:c_{H6},n=7:c_{H7},n=8:c_{H8},m_{baseH}[n]\right\}	
+f_{getSizeControlA}(n)=\left\{n=1:s_{A1},n=2:s_{A2},m_{baseA}[n]\right\}	
+f_{getSizeControlB}(n)=\left\{n=1:s_{B1},n=2:s_{B2},m_{baseB}[n]\right\}	
+f_{getSizeControlC}(n)=\left\{n=1:s_{C1},n=2:s_{C2},m_{baseC}[n]\right\}	
+f_{getSizeControlD}(n)=\left\{n=1:s_{D1},n=2:s_{D2},n=3:s_{D3},n=4:s_{D4},m_{baseD}[n]\right\}	
+f_{getSizeControlE}(n)=\left\{n=1:s_{E1},n=2:s_{E2},n=3:s_{E3},m_{baseE}[n]\right\}	
+f_{getSizeControlF}(n)=\left\{n=1:s_{F1},n=2:s_{F2},m_{baseF}[n]\right\}	
+f_{getSizeControlG}(n)=\left\{n=1:s_{G1},n=2:s_{G2},n=3:s_{G3},n=4:s_{G4},m_{baseG}[n]\right\}	
+f_{getSizeControlH}(n)=\left\{n=1:s_{H1},n=2:s_{H2},n=3:s_{H3},n=4:s_{H4},n=5:s_{H5},n=6:s_{H6},n=7:s_{H7},n=8:s_{H8},m_{baseH}[n]\right\}	
+f_{combinedMask}(I_{index})=f_{getControlA}(F_{groupByA}[I_{index}])\cdot f_{getControlB}(F_{groupByB}[I_{index}])\cdot f_{getControlC}(F_{groupByC}[I_{index}])\cdot f_{getControlD}(F_{groupByD}[I_{index}])\cdot f_{getControlE}(F_{groupByE}[I_{index}])\cdot f_{getControlF}(F_{groupByF}[I_{index}])\cdot f_{getControlG}(F_{groupByG}[I_{index}])\cdot f_{getControlH}(F_{groupByH}[I_{index}])	
+f_{combinedSizeMask}(I_{index})=f_{getSizeControlA}(F_{groupByA}[I_{index}])\cdot f_{getSizeControlB}(F_{groupByB}[I_{index}])\cdot f_{getSizeControlC}(F_{groupByC}[I_{index}])\cdot f_{getSizeControlD}(F_{groupByD}[I_{index}])\cdot f_{getSizeControlE}(F_{groupByE}[I_{index}])\cdot f_{getSizeControlF}(F_{groupByF}[I_{index}])\cdot f_{getSizeControlG}(F_{groupByG}[I_{index}])\cdot f_{getSizeControlH}(F_{groupByH}[I_{index}])	
+S_{opacity}=f_{combinedMask}(I_{index})\ \operatorname{for}I_{index}=G_{list}	
+S_{size}=f_{combinedSizeMask}(I_{index})\ \operatorname{for}I_{index}=G_{list}	
+### Index Counts	
+I_{A}=\frac{G_{items}}{G_{A}}	
+I_{B}=\frac{I_{A}}{G_{B}}	
+I_{C}=\frac{I_{B}}{G_{C}}	
+I_{D}=\frac{I_{C}}{G_{D}}	
+I_{E}=\frac{I_{D}}{G_{E}}	
+I_{F}=\frac{I_{E}}{G_{F}}	
+I_{G}=\frac{I_{F}}{G_{G}}	
+I_{H}=\frac{I_{G}}{G_{H}}	
+f_{getSizeControlE}(n)=\left\{n=1:s_{E1},n=2:s_{E2},n=3:s_{E3},m_{baseE}[n]\right\}	
+f_{getSizeControlF}(n)=\left\{n=1:s_{F1},n=2:s_{F2},m_{baseF}[n]\right\}	
+f_{getSizeControlG}(n)=\left\{n=1:s_{G1},n=2:s_{G2},n=3:s_{G3},n=4:s_{G4},m_{baseG}[n]\right\}	
+f_{getSizeControlH}(n)=\left\{n=1:s_{H1},n=2:s_{H2},n=3:s_{H3},n=4:s_{H4},n=5:s_{H5},n=6:s_{H6},n=7:s_{H7},n=8:s_{H8},m_{baseH}[n]\right\}	
+f_{combinedMask}(I_{index})=f_{getControlA}(F_{groupByA}[I_{index}])\cdot f_{getControlB}(F_{groupByB}[I_{index}])\cdot f_{getControlC}(F_{groupByC}[I_{index}])\cdot f_{getControlD}(F_{groupByD}[I_{index}])\cdot f_{getControlE}(F_{groupByE}[I_{index}])\cdot f_{getControlF}(F_{groupByF}[I_{index}])\cdot f_{getControlG}(F_{groupByG}[I_{index}])\cdot f_{getControlH}(F_{groupByH}[I_{index}])	
+f_{combinedSizeMask}(I_{index})=f_{getSizeControlA}(F_{groupByA}[I_{index}])\cdot f_{getSizeControlB}(F_{groupByB}[I_{index}])\cdot f_{getSizeControlC}(F_{groupByC}[I_{index}])\cdot f_{getSizeControlD}(F_{groupByD}[I_{index}])\cdot f_{getSizeControlE}(F_{groupByE}[I_{index}])\cdot f_{getSizeControlF}(F_{groupByF}[I_{index}])\cdot f_{getSizeControlG}(F_{groupByG}[I_{index}])\cdot f_{getSizeControlH}(F_{groupByH}[I_{index}])	
+S_{opacity}=f_{combinedMask}(I_{index})\ \operatorname{for}I_{index}=G_{list}	
+S_{size}=f_{combinedSizeMask}(I_{index})\ \operatorname{for}I_{index}=G_{list}	
+### Index Counts	
+I_{A}=\frac{G_{items}}{G_{A}}	
+I_{B}=\frac{I_{A}}{G_{B}}	
+I_{C}=\frac{I_{B}}{G_{C}}	
+I_{D}=\frac{I_{C}}{G_{D}}	
+I_{E}=\frac{I_{D}}{G_{E}}	
+I_{F}=\frac{I_{E}}{G_{F}}	
+I_{G}=\frac{I_{F}}{G_{G}}	
+I_{H}=\frac{I_{G}}{G_{H}}	
