@@ -32,11 +32,28 @@ function visGroup(vals, defaults = {}) {
 // ── State ────────────────────────────────────────────────────
 
 export const state = {
-  n: 710, k: 1, k1: 1, k2: 1,
-  alpha: TAU, showAlpha: true,
+  // ── Traversal ───────────────────────────────────────────────
+  T: 1.9999,          // master traversal parameter
+  kMode: 'derived',   // 'derived' (from T) | 'manual'
+  k: 1,               // k = log_τ(T·τ/2) in derived mode
+
+  // ── Amplitude / q-system ────────────────────────────────────
+  q1: 26.3,           // spoke parameter (free slider)
+  q2: 0,              // τ-exponent (integer)
+  qMode: 'manual',    // 'derived' (k₁ from q,d) | 'direct' (k₁=q₁) | 'manual'
+  k1: 1,              // k₁ = τ/((q/2)·d) in derived mode
+
+  // ── Output scaling ──────────────────────────────────────────
+  k2: 1,
+  n: 710,
   numStrands: 6,
+
+  // ── Proof ───────────────────────────────────────────────────
+  alpha: TAU, showAlpha: true,
+  P: 1,               // block offset for E_proof comparison
+
+  // ── Rendering ───────────────────────────────────────────────
   showLines: true, lineWidth: 2.0, lineOpacity: 0.5, ptSize: 1.5, ptOpacity: 0.7,
-  // Bloom & post-processing
   bloomStrength: 0.45,
   bloomRadius: 0.45,
   bloomThreshold: 0.8,
@@ -66,6 +83,68 @@ const GROUP_META = {
   H: { name: 'H: Variant', labels: H_LABELS.map((l, i) => `H${i}: ${l}`), colors: Array(8).fill(null) },
 };
 
+// ── Derivation chain ────────────────────────────────────────
+
+export function computeKFromT(T) {
+  // k = log_τ(T · τ/2)  ←→  τ^k = T·τ/2
+  return Math.log(T * TAU / 2) / Math.log(TAU);
+}
+
+export function computeTFromK(k) {
+  // inverse: T = 2·τ^k / τ = 2·τ^(k-1)
+  return 2 * Math.pow(TAU, k - 1);
+}
+
+function computeD(T) {
+  return Math.abs(2 * Math.cos(Math.PI * T));
+}
+
+function computeQ(q1, q2) {
+  return q1 * Math.pow(TAU, q2);
+}
+
+// Derive all dependent state values from free inputs.
+// Call this before every regenerate.
+export function deriveState() {
+  // T ↔ k
+  if (state.kMode === 'derived') {
+    state.k = computeKFromT(state.T);
+  } else {
+    // manual k — back-compute T for HUD display only
+    state.T = computeTFromK(state.k);
+  }
+
+  // q and d (always computed for HUD)
+  state._q  = computeQ(state.q1, state.q2);
+  state._d  = computeD(state.T);
+
+  // k₁ derivation
+  if (state.qMode === 'derived') {
+    const denom = (state._q / 2) * state._d;
+    state.k1 = denom > 0 ? TAU / denom : 1;
+  } else if (state.qMode === 'direct') {
+    state.k1 = state.q1;
+  }
+  // 'manual': k1 stays as-is
+}
+
+// E_proof: Σ |sin(n_x(P)·f)·k₂ − sin(n_x(P₁)·f)·k₂|
+// where n_x(x) = n + x·Z,  P₁ = P·(1 + τ/Z)
+function computeEProof(f, k2, Z, P) {
+  const P1 = P * (1 + TAU / Z);
+  let sum = 0;
+  // f as complex [re,im]; sin(n·f) ≈ sin of real part for strand probe
+  const fRe = f[0], fIm = f[1];
+  for (let i = 0; i < Z; i++) {
+    const nx0 = i + P  * Z;
+    const nx1 = i + P1 * Z;
+    const v0 = Math.sin(nx0 * fRe) * k2;
+    const v1 = Math.sin(nx1 * fRe) * k2;
+    sum += Math.abs(v0 - v1);
+  }
+  return sum;
+}
+
 // ── Regenerate ───────────────────────────────────────────────
 
 let regenerateTimeout = null;
@@ -75,6 +154,7 @@ export function regenerate(isHeavy = false) {
   const delay = isHeavy ? 50 : 16;
 
   regenerateTimeout = setTimeout(() => {
+    deriveState(); // always run derivation before using state
     setPointBudget(isPerformance() ? 50_000 : 200_000);
 
     const pointsEnabled = state.vis.A.vals[0] > 0;
@@ -85,11 +165,20 @@ export function regenerate(isHeavy = false) {
       updatePointCloud(data, state.ptSize, state.ptOpacity * state.vis.A.vals[0]);
       if (data.meta) {
         const m = data.meta;
-        setText('k-display', m.k.toFixed(6));
-        setText('k1-display', m.k1.toFixed(6));
-        setText('f-display', `(${m.f[0].toFixed(3)}, ${m.f[1].toFixed(3)}i)`);
-        setText('compute-display', `${m.computeMs.toFixed(0)}ms`);
+        const tauK = Math.pow(TAU, m.k);
+        const eproof = computeEProof(m.f, state.k2, state.n, state.P);
+        setText('T-display',      state.T.toFixed(6));
+        setText('k-display',      m.k.toFixed(6) + (state.kMode === 'derived' ? ' ←T' : ''));
+        setText('k1-display',     m.k1.toFixed(6) + (state.qMode !== 'manual' ? ' ←q' : ''));
+        setText('q-display',      (state._q  ?? computeQ(state.q1, state.q2)).toFixed(4));
+        setText('d-display',      (state._d  ?? computeD(state.T)).toFixed(6));
+        setText('tauk-display',   tauK.toFixed(6));
+        setText('f-display',      `(${m.f[0].toFixed(3)}, ${m.f[1].toFixed(3)}i)`);
+        setText('eproof-display', eproof.toExponential(3));
+        setText('compute-display',`${m.computeMs.toFixed(0)}ms`);
         setText('budget-display', `${data.count.toLocaleString()} / ${data.budget.toLocaleString()}`);
+        // sync derived slider displays if in derived mode
+        syncDerivedSliders();
       }
     } else {
       updatePointCloud({ positions: new Float32Array(0), colors: new Float32Array(0), sizes: new Float32Array(0), count: 0 }, 0, 0);
@@ -109,13 +198,27 @@ export function regenerate(isHeavy = false) {
     updateOrbitCircle(state.k);
 
     const stepsToClose = (TAU / state.alpha).toFixed(4);
-    setText('closure-display', alphaNotTau ? `α: ${stepsToClose} steps` : 'α = τ → 1 step = 1 turn');
+    const closureMsg = alphaNotTau ? `α: ${stepsToClose} steps` : 'α = τ → 1 step = 1 turn';
+    setText('closure-display', closureMsg);
+    setText('closure-display-panel', closureMsg);
   }, delay);
 }
 
 function setText(id, text) {
   const el = document.getElementById(id);
   if (el) el.textContent = text;
+}
+
+// Sync readonly slider tracks when values are overwritten by derivation
+function syncDerivedSliders() {
+  if (state.kMode === 'derived') {
+    const el = document.getElementById('slider-k');
+    if (el) el.value = state.k;
+  }
+  if (state.qMode !== 'manual') {
+    const el = document.getElementById('slider-k1');
+    if (el) el.value = state.k1;
+  }
 }
 
 // ── Polymorphic UI Builder ───────────────────────────────────
@@ -177,7 +280,7 @@ class UIBuilder {
 
   // Polymorphic slider supporting Portable Scroll-Animation NumberParam binding
   slider(label, obj, key, min, max, step, props = {}) {
-    const { index = null, isHeavy = false, fmt, color, onChange } = props;
+    const { index = null, isHeavy = false, fmt, color, onChange, id: inputId } = props;
     const parent = this._getParent();
     
     // Register param for global playback targeting
@@ -212,6 +315,7 @@ class UIBuilder {
     const inputStr = '<input type="range" class="slider-input base-thumb" min="'+min+'" max="'+max+'" step="'+step+'">';
     trackWrap.innerHTML = inputStr;
     const inputBase = trackWrap.querySelector('.base-thumb');
+    if (inputId) inputBase.id = inputId;
     inputBase.value = link.baseValue;
     
     // Target value input (for animation)
@@ -426,13 +530,76 @@ function buildControls() {
    .modeToggle('Render', getRenderMode, setRenderMode, 'cinematic', 'performance', 'Cinematic', 'Performance')
    .modeToggle('View', getViewMode, setViewMode, '3d', '2d', '3D', '2D');
 
-  b.section('τ-Native Parameters')
-   .slider('k (exponent)', state, 'k', -3, 3, 0.01)
-   .slider('k₁ (amplitude)', state, 'k1', 0.01, 50, 0.01)
-   .slider('k₂ (spoke scale)', state, 'k2', 0.01, 5, 0.01)
-   .slider('n (points)', state, 'n', 1, 2000, 1, { isHeavy: true, fmt: v => v.toString() });
+  // ── TRAVERSAL ──────────────────────────────────────────────
+  b.section('Traversal')
+   .info('T is the primary parameter. k is derived from T via k = log_τ(T·τ/2).')
+   .slider('T (traversal)', state, 'T', 0.01, 4, 0.0001, {
+     fmt: v => v.toFixed(6),
+     onChange: () => { if (state.kMode === 'derived') { state.k = computeKFromT(state.T); } }
+   })
+   .html(`<div class="mode-row">
+     <span class="slider-label">k source</span>
+     <button class="mode-pill ctrl-interactive" id="kmode-derived">derived</button>
+     <button class="mode-pill ctrl-interactive" id="kmode-manual">manual</button>
+   </div>`)
+   .slider('k (exponent)', state, 'k', -3, 3, 0.001, {
+     id: 'slider-k',
+     fmt: v => v.toFixed(6),
+     onChange: () => { if (state.kMode === 'manual') { state.T = computeTFromK(state.k); } }
+   });
 
-  b.section('α-Base Comparison')
+  // Wire k-mode pills
+  (() => {
+    ['derived','manual'].forEach(mode => {
+      const btn = b.container.querySelector(`#kmode-${mode}`);
+      if (!btn) return;
+      btn.classList.toggle('active', state.kMode === mode);
+      btn.addEventListener('click', () => {
+        state.kMode = mode;
+        b.container.querySelectorAll('#kmode-derived,#kmode-manual').forEach(el =>
+          el.classList.toggle('active', el.id === `kmode-${mode}`));
+        deriveState(); regenerate();
+      });
+    });
+  })();
+
+  // ── AMPLITUDE / q-SYSTEM ──────────────────────────────────
+  b.section('Amplitude')
+   .info('k₁ = τ / ((q/2)·d)   where q = q₁·τ^q₂ and d = |2cos(πT)|')
+   .slider('q₁ (spoke param)', state, 'q1', 0.1, 71, 0.01, { fmt: v => v.toFixed(4) })
+   .slider('q₂ (τ-exponent)', state, 'q2', -4, 4, 1, { fmt: v => v.toFixed(0) })
+   .html(`<div class="mode-row">
+     <span class="slider-label">k₁ source</span>
+     <button class="mode-pill ctrl-interactive" id="qmode-derived">q,d→k₁</button>
+     <button class="mode-pill ctrl-interactive" id="qmode-direct">k₁=q₁</button>
+     <button class="mode-pill ctrl-interactive" id="qmode-manual">manual</button>
+   </div>`)
+   .slider('k₁ (amplitude)', state, 'k1', 0.01, 100, 0.01, { id: 'slider-k1', fmt: v => v.toFixed(4) });
+
+  // Wire q-mode pills
+  (() => {
+    ['derived','direct','manual'].forEach(mode => {
+      const btn = b.container.querySelector(`#qmode-${mode}`);
+      if (!btn) return;
+      btn.classList.toggle('active', state.qMode === mode);
+      btn.addEventListener('click', () => {
+        state.qMode = mode;
+        b.container.querySelectorAll('#qmode-derived,#qmode-direct,#qmode-manual').forEach(el =>
+          el.classList.toggle('active', el.id === `qmode-${mode}`));
+        deriveState(); regenerate();
+      });
+    });
+  })();
+
+  // ── OUTPUT SCALING ─────────────────────────────────────────
+  b.section('Output Scaling')
+   .slider('k₂ (spoke scale)', state, 'k2', 0.01, 5, 0.01)
+   .slider('Z (sample points)', state, 'n', 1, 2000, 1, { isHeavy: true, fmt: v => v.toString() })
+   .slider('# strands', state, 'numStrands', 1, 28, 1, { isHeavy: true, fmt: v => v.toString() })
+   .info('sin(n·f)·k₂, strands offset by n');
+
+  // ── PROOF ─────────────────────────────────────────────────
+  b.section('Proof')
    .info('α<sup>i·nα/ln(α)</sup> closes at n=1 ⟺ α = τ')
    .slider('α (base)', state, 'alpha', 1, 20, 0.001, {
      fmt: v => {
@@ -443,13 +610,10 @@ function buildControls() {
      }
    })
    .toggle('Show α trace', state, 'showAlpha')
-   .html('<div class="hud-row"><span class="hud-key">Closure</span><span class="hud-val" id="closure-display">—</span></div>');
+   .slider('P (block offset)', state, 'P', 1, 50, 1, { fmt: v => v.toFixed(0) })
+   .html('<div class="hud-row" style="margin-top:6px"><span class="hud-key">Closure</span><span class="hud-val" id="closure-display-panel">—</span></div>');
 
-  b.section('Strands')
-   .slider('# strands', state, 'numStrands', 1, 28, 1, { isHeavy: true, fmt: v => v.toString() })
-   .info('sin(n·f)·k₂, strands offset by n');
-
-  // Groups
+  // ── ATLAS VISIBILITY ───────────────────────────────────────
   b.visGroup('A', false)
    .visGroup('G', true)
    .visGroup('D', true)
@@ -486,7 +650,6 @@ function buildControls() {
      <span class="slider-label">Duration</span>
      <input type="range" class="slider-input" style="flex:1" min="1" max="120" step="1" value="${animation.duration}" oninput="this.nextElementSibling.textContent=this.value+'s'; this.dispatchEvent(new CustomEvent('dur',{detail:+this.value,bubbles:true}))">
      <span class="slider-value">${animation.duration}s</span></div>`);
-  // Wire duration input
   (() => {
     const el = b.container.querySelector('[type=range]:last-of-type');
     if (el) el.addEventListener('dur', e => { animation.duration = e.detail; });
@@ -500,7 +663,12 @@ function buildControls() {
 
   b.section('Presets')
    .presetGroup([
-     { label: 'τ = 1 turn', action: () => { Object.assign(state, { k: 1, k1: 1, k2: 1, alpha: TAU, numStrands: 6, n: 710 }); state.vis.G.vals = [1, 0, 0, 0]; } },
+     { label: 'τ = 1 turn', action: () => {
+         Object.assign(state, { T: computeTFromK(1), k: 1, kMode: 'manual', k1: 1, qMode: 'manual', k2: 1, alpha: TAU, numStrands: 6, n: 710 });
+         state.vis.G.vals = [1, 0, 0, 0]; buildControls(); } },
+     { label: 'Derived (q)', action: () => {
+         Object.assign(state, { T: 1.9999, kMode: 'derived', q1: 26.3, q2: 0, qMode: 'derived', alpha: TAU, numStrands: 6, n: 710 });
+         buildControls(); } },
      { label: 'The Proof', action: () => Object.assign(state, { k: 1, k1: 1, k2: 1, alpha: Math.E, showAlpha: true, numStrands: 1, n: 710 }) },
      { label: 'Concentric', action: () => Object.assign(state, { k: 0.5, k1: 1, k2: 1, alpha: TAU, numStrands: 6 }) },
      { label: 'Full Atlas', action: () => {

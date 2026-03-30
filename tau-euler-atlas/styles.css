@@ -275,3 +275,29 @@ body[data-collapsed="true"] #controls-panel { opacity: 0; pointer-events: none; 
   .slider-label { width: 60px; }
   .transport-scrub { width: 120px; }
 }
+
+/* ── Mode pills (derived / manual / direct toggles) ─────── */
+
+.mode-row {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 0 2px; flex-wrap: wrap;
+}
+
+.mode-pill {
+  flex: 1; min-width: 0;
+  padding: 3px 6px; border-radius: 20px;
+  font-size: 9.5px; font-family: 'DM Mono', monospace; letter-spacing: 0.02em;
+  background: var(--interact-bg); border: 1px solid var(--interact-border);
+  color: var(--text-secondary); cursor: pointer;
+  transition: var(--trans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mode-pill:hover {
+  background: var(--interact-hover-bg); border-color: var(--interact-hover-border);
+  color: var(--text-primary);
+}
+.mode-pill.active {
+  background: rgba(137, 196, 244, 0.18);
+  border-color: rgba(137, 196, 244, 0.5);
+  color: #89c4f4;
+  box-shadow: 0 0 8px rgba(137, 196, 244, 0.2);
+}
