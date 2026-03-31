@@ -25,6 +25,7 @@ let activeCamera;
 let bloomPass, renderPass, outputPass;
 let pointCloud = null;
 let strandLines = [];
+let atlasLines  = [];  // independent layer for atlas expression curves
 let gridGroup = null;
 let refCircles = null;
 let starSystem = null;
@@ -514,6 +515,59 @@ export function updateStrandPaths(paths, lineWidth, lineOpacity, showLines) {
     line.computeLineDistances();
     scene.add(line);
     strandLines.push(line);
+  }
+}
+
+// ── Atlas curve path management (independent from strand lines) ──
+//
+//  finalLineWidth = globalWidth × path.widthMul
+//  where widthMul = Π(group.lineW) × Π(member.sizes[i])  — the s_ system
+
+export function updateAtlasPaths(paths, globalWidth, lineOpacity) {
+  // Dispose old atlas lines
+  atlasLines.forEach(line => {
+    scene.remove(line);
+    line.geometry.dispose();
+    line.material.dispose();
+  });
+  atlasLines = [];
+
+  if (!paths || paths.length === 0 || lineOpacity < 0.01 || globalWidth < 0.05) return;
+
+  const w = window.innerWidth, h = window.innerHeight;
+
+  for (const path of paths) {
+    if (path.pointCount < 2) continue;
+
+    const geo = new LineGeometry();
+    geo.setPositions(path.positions);
+
+    const flatColors = new Float32Array(path.pointCount * 3);
+    for (let i = 0; i < path.pointCount; i++) {
+      flatColors[i * 3]     = path.color[0];
+      flatColors[i * 3 + 1] = path.color[1];
+      flatColors[i * 3 + 2] = path.color[2];
+    }
+    geo.setColors(flatColors);
+
+    // Apply per-path width multiplier (s_ system: global × widthMul)
+    const pw = Math.max(0.2, globalWidth * (path.widthMul ?? 1));
+
+    const mat = new LineMaterial({
+      linewidth: pw,
+      vertexColors: true,
+      transparent: true,
+      opacity: lineOpacity,
+      worldUnits: false,
+      alphaToCoverage: false,
+      depthWrite: false,
+    });
+    mat.resolution.set(w, h);
+
+    const line = new Line2(geo, mat);
+    line.computeLineDistances();
+    scene.add(line);
+    atlasLines.push(line);
   }
 }
 

@@ -400,20 +400,18 @@ function computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil) {
   }
 }
 
-const ATLAS_PATH_BUDGET = 200; // max connected path segments from the atlas
+const ATLAS_PATH_BUDGET = 200; // default if not specified in params
 
 export function generateAtlasPaths(params) {
-  const { n: Z, k, k2, numStrands, vis } = params;
+  const { n: Z, k, k2, numStrands, vis, atlasBudget = ATLAS_PATH_BUDGET } = params;
   const kVal = k;
   const kCeil = Math.max(1, Math.floor(Math.abs(kVal) + 1));
   const paths = [];
 
-  // Early-out if lines axis (A₂) is off — caller checks this,
-  // but guard here too
+  // Early-out if no colour group is active
   if (!vis.G.vals.some(v => v > 0)) return paths;
 
   // Collect candidate combinations, sorted by totalOp descending
-  // so that if we hit the budget we keep the most visible ones
   const combos = [];
 
   for (let gi = 0; gi < 4; gi++) {
@@ -430,10 +428,16 @@ export function generateAtlasPaths(params) {
             if (vis.C.vals[ci] <= 0) continue;
             for (let bi = 0; bi < 2; bi++) {
               if (vis.B.vals[bi] <= 0) continue;
+              // ── Opacity product (c_ system) ──────────────────
               const totalOp = vis.G.vals[gi] * vis.E.vals[eIdx] * vis.F.vals[fIdx]
                 * vis.H.vals[hIdx] * vis.D.vals[di] * vis.C.vals[ci] * vis.B.vals[bi];
               if (totalOp <= 0.01) continue;
-              combos.push({ gi, fIdx, hIdx, eIdx, di, ci, bi, totalOp });
+              // ── Width product (s_ system) — Global × Group × Member ──
+              const sz = (grp, idx) => (grp.sizes && grp.sizes[idx] != null) ? grp.sizes[idx] : 1;
+              const widthMul = sz(vis.G, gi) * sz(vis.F, fIdx) * sz(vis.H, hIdx)
+                * sz(vis.E, eIdx) * sz(vis.D, di) * sz(vis.C, ci) * sz(vis.B, bi)
+                * (vis.G.lineW ?? 1);
+              combos.push({ gi, fIdx, hIdx, eIdx, di, ci, bi, totalOp, widthMul });
             }
           }
         }
@@ -444,11 +448,10 @@ export function generateAtlasPaths(params) {
   // Sort highest opacity first so budget preserves the most visible paths
   combos.sort((a, b) => b.totalOp - a.totalOp);
 
-  const perCombo = numStrands; // paths per combo = one per strand
   let pathCount = 0;
 
-  for (const { gi, fIdx, hIdx, di, ci, bi, totalOp } of combos) {
-    if (pathCount >= ATLAS_PATH_BUDGET) break;
+  for (const { gi, fIdx, hIdx, di, ci, bi, totalOp, widthMul } of combos) {
+    if (pathCount >= atlasBudget) break;
 
     const quad = QUADS[gi];
     const br = Math.min(1, totalOp * 0.85);
@@ -472,6 +475,7 @@ export function generateAtlasPaths(params) {
           paths.push({
             positions: pos,
             color,
+            widthMul,  // s_ system: caller multiplies atlasLineWidth × widthMul
             pointCount: segment.length,
             tag: { gi, fIdx, hIdx, di, ci, bi }
           });

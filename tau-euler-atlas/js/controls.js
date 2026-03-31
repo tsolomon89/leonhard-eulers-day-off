@@ -6,7 +6,7 @@
 import { TAU, QUADS } from './complex.js';
 import { generateAllPoints, generateStrandPaths, generateAtlasPaths, generateAlphaTrace, generateTauTrace, setPointBudget, H_LABELS } from './generators.js';
 import {
-  updatePointCloud, updateStrandPaths, updateGhostTraces, updateOrbitCircle,
+  updatePointCloud, updateStrandPaths, updateAtlasPaths, updateGhostTraces, updateOrbitCircle,
   setBloomStrength, setBloomRadius, setBloomThreshold, setToneExposure, setFogDensity,
   resetCamera, captureScreenshot,
   setExternalUpdate, cinematic, setStarVisibility, setStarOpacity
@@ -22,10 +22,11 @@ import {
 
 function visGroup(vals, defaults = {}) {
   return {
-    vals: [...vals],
+    vals:    [...vals],
+    sizes:   vals.map(() => defaults.size ?? 1), // s_ system: per-member width/size multiplier
     ptScale: defaults.ptScale ?? 1,
-    lineW: defaults.lineW ?? 1,
-    lineOp: defaults.lineOp ?? 1,
+    lineW:   defaults.lineW   ?? 1,
+    lineOp:  defaults.lineOp  ?? 1,
   };
 }
 
@@ -52,8 +53,15 @@ export const state = {
   alpha: TAU, showAlpha: true,
   P: 1,               // block offset for E_proof comparison
 
-  // ── Rendering ───────────────────────────────────────────────
+  // ── Rendering (primary strands) ─────────────────────────────
   showLines: true, lineWidth: 2.0, lineOpacity: 0.5, ptSize: 1.5, ptOpacity: 0.7,
+
+  // ── Atlas curves (independent layer) ────────────────────────
+  showAtlasPaths:   false, // off by default — gates generateAtlasPaths() entirely
+  atlasLineWidth:   1.0,   // global width multiplied by widthMul (s_ system) per path
+  atlasLineOpacity: 0.35,  // independent opacity
+  atlasBudget:      200,   // max path segments (performance guard)
+
   bloomStrength: 0.45,
   bloomRadius: 0.45,
   bloomThreshold: 0.8,
@@ -184,12 +192,22 @@ export function regenerate(isHeavy = false) {
       updatePointCloud({ positions: new Float32Array(0), colors: new Float32Array(0), sizes: new Float32Array(0), count: 0 }, 0, 0);
     }
 
+    // ── Primary strand lines (unchanged) ──────────────────────────
     if (linesEnabled && state.showLines && state.lineOpacity > 0.01) {
       const primaryPaths = generateStrandPaths(state);
-      const atlasPaths   = generateAtlasPaths(state);
-      updateStrandPaths([...primaryPaths, ...atlasPaths], state.lineWidth, state.lineOpacity * state.vis.A.vals[1], true);
+      updateStrandPaths(primaryPaths, state.lineWidth, state.lineOpacity * state.vis.A.vals[1], true);
     } else {
       updateStrandPaths(null, 0, 0, false);
+    }
+
+    // ── Atlas curve lines (independent layer) ─────────────────────
+    if (linesEnabled && state.showAtlasPaths && state.atlasLineOpacity > 0.01) {
+      const atlasPaths = generateAtlasPaths(state);
+      updateAtlasPaths(atlasPaths, state.atlasLineWidth, state.atlasLineOpacity * state.vis.A.vals[1]);
+      setText('atlas-paths-display', `${atlasPaths.length} / ${state.atlasBudget}`);
+    } else {
+      updateAtlasPaths(null, 0, 0);
+      setText('atlas-paths-display', '—');
     }
 
     const tauTrace = generateTauTrace(256, state.k);
@@ -288,7 +306,7 @@ class UIBuilder {
     const link = animation.registerLink(obj, key, index);
     
     const row = document.createElement('div');
-    row.className = 'slider-row anim-ready';
+    row.className = 'slider-row anim-ready' + (label.trimStart().startsWith('↳') ? ' sz-row' : '');
     
     // Link Toggle
     const linkBtn = document.createElement('button');
@@ -476,12 +494,12 @@ class UIBuilder {
 
   // Polymorphic generator for Vis Groups (A-H)
   visGroup(groupKey, collapsed = true) {
-    const meta = GROUP_META[groupKey];
+    const meta  = GROUP_META[groupKey];
     const group = state.vis[groupKey];
     
     this.section(meta.name, collapsed);
     
-    // Bulk Toggles
+    // Bulk Toggles (opacity — the c_ system)
     const toggleRow = document.createElement('div');
     toggleRow.className = 'parent-toggle-row';
     const allOn = document.createElement('button');
@@ -493,16 +511,29 @@ class UIBuilder {
     toggleRow.appendChild(allOn); toggleRow.appendChild(allOff);
     this.currentBody.appendChild(toggleRow);
 
-    // Dynamic sliders — pass the group object + 'vals' key, with index prop
+    // Per-member: opacity (c_) + size (s_) sliders — Global→Group→Function
     for (let i = 0; i < group.vals.length; i++) {
+      // Opacity slider (c_ system)
       this.slider(meta.labels[i], group, 'vals', 0, 1, 0.05, { index: i, color: meta.colors[i] });
+      // Size/width slider (s_ system) — compact label
+      this.slider(`  ↳ sz`, group, 'sizes', 0, 3, 0.05, { index: i });
     }
 
-    // Group modifiers
+    // Group-level multipliers (child, collapsed) — these are the "Group" tier
     this.childSection('⚙ Group Render', true);
-    this.slider('Point scale', group, 'ptScale', 0.1, 3, 0.05);
-    this.slider('Line width ×', group, 'lineW', 0.1, 3, 0.05);
-    this.slider('Line opacity ×', group, 'lineOp', 0, 1, 0.05);
+    this.slider('Point scale ×', group, 'ptScale', 0.1, 3, 0.05);
+    this.slider('Line width ×',  group, 'lineW',   0.1, 3, 0.05);
+    this.slider('Line opacity ×', group, 'lineOp',  0,   1, 0.05);
+
+    // Special child section for A group: Atlas Curves controls
+    if (groupKey === 'A') {
+      this.childSection('❆ Atlas Curves', true);
+      this.toggle('Atlas paths on', state, 'showAtlasPaths');
+      this.slider('atlas width',   state, 'atlasLineWidth',   0.1, 8,   0.1,  { fmt: v => v.toFixed(1) });
+      this.slider('atlas opacity', state, 'atlasLineOpacity', 0,   1,   0.05, { fmt: v => v.toFixed(2) });
+      this.slider('path budget',   state, 'atlasBudget',      10,  500, 10,   { isHeavy: true, fmt: v => v.toString() });
+      this.html('<div class="hud-row" style="margin-top:4px"><span class="hud-key">Atlas paths</span><span class="hud-val" id="atlas-paths-display">—</span></div>');
+    }
     
     return this;
   }
