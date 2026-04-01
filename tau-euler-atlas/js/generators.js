@@ -26,7 +26,7 @@ export { TRIG }; // re-export so controls.js can build expression labels
 export function evaluateDirectFamily(base, nValue, dIndex, k2) {
   const nBase = cScl(base, nValue);
   switch (dIndex) {
-    case 0: return base;
+    case 0: return nBase;
     case 1: return cScl(cSin(nBase), k2);
     case 2: return cScl(cCos(nBase), k2);
     case 3: return cScl(cTan(nBase), k2);
@@ -41,6 +41,31 @@ export function computeF(k1, k) {
   const tauK = Math.pow(TAU, k);
   const tauNativeExp = [0, tauK / LN_TAU];
   return cScl(cTauPow(tauNativeExp), k1);
+}
+
+export function computeEProof(f, k2, Z, P, nList = null) {
+  const safeZ = Math.max(1, Math.floor(Number.isFinite(Z) ? Z : 1));
+  const safeP = Number.isFinite(P) ? P : 1;
+  const P1 = safeP * (1 + TAU / safeZ);
+  const samples = Array.isArray(nList) && nList.length > 0
+    ? nList
+    : Array.from({ length: safeZ }, (_, i) => i);
+  let sum = 0;
+
+  for (const nBase of samples) {
+    const v0 = evaluateDirectFamily(f, nBase + safeP * safeZ, 1, k2);
+    const v1 = evaluateDirectFamily(f, nBase + P1 * safeZ, 1, k2);
+    if (!ok(v0) || !ok(v1)) continue;
+    sum += Math.hypot(v0[0] - v1[0], v0[1] - v1[1]);
+  }
+
+  return { value: sum, P1 };
+}
+
+export function computeEProofFromState(params) {
+  const derived = buildDerivedState(params);
+  const f = computeF(derived.k1, derived.k);
+  return computeEProof(f, derived.k2, derived.Z, derived.P, derived.nList);
 }
 
 // ── α-base trace (the proof) ─────────────────────────────────
@@ -94,6 +119,17 @@ function quadC(quad, kv, nv) {
   return { c1, c2 };
 }
 
+function quadPath(quad, nv) {
+  const theta1 = quad.iS * Math.pow(TAU, nv);
+  const p1z = cTauPow([0, theta1 / LN_TAU]);
+  const p1 = quad.s === -1 ? cNeg(p1z) : p1z;
+
+  const theta2 = -quad.iS * Math.pow(TAU, -nv);
+  const p2z = cTauPow([0, theta2 / LN_TAU]);
+  const p2 = quad.s === -1 ? p2z : cNeg(p2z);
+  return { p1, p2 };
+}
+
 // ── HSL hue → RGB ────────────────────────────────────────────
 
 function hueToRGB(hue, satMul = 0.9, litAdd = 0.1) {
@@ -121,8 +157,10 @@ export function setPointBudget(n) { _pointBudget = n; }
 //  H3: inverted (1/f)
 //  H4: J-scaled (nv/kVal)
 //  H5: J-inv-scaled (kVal/nv)
-//  H6: c raw
-//  H7: c k-scaled / neg-k-scaled
+//  H6: curve-leaf raw
+//  H7: curve-leaf k-scaled / neg-k-scaled
+//  H8: curve-path raw (tau^n family)
+//  H9: curve-path inverse
 
 export const H_LABELS = [
   'raw',        // H0
@@ -131,8 +169,10 @@ export const H_LABELS = [
   'inverted',   // H3
   'J-scaled',   // H4
   'J-inv',      // H5
-  'curve-raw',  // H6
-  'curve-k',    // H7
+  'curve-leaf', // H6
+  'curve-leaf-k', // H7
+  'curve-path', // H8
+  'curve-path-inv', // H9
 ];
 
 // ── Main generator ───────────────────────────────────────────
@@ -146,13 +186,14 @@ export function generateAllPoints(params) {
   const t0 = performance.now();
   const derived = buildDerivedState(params);
   const {
-    Z, k, k1, k2, l_base,
-    numStrands, vis, ptSize
+    Z, k, k1, k2, logBase,
+    numStrands, vis, ptSize, k3, nList, primaryTrigIndex
   } = derived;
 
   const f = computeF(k1, k);
   const kVal = k;
   const kCeil = Math.max(1, Math.floor(Math.abs(kVal) + 1));
+  const sampleCount = nList.length;
 
   // Check if any atlas dimensions are active
   const atlasActive = vis.G.vals.some(v => v > 0) &&
@@ -160,7 +201,7 @@ export function generateAllPoints(params) {
     vis.B.vals.some(v => v > 0) && vis.C.vals.some(v => v > 0);
 
   // Budget: split between pure strand and atlas
-  const purebudget = Math.min(numStrands * Z * 2, _pointBudget);
+  const purebudget = Math.min(numStrands * sampleCount * 2, _pointBudget);
   const atlasBudget = atlasActive ? Math.min(_pointBudget - Math.min(purebudget, _pointBudget * 0.4), _pointBudget * 0.6) : 0;
 
   const maxPts = purebudget + atlasBudget;
@@ -174,10 +215,10 @@ export function generateAllPoints(params) {
     const offset = strand * Z;
     const [sr, sg, sb] = hueToRGB(strand / Math.max(1, numStrands));
 
-    for (let i = 0; i < Z; i++) {
+    for (let i = 0; i < sampleCount; i++) {
       if (count >= purebudget) break;
-      const nv = i + offset;
-      const val = evaluateDirectFamily(f, nv, 1, k2);
+      const nv = nList[i] + offset;
+      const val = evaluateDirectFamily(f, nv, primaryTrigIndex, k2);
 
       if (!ok(val) || Math.abs(val[0]) > 100 || Math.abs(val[1]) > 100) continue;
 
@@ -188,7 +229,7 @@ export function generateAllPoints(params) {
       colors[idx3] = sr;
       colors[idx3 + 1] = sg;
       colors[idx3 + 2] = sb;
-      sizes[count] = ptSize * 0.8;
+      sizes[count] = ptSize * k3 * 0.8;
       count++;
     }
   }
@@ -207,9 +248,10 @@ export function generateAllPoints(params) {
         const quad = QUADS[gi];
         const { f1, f2 } = quadF(quad, kVal);
 
-        for (let i = 0; i < Z && count < maxPts; i++) {
-          const nv = i + offset;
+        for (let i = 0; i < sampleCount && count < maxPts; i++) {
+          const nv = nList[i] + offset;
           const { c1, c2 } = quadC(quad, kVal, nv === 0 ? 0.001 : nv);
+          const { p1, p2 } = quadPath(quad, nv);
           const jScale = (i < kCeil && kVal !== 0) ? nv / kVal : null;
 
           // Build tagged variants: [z, eIdx, fIdx, hIdx]
@@ -228,9 +270,12 @@ export function generateAllPoints(params) {
             variants.push([cScl(f1, 1 / jScale), 1, 0, 5]);         // H5: J-inv (V)
           }
           if (ok(c1)) {
-            variants.push([c1, 2, 0, 6]);                           // H6: curve raw (C)
-            if (kVal !== 0) variants.push([cScl(c1, -kVal), 2, 0, 7]); // H7: curve k (C)
-            variants.push([cInv(c1), 2, 0, 6]);                     // H6 again: curve inv
+            variants.push([c1, 2, 0, 6]);                           // H6: leaf curve raw (C)
+            if (kVal !== 0) variants.push([cScl(c1, -kVal), 2, 0, 7]); // H7: leaf curve k (C)
+          }
+          if (ok(p1)) {
+            variants.push([p1, 2, 0, 8]);                           // H8: path curve raw (C)
+            variants.push([cInv(p1), 2, 0, 9]);                     // H9: path curve inv (C)
           }
 
           // ── Branch B (f₂) — F=1 ──
@@ -245,7 +290,10 @@ export function generateAllPoints(params) {
           if (ok(c2)) {
             variants.push([c2, 2, 1, 6]);
             if (kVal !== 0) variants.push([cScl(c2, kVal), 2, 1, 7]);
-            variants.push([cInv(c2), 2, 1, 6]);
+          }
+          if (ok(p2)) {
+            variants.push([p2, 2, 1, 8]);
+            variants.push([cInv(p2), 2, 1, 9]);
           }
 
           for (const [baseZ, eIdx, fIdx, hIdx] of variants) {
@@ -267,7 +315,7 @@ export function generateAllPoints(params) {
               for (let ci = 0; ci < 2; ci++) {
                 if (count >= maxPts) break;
                 if (vis.C.vals[ci] <= 0) continue;
-                const afterLog = ci === 0 ? afterTrig : cLogBase(afterTrig, l_base);
+                const afterLog = ci === 0 ? afterTrig : cLogBase(afterTrig, logBase);
                 if (!ok(afterLog)) continue;
 
                 for (let bi = 0; bi < 2; bi++) {
@@ -293,7 +341,7 @@ export function generateAllPoints(params) {
                   colors[idx3] = quad.color[0] * br;
                   colors[idx3 + 1] = quad.color[1] * br;
                   colors[idx3 + 2] = quad.color[2] * br;
-                  sizes[count] = ptSize * ptMul * (0.5 + Math.random() * 0.3);
+                  sizes[count] = ptSize * k3 * ptMul * (0.5 + Math.random() * 0.3);
                   count++;
                 }
               }
@@ -336,18 +384,20 @@ function getEIndexForH(hIdx) {
   return 2;                 // C (curve) geometry
 }
 
-function computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil) {
+function computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil, nOrdinal) {
   const { f1, f2 } = quadF(quad, kVal);
   const f = fIdx === 0 ? f1 : f2;
 
   // J-scale factor (only valid in the early range)
-  const atJ = nv < kCeil && kVal !== 0 && nv !== 0;
+  const atJ = nOrdinal < kCeil && kVal !== 0 && nv !== 0;
   const jScale = atJ ? nv / kVal : null;
 
   // Curve variants
   const safeNv = nv === 0 ? 0.001 : nv;
   const { c1, c2 } = quadC(quad, kVal, safeNv);
+  const { p1, p2 } = quadPath(quad, nv);
   const c = fIdx === 0 ? c1 : c2;
+  const p = fIdx === 0 ? p1 : p2;
 
   switch (hIdx) {
     case 0: return f;
@@ -357,7 +407,11 @@ function computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil) {
     case 4: return (jScale !== null) ? cScl(f, jScale)     : null;
     case 5: return (jScale !== null) ? cScl(f, 1 / jScale) : null;
     case 6: return ok(c) ? c : null;
-    case 7: return (ok(c) && kVal !== 0) ? cScl(c, -kVal) : null;
+    case 7:
+      if (!ok(c) || kVal === 0) return null;
+      return cScl(c, fIdx === 0 ? -kVal : kVal);
+    case 8: return ok(p) ? p : null;
+    case 9: return ok(p) ? cInv(p) : null;
     default: return null;
   }
 }
@@ -366,7 +420,7 @@ const ATLAS_PATH_BUDGET = 200; // default if not specified in params
 
 export function generateAtlasPaths(params) {
   const derived = buildDerivedState(params);
-  const { Z, k, k2, l_base, numStrands, vis, atlasBudget = ATLAS_PATH_BUDGET } = derived;
+  const { Z, k, k2, logBase, numStrands, vis, nList, atlasBudget = ATLAS_PATH_BUDGET } = derived;
   const kVal = k;
   const kCeil = Math.max(1, Math.floor(Math.abs(kVal) + 1));
   const paths = [];
@@ -381,7 +435,7 @@ export function generateAtlasPaths(params) {
     if (vis.G.vals[gi] <= 0) continue;
     for (let fIdx = 0; fIdx < 2; fIdx++) {
       if (vis.F.vals[fIdx] <= 0) continue;
-      for (let hIdx = 0; hIdx < 8; hIdx++) {
+      for (let hIdx = 0; hIdx < H_LABELS.length; hIdx++) {
         if (vis.H.vals[hIdx] <= 0) continue;
         const eIdx = getEIndexForH(hIdx);
         if (vis.E.vals[eIdx] <= 0) continue;
@@ -456,16 +510,16 @@ export function generateAtlasPaths(params) {
         segment = [];
       };
 
-      for (let i = 0; i < Z; i++) {
-        const nv = i + offset;
+      for (let i = 0; i < nList.length; i++) {
+        const nv = nList[i] + offset;
 
-        const baseZ = computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil);
+        const baseZ = computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil, i);
         if (!baseZ || !ok(baseZ)) { flushSeg(); continue; }
 
         const afterTrig = evaluateDirectFamily(baseZ, nv, di, k2);
         if (!ok(afterTrig)) { flushSeg(); continue; }
 
-        const afterLog  = ci === 0 ? afterTrig : cLogBase(afterTrig, l_base);
+        const afterLog  = ci === 0 ? afterTrig : cLogBase(afterTrig, logBase);
         if (!ok(afterLog)) { flushSeg(); continue; }
 
         const final = bi === 0 ? afterLog : cNeg(afterLog);
@@ -491,7 +545,9 @@ export function generateAtlasPaths(params) {
 //  isPrimary: true — controls.js applies primaryLineWidth/Opacity separately.
 
 export function generatePrimaryPaths(params) {
-  const { Z, k, k1, k2, numStrands } = buildDerivedState(params);
+  const {
+    Z, k, k1, k2, numStrands, nList, primaryTrigIndex,
+  } = buildDerivedState(params);
   const f = computeF(k1, k);
   const paths = [];
 
@@ -522,9 +578,9 @@ export function generatePrimaryPaths(params) {
       segment = [];
     };
 
-    for (let i = 0; i < Z; i++) {
-      const nv  = i + offset;
-      const val = evaluateDirectFamily(f, nv, 1, k2);
+    for (let i = 0; i < nList.length; i++) {
+      const nv  = nList[i] + offset;
+      const val = evaluateDirectFamily(f, nv, primaryTrigIndex, k2);
       if (!ok(val) || Math.abs(val[0]) > 100 || Math.abs(val[1]) > 100) {
         flushSeg();
       } else {

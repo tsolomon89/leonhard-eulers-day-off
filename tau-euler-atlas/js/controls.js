@@ -5,12 +5,22 @@
 
 import { TAU, QUADS } from './complex.js';
 import { TRIG } from './complex.js';
-import { generateAllPoints, generatePrimaryPaths, generateAtlasPaths, generateAlphaTrace, generateTauTrace, setPointBudget, H_LABELS } from './generators.js';
+import {
+  generateAllPoints,
+  generatePrimaryPaths,
+  generateAtlasPaths,
+  generateAlphaTrace,
+  generateTauTrace,
+  setPointBudget,
+  H_LABELS,
+  computeEProofFromState,
+} from './generators.js';
 import {
   applyDerivedState,
   computeKFromT,
   computeStepDelta,
   computeTFromK,
+  shouldAdvanceStep,
 } from './derivation.js';
 import {
   updatePointCloud, updateStrandPaths, updateAtlasPaths, updateGhostTraces, updateOrbitCircle,
@@ -42,8 +52,12 @@ function visGroup(vals, defaults = {}) {
 export const state = {
   // ── Traversal ───────────────────────────────────────────────
   T: 1.9999,          // master traversal parameter
+  tRegion: 'full',    // traversal range preset
+  syncTStepToS: true, // keep T slider granularity synced to s=1/b
   kMode: 'derived',   // 'derived' (from T) | 'manual'
   k: 1,               // manual value when kMode='manual'
+  k_value: 1,         // alignment/manual k input
+  kStepsInAlignments: 0,
   timeMode: 'animation', // 'animation' | 'step'
   b: 1000,            // deterministic stepping denominator
   stepRate: 1,        // deterministic stepping multiplier
@@ -58,14 +72,26 @@ export const state = {
   k1: 1,              // resolved value after derivation
   qMode: 'derived',   // legacy compatibility mirror only
   l_base: 10,         // log base used for C2 representation
+  logBaseSource: 'l_base', // 'l_base' | 'X'
+  logXIsIndependentVar: 0,
+  X_n: 1,
+  X: 1,
 
   // ── Output scaling ──────────────────────────────────────────
   k2: 1,
+  k3: 1,
   Z: 710,             // canonical sample count
   n: 710,             // legacy alias
+  nIsPrimeOnly: 0,
+  U_unit: 1,
+  nList: [],
   numStrands: 6,
+  primaryTrigIndex: 1,
 
   // ── Proof ───────────────────────────────────────────────────
+  P: 1,
+  P1: 1,
+  eProof: NaN,
   alpha: TAU, showAlpha: true,
 
   // ── Rendering (primary strands) ─────────────────────────────
@@ -94,7 +120,7 @@ export const state = {
     E: visGroup([1, 0, 0]),           
     F: visGroup([1, 1]),              
     G: visGroup([1, 0, 0, 0]),        
-    H: visGroup([1, 1, 1, 1, 1, 1, 1, 1]), 
+    H: visGroup(Array(H_LABELS.length).fill(1)),
   },
 };
 
@@ -106,12 +132,37 @@ const GROUP_META = {
   E: { name: 'E: Geometry', labels: ['E₁: F (point)', 'E₂: V (vector)', 'E₃: C (curve)'], colors: [null, null, null] },
   F: { name: 'F: Branch', labels: ['F₁: Branch A (f₁)', 'F₂: Branch B (f₂)'], colors: [null, null] },
   G: { name: 'G: Color Family', labels: ['G₁: Red', 'G₂: Green', 'G₃: Blue', 'G₄: Purple'], colors: [QUADS[0].hex, QUADS[1].hex, QUADS[2].hex, QUADS[3].hex] },
-  H: { name: 'H: Variant', labels: H_LABELS.map((l, i) => `H${i}: ${l}`), colors: Array(8).fill(null) },
+  H: { name: 'H: Variant', labels: H_LABELS.map((l, i) => `H${i}: ${l}`), colors: Array(H_LABELS.length).fill(null) },
 };
 
 // Derive all dependent state values from canonical inputs.
 export function deriveState() {
   applyDerivedState(state);
+}
+
+const T_REGION_CONFIG = {
+  near1: { min: 0.9, max: 1.1, center: 1, b: 5000 },
+  near2: { min: 1.9, max: 2.1, center: 2, b: 5000 },
+  near2tight: { min: 1.99, max: 2.01, center: 1.999, b: 10000 },
+  full: { min: 0.0001, max: 4, center: 1.9999, b: null },
+};
+
+function getTRegionConfig(region) {
+  return T_REGION_CONFIG[region] || T_REGION_CONFIG.full;
+}
+
+function getTSliderStep() {
+  if (!state.syncTStepToS) return 0.0001;
+  const s = Math.abs(Number.isFinite(state.s) ? state.s : 0.0001);
+  return Math.max(0.000001, Math.min(0.1, s));
+}
+
+function applyTRegionPreset(region) {
+  const cfg = getTRegionConfig(region);
+  state.tRegion = region;
+  state.T = cfg.center;
+  if (Number.isFinite(cfg.b)) state.b = cfg.b;
+  deriveState();
 }
 
 // ── Regenerate ───────────────────────────────────────────────
@@ -131,7 +182,7 @@ export function regenerate(isHeavy = false) {
 
     if (pointsEnabled) {
       const data = generateAllPoints(state);
-      updatePointCloud(data, state.ptSize, state.ptOpacity * state.vis.A.vals[0]);
+      updatePointCloud(data, state.ptSize * state.k3, state.ptOpacity * state.vis.A.vals[0]);
       if (data.meta) {
         const m = data.meta;
         const tauK = Math.pow(TAU, m.k);
@@ -140,7 +191,7 @@ export function regenerate(isHeavy = false) {
         setText('k1-display',     m.k1.toFixed(6) + (!state.manual_k1 ? ' ←q' : ''));
         setText('q-display',      state.q.toFixed(4));
         setText('d-display',      state.d.toFixed(6));
-        setText('lbase-display',  state.l_base.toFixed(3));
+        setText('lbase-display',  state.logBase.toFixed(3));
         setText('s-display',      state.s.toExponential(2));
         setText('tauk-display',   tauK.toFixed(6));
         setText('f-display',      `(${m.f[0].toFixed(3)}, ${m.f[1].toFixed(3)}i)`);
@@ -203,6 +254,14 @@ export function regenerate(isHeavy = false) {
     const closureMsg = alphaNotTau ? `α: ${stepsToClose} steps` : 'α = τ → 1 step = 1 turn';
     setText('closure-display', closureMsg);
     setText('closure-display-panel', closureMsg);
+
+    const proof = computeEProofFromState(state);
+    state.P1 = proof.P1;
+    state.eProof = proof.value;
+    const eProofMsg = Number.isFinite(state.eProof) ? state.eProof.toFixed(6) : '—';
+    setText('eproof-display', eProofMsg);
+    setText('eproof-display-panel', eProofMsg);
+    setText('p1-display-panel', Number.isFinite(state.P1) ? state.P1.toFixed(6) : '—');
   }, delay);
 }
 
@@ -520,6 +579,7 @@ let controlsContainer = null;
 
 function buildControls() {
   if (!controlsContainer) controlsContainer = document.getElementById('controls-panel');
+  deriveState();
   controlsContainer.innerHTML = '';
   animation.clearLinks(); // Reset bindings
 
@@ -538,12 +598,26 @@ function buildControls() {
    .modeToggle('View', getViewMode, setViewMode, '3d', '2d', '3D', '2D');
 
   // ── TRAVERSAL ──────────────────────────────────────────────
+  const tCfg = getTRegionConfig(state.tRegion);
+  const tStep = getTSliderStep();
   b.section('Traversal')
    .info('T is the primary parameter. k is derived from T via k = log_tau(T*tau/2).')
-   .slider('T (traversal)', state, 'T', 0.0001, 4, 0.0001, {
+   .slider('T (traversal)', state, 'T', tCfg.min, tCfg.max, tStep, {
      fmt: v => v.toFixed(6),
      onChange: () => { if (state.kMode === 'derived') { state.k = computeKFromT(state.T); } }
    })
+   .html(`<div class="mode-row">
+     <span class="slider-label">T region</span>
+     <button class="mode-pill ctrl-interactive" id="tregion-near1">near 1</button>
+     <button class="mode-pill ctrl-interactive" id="tregion-near2">near 2</button>
+     <button class="mode-pill ctrl-interactive" id="tregion-near2tight">1.99–2.01</button>
+     <button class="mode-pill ctrl-interactive" id="tregion-full">full</button>
+   </div>`)
+   .html(`<div class="mode-row">
+     <span class="slider-label">T step source</span>
+     <button class="mode-pill ctrl-interactive" id="tstep-sync-on">sync s</button>
+     <button class="mode-pill ctrl-interactive" id="tstep-sync-off">fixed</button>
+   </div>`)
    .html(`<div class="mode-row">
      <span class="slider-label">k source</span>
      <button class="mode-pill ctrl-interactive" id="kmode-derived">derived</button>
@@ -552,8 +626,19 @@ function buildControls() {
    .slider('k (exponent)', state, 'k', -3, 3, 0.001, {
      id: 'slider-k',
      fmt: v => v.toFixed(6),
-     onChange: () => { if (state.kMode === 'manual') { state.T = computeTFromK(state.k); } }
+     onChange: () => {
+       if (state.kMode === 'manual') {
+         state.k_value = state.k;
+         state.T = computeTFromK(state.k);
+       }
+     }
    })
+   .slider('k_value (alignment input)', state, 'k_value', 0.01, 20, 0.01, { fmt: v => v.toFixed(4) })
+   .html(`<div class="mode-row">
+     <span class="slider-label">k alignment</span>
+     <button class="mode-pill ctrl-interactive" id="kalign-off">off</button>
+     <button class="mode-pill ctrl-interactive" id="kalign-on">on</button>
+   </div>`)
    .html(`<div class="mode-row">
      <span class="slider-label">time mode</span>
      <button class="mode-pill ctrl-interactive" id="timemode-animation">animation</button>
@@ -574,6 +659,60 @@ function buildControls() {
           el.classList.toggle('active', el.id === `kmode-${mode}`));
         deriveState(); regenerate();
       });
+    });
+  })();
+
+  (() => {
+    const regions = ['near1', 'near2', 'near2tight', 'full'];
+    regions.forEach((region) => {
+      const btn = b.container.querySelector(`#tregion-${region}`);
+      if (!btn) return;
+      btn.classList.toggle('active', state.tRegion === region);
+      btn.addEventListener('click', () => {
+        applyTRegionPreset(region);
+        regenerate();
+        buildControls();
+      });
+    });
+  })();
+
+  (() => {
+    const onBtn = b.container.querySelector('#tstep-sync-on');
+    const offBtn = b.container.querySelector('#tstep-sync-off');
+    if (!onBtn || !offBtn) return;
+    onBtn.classList.toggle('active', state.syncTStepToS);
+    offBtn.classList.toggle('active', !state.syncTStepToS);
+    onBtn.addEventListener('click', () => {
+      state.syncTStepToS = true;
+      deriveState();
+      regenerate();
+      buildControls();
+    });
+    offBtn.addEventListener('click', () => {
+      state.syncTStepToS = false;
+      deriveState();
+      regenerate();
+      buildControls();
+    });
+  })();
+
+  (() => {
+    const offBtn = b.container.querySelector('#kalign-off');
+    const onBtn = b.container.querySelector('#kalign-on');
+    if (!offBtn || !onBtn) return;
+    offBtn.classList.toggle('active', state.kStepsInAlignments === 0);
+    onBtn.classList.toggle('active', state.kStepsInAlignments === 1);
+    offBtn.addEventListener('click', () => {
+      state.kStepsInAlignments = 0;
+      deriveState();
+      regenerate();
+      buildControls();
+    });
+    onBtn.addEventListener('click', () => {
+      state.kStepsInAlignments = 1;
+      deriveState();
+      regenerate();
+      buildControls();
     });
   })();
 
@@ -643,14 +782,93 @@ function buildControls() {
   // ── OUTPUT SCALING ─────────────────────────────────────────
   b.section('Output Scaling')
    .slider('k₂ (spoke scale)', state, 'k2', 0.01, 5, 0.01)
+   .slider('k₃ (point scale)', state, 'k3', 0.1, 5, 0.01)
    .slider('Z (sample points)', state, 'Z', 1, 2000, 1, { isHeavy: true, fmt: v => v.toString(), onChange: () => { state.n = state.Z; } })
+   .html(`<div class="mode-row">
+     <span class="slider-label">n domain</span>
+     <button class="mode-pill ctrl-interactive" id="nmode-dense">integers</button>
+     <button class="mode-pill ctrl-interactive" id="nmode-prime">primes</button>
+   </div>`)
+   .slider('U_unit (domain scale)', state, 'U_unit', 0.1, 10, 0.1, { fmt: v => v.toFixed(2) })
    .slider('log base (l_base)', state, 'l_base', 0.1, 20, 0.1, { fmt: v => v.toFixed(2) })
+   .html(`<div class="mode-row">
+     <span class="slider-label">log base source</span>
+     <button class="mode-pill ctrl-interactive" id="logbase-lbase">l_base</button>
+     <button class="mode-pill ctrl-interactive" id="logbase-x">X</button>
+   </div>`)
+   .html(`<div class="mode-row">
+     <span class="slider-label">X source</span>
+     <button class="mode-pill ctrl-interactive" id="xsource-k">k</button>
+     <button class="mode-pill ctrl-interactive" id="xsource-xn">X_n</button>
+   </div>`)
+   .slider('X_n', state, 'X_n', 0.01, 20, 0.01, { fmt: v => v.toFixed(4) })
    .slider('# strands', state, 'numStrands', 1, 28, 1, { isHeavy: true, fmt: v => v.toString() })
-   .info('sin(n·f)·k₂, strands offset by n');
+   .info('Direct family on n·f with optional prime-domain and X-based log control.');
+
+  (() => {
+    const dense = b.container.querySelector('#nmode-dense');
+    const prime = b.container.querySelector('#nmode-prime');
+    if (!dense || !prime) return;
+    dense.classList.toggle('active', state.nIsPrimeOnly === 0);
+    prime.classList.toggle('active', state.nIsPrimeOnly === 1);
+    dense.addEventListener('click', () => {
+      state.nIsPrimeOnly = 0;
+      deriveState();
+      regenerate(true);
+      buildControls();
+    });
+    prime.addEventListener('click', () => {
+      state.nIsPrimeOnly = 1;
+      deriveState();
+      regenerate(true);
+      buildControls();
+    });
+  })();
+
+  (() => {
+    const lBaseBtn = b.container.querySelector('#logbase-lbase');
+    const xBtn = b.container.querySelector('#logbase-x');
+    if (!lBaseBtn || !xBtn) return;
+    lBaseBtn.classList.toggle('active', state.logBaseSource !== 'X');
+    xBtn.classList.toggle('active', state.logBaseSource === 'X');
+    lBaseBtn.addEventListener('click', () => {
+      state.logBaseSource = 'l_base';
+      deriveState();
+      regenerate();
+      buildControls();
+    });
+    xBtn.addEventListener('click', () => {
+      state.logBaseSource = 'X';
+      deriveState();
+      regenerate();
+      buildControls();
+    });
+  })();
+
+  (() => {
+    const kBtn = b.container.querySelector('#xsource-k');
+    const xnBtn = b.container.querySelector('#xsource-xn');
+    if (!kBtn || !xnBtn) return;
+    kBtn.classList.toggle('active', state.logXIsIndependentVar === 0);
+    xnBtn.classList.toggle('active', state.logXIsIndependentVar === 1);
+    kBtn.addEventListener('click', () => {
+      state.logXIsIndependentVar = 0;
+      deriveState();
+      regenerate();
+      buildControls();
+    });
+    xnBtn.addEventListener('click', () => {
+      state.logXIsIndependentVar = 1;
+      deriveState();
+      regenerate();
+      buildControls();
+    });
+  })();
 
   // ── PROOF ─────────────────────────────────────────────────
   b.section('Proof')
    .info('α<sup>i·nα/ln(α)</sup> closes at n=1 ⟺ α = τ')
+   .slider('P (offset)', state, 'P', 1, 50, 1, { fmt: v => v.toFixed(0) })
    .slider('α (base)', state, 'alpha', 1, 20, 0.001, {
      fmt: v => {
        if (Math.abs(v - TAU) < 0.01) return `τ ≈ ${TAU.toFixed(3)}`;
@@ -660,7 +878,9 @@ function buildControls() {
      }
    })
    .toggle('Show α trace', state, 'showAlpha')
-   .html('<div class="hud-row" style="margin-top:6px"><span class="hud-key">Closure</span><span class="hud-val" id="closure-display-panel">—</span></div>');
+   .html('<div class="hud-row" style="margin-top:6px"><span class="hud-key">Closure</span><span class="hud-val" id="closure-display-panel">—</span></div>')
+   .html('<div class="hud-row"><span class="hud-key">P₁</span><span class="hud-val" id="p1-display-panel">—</span></div>')
+   .html('<div class="hud-row"><span class="hud-key">E_proof</span><span class="hud-val" id="eproof-display-panel">—</span></div>');
 
   // ── ATLAS VISIBILITY ───────────────────────────────────────
   b.visGroup('A', false)
@@ -673,10 +893,31 @@ function buildControls() {
    .visGroup('H', true);
 
   b.section('Primary Strand', false)
-   .info('f = k₁·e<sup>iτ^k</sup> rendered as sin(n·f)·k₂')
+   .info('Primary strand uses selected direct family on n·f (base/sin/cos/tan).')
+   .html(`<div class="mode-row">
+     <span class="slider-label">trig</span>
+     <button class="mode-pill ctrl-interactive" id="ptrig-0">base</button>
+     <button class="mode-pill ctrl-interactive" id="ptrig-1">sin</button>
+     <button class="mode-pill ctrl-interactive" id="ptrig-2">cos</button>
+     <button class="mode-pill ctrl-interactive" id="ptrig-3">tan</button>
+   </div>`)
    .toggle('Show strand lines', state, 'showLines')
    .slider('strand width', state, 'primaryLineWidth', 0.5, 8, 0.25)
    .slider('strand opacity', state, 'primaryLineOpacity', 0, 1, 0.05);
+
+  (() => {
+    for (let i = 0; i < 4; i++) {
+      const btn = b.container.querySelector(`#ptrig-${i}`);
+      if (!btn) continue;
+      btn.classList.toggle('active', state.primaryTrigIndex === i);
+      btn.addEventListener('click', () => {
+        state.primaryTrigIndex = i;
+        deriveState();
+        regenerate();
+        buildControls();
+      });
+    }
+  })();
 
   b.section('Atlas Curves', false)
    .info('Connected curves for active expression combinations.')
@@ -749,7 +990,7 @@ function buildControls() {
           state.vis.A.vals = [1, 1]; state.vis.G.vals = [1, 1, 1, 1];
           state.vis.D.vals = [1, 1, 1, 1]; state.vis.E.vals = [1, 1, 1];
           state.vis.B.vals = [1, 1]; state.vis.C.vals = [1, 1];
-          state.vis.F.vals = [1, 1]; state.vis.H.vals = [1, 1, 1, 1, 1, 1, 1, 1];
+          state.vis.F.vals = [1, 1]; state.vis.H.vals = Array(H_LABELS.length).fill(1);
       }},
       { label: 'All 28', action: () => Object.assign(state, {
         numStrands: 28, primaryLineWidth: 1.0, primaryLineOpacity: 0.3, ptSize: 0.5
@@ -767,7 +1008,7 @@ function buildControls() {
       <div>τ is the substrate. e is infrastructure.</div>
       <div class="arch-spacer"></div>
       <div>Each strand family: base/sin/cos/tan on n·f, scaled by k₂</div>
-      <div>Atlas: A(2) × G(4) × E(3) × D(4) × B(2) × C(2) × F(2) × H(8)</div>
+      <div>Atlas: A(2) × G(4) × E(3) × D(4) × B(2) × C(2) × F(2) × H(10)</div>
       <div>visible(item) = A[a] × B[b] × … × H[h]</div>
     </div>
   `);
@@ -850,7 +1091,7 @@ function animationFrame() {
     updateTransportUI();
   }
 
-  if (state.timeMode === 'step' && state.kMode === 'derived') {
+  if (shouldAdvanceStep(state, animation.playing)) {
     deriveState();
     const dT = computeStepDelta(state, dtSeconds);
     if (Number.isFinite(dT) && dT !== 0) {

@@ -1,6 +1,13 @@
 import { TAU } from './complex.js';
 
 const EPS = 1e-12;
+const PI = Math.PI;
+
+export const PRIMES = [
+  2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
+  31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
+  73, 79, 83, 89, 97,
+];
 
 export function computeKFromT(T) {
   const safeT = Math.max(EPS, Number.isFinite(T) ? T : 1);
@@ -34,6 +41,55 @@ export function computeStepDelta(derived, dtSeconds) {
   return s * stepRate * dtSeconds;
 }
 
+export function shouldAdvanceStep(derived, isPlaying) {
+  return (
+    !!isPlaying &&
+    derived.timeMode === 'step' &&
+    derived.kMode === 'derived'
+  );
+}
+
+export function computeAlignedK(kValue) {
+  const raw = Number.isFinite(kValue) ? kValue : 1;
+  const alignedInput = Math.max(EPS, raw * PI);
+  return Math.log(alignedInput) / Math.log(TAU);
+}
+
+export function buildNList(Z, nIsPrimeOnly, U_unit) {
+  const safeZ = Math.max(1, Math.floor(Number.isFinite(Z) ? Z : 710));
+  const unit = Number.isFinite(U_unit) ? U_unit : 1;
+  const usePrimes = Number(nIsPrimeOnly) > 0;
+
+  const source = usePrimes
+    ? PRIMES.filter((p) => p < safeZ)
+    : Array.from({ length: safeZ }, (_, i) => i);
+
+  return source.map((v) => v * unit);
+}
+
+export function resolveLogBase(base, sourceMode, X) {
+  const mode = sourceMode === 'X' ? 'X' : 'l_base';
+  const candidate = mode === 'X' ? X : base;
+  const fallback = Number.isFinite(base) ? base : 10;
+  const validCandidate = Number.isFinite(candidate) && candidate > 0 && Math.abs(candidate - 1) > EPS;
+  if (validCandidate) return candidate;
+  if (Number.isFinite(fallback) && fallback > 0 && Math.abs(fallback - 1) > EPS) return fallback;
+  return 10;
+}
+
+function normalizeVisGroup(group, expectedLength) {
+  if (!group || !Array.isArray(group.vals)) return group;
+  const vals = [...group.vals];
+  const sizes = Array.isArray(group.sizes) ? [...group.sizes] : [];
+  while (vals.length < expectedLength) vals.push(1);
+  while (sizes.length < expectedLength) sizes.push(1);
+  return {
+    ...group,
+    vals: vals.slice(0, expectedLength),
+    sizes: sizes.slice(0, expectedLength),
+  };
+}
+
 export function buildDerivedState(input) {
   const base = { ...input };
 
@@ -47,9 +103,20 @@ export function buildDerivedState(input) {
 
   const kMode = base.kMode === 'manual' ? 'manual' : 'derived';
   let T = Number.isFinite(base.T) ? base.T : 1.9999;
-  let k = Number.isFinite(base.k) ? base.k : 1;
+  const kStepsInAlignments = Number(base.kStepsInAlignments) > 0 ? 1 : 0;
+  let k_value = Number.isFinite(base.k_value)
+    ? base.k_value
+    : (Number.isFinite(base.k) ? base.k : 1);
+  let k = Number.isFinite(base.k) ? base.k : k_value;
 
-  if (kMode === 'manual') {
+  if (kStepsInAlignments > 0) {
+    k = computeAlignedK(k_value);
+    if (kMode === 'manual') {
+      T = computeTFromK(k);
+    }
+  } else if (kMode === 'manual') {
+    k = Number.isFinite(base.k) ? base.k : (Number.isFinite(k_value) ? k_value : k);
+    k_value = k;
     T = computeTFromK(k);
   } else {
     k = computeKFromT(T);
@@ -84,12 +151,38 @@ export function buildDerivedState(input) {
   let l_base = Number.isFinite(base.l_base) ? base.l_base : 10;
   if (l_base <= 0 || Math.abs(l_base - 1) < EPS) l_base = 10;
 
+  const logXIsIndependentVar = Number(base.logXIsIndependentVar) > 0 ? 1 : 0;
+  const X_n = Number.isFinite(base.X_n) ? base.X_n : k;
+  const X = logXIsIndependentVar > 0 ? X_n : k;
+  const logBaseSource = base.logBaseSource === 'X' ? 'X' : 'l_base';
+  const logBase = resolveLogBase(l_base, logBaseSource, X);
+
   let b = Number.isFinite(base.b) ? base.b : 1000;
   if (Math.abs(b) < EPS) b = 1;
   const s = 1 / b;
 
   const stepRate = Number.isFinite(base.stepRate) ? base.stepRate : 1;
   const timeMode = base.timeMode === 'step' ? 'step' : 'animation';
+  const syncTStepToS = base.syncTStepToS !== false;
+  const tRegion = typeof base.tRegion === 'string' ? base.tRegion : 'full';
+
+  const primaryTrigIndex = Math.max(0, Math.min(3, Math.floor(Number.isFinite(base.primaryTrigIndex) ? base.primaryTrigIndex : 1)));
+  const k3 = Number.isFinite(base.k3) ? Math.max(EPS, base.k3) : 1;
+
+  const nIsPrimeOnly = Number(base.nIsPrimeOnly) > 0 ? 1 : 0;
+  const U_unit = Number.isFinite(base.U_unit) ? base.U_unit : 1;
+  const nList = buildNList(Z, nIsPrimeOnly, U_unit);
+
+  const P = Number.isFinite(base.P) ? base.P : 1;
+  const P1 = P * (1 + TAU / Z);
+  const eProof = Number.isFinite(base.eProof) ? base.eProof : NaN;
+
+  const vis = base.vis;
+  if (vis && vis.H) {
+    const normalizedH = normalizeVisGroup(vis.H, 10);
+    vis.H.vals = normalizedH.vals;
+    vis.H.sizes = normalizedH.sizes;
+  }
 
   return {
     ...base,
@@ -97,6 +190,8 @@ export function buildDerivedState(input) {
     n: Z,
     T,
     k,
+    k_value,
+    kStepsInAlignments,
     kMode,
     q1,
     q2,
@@ -110,10 +205,26 @@ export function buildDerivedState(input) {
     manual_k1,
     qMode,
     l_base,
+    logBaseSource,
+    logBase,
+    logXIsIndependentVar,
+    X_n,
+    X,
     b,
     s,
     stepRate,
     timeMode,
+    syncTStepToS,
+    tRegion,
+    primaryTrigIndex,
+    k3,
+    nIsPrimeOnly,
+    U_unit,
+    nList,
+    P,
+    P1,
+    eProof,
+    vis,
   };
 }
 
