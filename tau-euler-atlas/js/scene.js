@@ -552,12 +552,14 @@ export function updateAtlasPaths(paths, globalWidth, lineOpacity) {
 
     // Apply per-path width multiplier (s_ system: global × widthMul)
     const pw = Math.max(0.2, globalWidth * (path.widthMul ?? 1));
+    // Apply per-path opacity multiplier (lineOp system: global × opacityMul)
+    const po = Math.min(1, lineOpacity * (path.opacityMul ?? 1));
 
     const mat = new LineMaterial({
       linewidth: pw,
       vertexColors: true,
       transparent: true,
-      opacity: lineOpacity,
+      opacity: po,
       worldUnits: false,
       alphaToCoverage: false,
       depthWrite: false,

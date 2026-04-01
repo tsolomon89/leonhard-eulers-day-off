@@ -17,8 +17,23 @@
 
 import {
   TAU, LN_TAU, QUADS, TRIG,
-  cExp, cLog, cSin, cScl, cNeg, cInv, cTauPow, cAlphaPow, ok
+  cCos, cTan, cLogBase, cSin, cScl, cNeg, cInv, cTauPow, cAlphaPow, ok
 } from './complex.js';
+import { buildDerivedState } from './derivation.js';
+
+export { TRIG }; // re-export so controls.js can build expression labels
+
+export function evaluateDirectFamily(base, nValue, dIndex, k2) {
+  const nBase = cScl(base, nValue);
+  switch (dIndex) {
+    case 0: return base;
+    case 1: return cScl(cSin(nBase), k2);
+    case 2: return cScl(cCos(nBase), k2);
+    case 3: return cScl(cTan(nBase), k2);
+    default: return [NaN, NaN];
+  }
+}
+
 
 // ── Core τ-native computation ────────────────────────────────
 
@@ -129,10 +144,11 @@ export const H_LABELS = [
 
 export function generateAllPoints(params) {
   const t0 = performance.now();
+  const derived = buildDerivedState(params);
   const {
-    n: Z, k, k1, k2,
+    Z, k, k1, k2, l_base,
     numStrands, vis, ptSize
-  } = params;
+  } = derived;
 
   const f = computeF(k1, k);
   const kVal = k;
@@ -161,9 +177,7 @@ export function generateAllPoints(params) {
     for (let i = 0; i < Z; i++) {
       if (count >= purebudget) break;
       const nv = i + offset;
-      const nf = cScl(f, nv);
-      const sinNf = cSin(nf);
-      const val = cScl(sinNf, k2);
+      const val = evaluateDirectFamily(f, nv, 1, k2);
 
       if (!ok(val) || Math.abs(val[0]) > 100 || Math.abs(val[1]) > 100) continue;
 
@@ -244,21 +258,16 @@ export function generateAllPoints(params) {
             // H filter
             if (vis.H.vals[hIdx] <= 0) continue;
 
-            const nBase = cScl(baseZ, nv);
-            const sinVal = cSin(nBase);
-            const spokePoint = cScl(sinVal, k2);
-            if (!ok(spokePoint)) continue;
-
             for (let di = 0; di < 4; di++) {
               if (count >= maxPts) break;
               if (vis.D.vals[di] <= 0) continue;
-              const afterTrig = TRIG[di].fn(spokePoint);
+              const afterTrig = evaluateDirectFamily(baseZ, nv, di, k2);
               if (!ok(afterTrig)) continue;
 
               for (let ci = 0; ci < 2; ci++) {
                 if (count >= maxPts) break;
                 if (vis.C.vals[ci] <= 0) continue;
-                const afterLog = ci === 0 ? afterTrig : cLog(afterTrig);
+                const afterLog = ci === 0 ? afterTrig : cLogBase(afterTrig, l_base);
                 if (!ok(afterLog)) continue;
 
                 for (let bi = 0; bi < 2; bi++) {
@@ -307,58 +316,11 @@ export function generateAllPoints(params) {
   };
 }
 
-// ── Strand paths for Line2 rendering ─────────────────────────
-
+// ── Legacy strand-path entrypoint (compat only) ───────────────
+// Deprecated: kept for one-release compatibility.
+// Delegates to canonical primary-path generator to prevent drift.
 export function generateStrandPaths(params) {
-  const { n: Z, k, k1, k2, numStrands } = params;
-  const f = computeF(k1, k);
-
-  const paths = [];
-
-  for (let strand = 0; strand < numStrands; strand++) {
-    const offset = strand * Z;
-    const hue = strand / Math.max(1, numStrands);
-    const [r, g, b] = hueToRGB(hue);
-
-    const allPts = [];
-    for (let i = 0; i < Z; i++) {
-      const nv = i + offset;
-      const nf = cScl(f, nv);
-      const sinNf = cSin(nf);
-      const val = cScl(sinNf, k2);
-
-      if (!ok(val) || Math.abs(val[0]) > 100 || Math.abs(val[1]) > 100) {
-        allPts.push(null);
-      } else {
-        allPts.push(val);
-      }
-    }
-
-    let segment = [];
-    const flushSegment = () => {
-      if (segment.length >= 2) {
-        const pos = new Float32Array(segment.length * 3);
-        for (let j = 0; j < segment.length; j++) {
-          pos[j * 3] = segment[j][0];
-          pos[j * 3 + 1] = segment[j][1];
-          pos[j * 3 + 2] = 0;
-        }
-        paths.push({ strandIdx: strand, positions: pos, color: [r, g, b], pointCount: segment.length });
-      }
-      segment = [];
-    };
-
-    for (let i = 0; i < allPts.length; i++) {
-      if (allPts[i]) {
-        segment.push(allPts[i]);
-      } else {
-        flushSegment();
-      }
-    }
-    flushSegment();
-  }
-
-  return paths;
+  return generatePrimaryPaths(params);
 }
 
 // ── Atlas path generator — connected curves per expression ────
@@ -403,7 +365,8 @@ function computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil) {
 const ATLAS_PATH_BUDGET = 200; // default if not specified in params
 
 export function generateAtlasPaths(params) {
-  const { n: Z, k, k2, numStrands, vis, atlasBudget = ATLAS_PATH_BUDGET } = params;
+  const derived = buildDerivedState(params);
+  const { Z, k, k2, l_base, numStrands, vis, atlasBudget = ATLAS_PATH_BUDGET } = derived;
   const kVal = k;
   const kCeil = Math.max(1, Math.floor(Math.abs(kVal) + 1));
   const paths = [];
@@ -432,12 +395,19 @@ export function generateAtlasPaths(params) {
               const totalOp = vis.G.vals[gi] * vis.E.vals[eIdx] * vis.F.vals[fIdx]
                 * vis.H.vals[hIdx] * vis.D.vals[di] * vis.C.vals[ci] * vis.B.vals[bi];
               if (totalOp <= 0.01) continue;
-              // ── Width product (s_ system) — Global × Group × Member ──
+              // ── Width product (s_ system) — ALL group lineW × ALL member sizes ──
               const sz = (grp, idx) => (grp.sizes && grp.sizes[idx] != null) ? grp.sizes[idx] : 1;
-              const widthMul = sz(vis.G, gi) * sz(vis.F, fIdx) * sz(vis.H, hIdx)
-                * sz(vis.E, eIdx) * sz(vis.D, di) * sz(vis.C, ci) * sz(vis.B, bi)
-                * (vis.G.lineW ?? 1);
-              combos.push({ gi, fIdx, hIdx, eIdx, di, ci, bi, totalOp, widthMul });
+              const widthMul =
+                (vis.G.lineW??1)*(vis.F.lineW??1)*(vis.H.lineW??1)*
+                (vis.E.lineW??1)*(vis.D.lineW??1)*(vis.C.lineW??1)*(vis.B.lineW??1)*
+                sz(vis.G,gi)*sz(vis.F,fIdx)*sz(vis.H,hIdx)*
+                sz(vis.E,eIdx)*sz(vis.D,di)*sz(vis.C,ci)*sz(vis.B,bi);
+              // ── Opacity product (lineOp system) — ALL group lineOp × totalOp ──
+              const opacityMul =
+                (vis.G.lineOp??1)*(vis.F.lineOp??1)*(vis.H.lineOp??1)*
+                (vis.E.lineOp??1)*(vis.D.lineOp??1)*(vis.C.lineOp??1)*(vis.B.lineOp??1)*
+                totalOp;
+              combos.push({ gi, fIdx, hIdx, eIdx, di, ci, bi, totalOp, widthMul, opacityMul });
             }
           }
         }
@@ -450,7 +420,7 @@ export function generateAtlasPaths(params) {
 
   let pathCount = 0;
 
-  for (const { gi, fIdx, hIdx, di, ci, bi, totalOp, widthMul } of combos) {
+  for (const { gi, fIdx, hIdx, di, ci, bi, totalOp, widthMul, opacityMul } of combos) {
     if (pathCount >= atlasBudget) break;
 
     const quad = QUADS[gi];
@@ -458,7 +428,7 @@ export function generateAtlasPaths(params) {
     const color = [quad.color[0] * br, quad.color[1] * br, quad.color[2] * br];
 
     for (let strand = 0; strand < numStrands; strand++) {
-      if (pathCount >= ATLAS_PATH_BUDGET) break;
+      if (pathCount >= atlasBudget) break;
       const offset = strand * Z;
 
       // Accumulate connected points for this (combo, strand)
@@ -475,9 +445,11 @@ export function generateAtlasPaths(params) {
           paths.push({
             positions: pos,
             color,
-            widthMul,  // s_ system: caller multiplies atlasLineWidth × widthMul
+            widthMul,
+            opacityMul, // lineOp product — applied multiplicatively in updateAtlasPaths
             pointCount: segment.length,
-            tag: { gi, fIdx, hIdx, di, ci, bi }
+            tag: { gi, fIdx, hIdx, di, ci, bi },
+            isPrimary: false,
           });
           pathCount++;
         }
@@ -490,15 +462,10 @@ export function generateAtlasPaths(params) {
         const baseZ = computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil);
         if (!baseZ || !ok(baseZ)) { flushSeg(); continue; }
 
-        const nBase    = cScl(baseZ, nv);
-        const sinVal   = cSin(nBase);
-        const spoke    = cScl(sinVal, k2);
-        if (!ok(spoke)) { flushSeg(); continue; }
-
-        const afterTrig = TRIG[di].fn(spoke);
+        const afterTrig = evaluateDirectFamily(baseZ, nv, di, k2);
         if (!ok(afterTrig)) { flushSeg(); continue; }
 
-        const afterLog  = ci === 0 ? afterTrig : cLog(afterTrig);
+        const afterLog  = ci === 0 ? afterTrig : cLogBase(afterTrig, l_base);
         if (!ok(afterLog)) { flushSeg(); continue; }
 
         const final = bi === 0 ? afterLog : cNeg(afterLog);
@@ -516,3 +483,56 @@ export function generateAtlasPaths(params) {
   return paths;
 }
 
+// ── Primary strand paths — unified into atlas pipeline ────────
+//
+//  f = k₁·e^{iτ^k}  — the T-derived seed, mapped through sin(n·f)·k₂
+//  Returns paths in the same format as generateAtlasPaths so they flow
+//  through updateAtlasPaths for unified rendering.
+//  isPrimary: true — controls.js applies primaryLineWidth/Opacity separately.
+
+export function generatePrimaryPaths(params) {
+  const { Z, k, k1, k2, numStrands } = buildDerivedState(params);
+  const f = computeF(k1, k);
+  const paths = [];
+
+  for (let strand = 0; strand < numStrands; strand++) {
+    const offset = strand * Z;
+    const hue = strand / Math.max(1, numStrands);
+    const [r, g, b] = hueToRGB(hue);
+
+    let segment = [];
+    const flushSeg = () => {
+      if (segment.length >= 2) {
+        const pos = new Float32Array(segment.length * 3);
+        for (let j = 0; j < segment.length; j++) {
+          pos[j * 3]     = segment[j][0];
+          pos[j * 3 + 1] = segment[j][1];
+          pos[j * 3 + 2] = 0;
+        }
+        paths.push({
+          positions:  pos,
+          color:      [r, g, b],
+          widthMul:   1,   // controlled by state.primaryLineWidth directly
+          opacityMul: 1,   // controlled by state.primaryLineOpacity directly
+          pointCount: segment.length,
+          tag:        null,
+          isPrimary:  true,
+        });
+      }
+      segment = [];
+    };
+
+    for (let i = 0; i < Z; i++) {
+      const nv  = i + offset;
+      const val = evaluateDirectFamily(f, nv, 1, k2);
+      if (!ok(val) || Math.abs(val[0]) > 100 || Math.abs(val[1]) > 100) {
+        flushSeg();
+      } else {
+        segment.push(val);
+      }
+    }
+    flushSeg();
+  }
+
+  return paths;
+}

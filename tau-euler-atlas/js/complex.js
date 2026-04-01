@@ -39,6 +39,12 @@ export const cExp = z => {
 };
 
 export const cLog = z => [Math.log(cAbs(z)), cArg(z)];
+export const cLogBase = (z, base) => {
+  const lnBase = Math.log(base);
+  if (!isFinite(lnBase) || Math.abs(lnBase) < 1e-30) return [NaN, NaN];
+  const lnZ = cLog(z);
+  return [lnZ[0] / lnBase, lnZ[1] / lnBase];
+};
 
 export const cPow = (base, exp) => cExp(cMul(exp, cLog(base)));
 
@@ -93,7 +99,7 @@ export const QUADS = [
 
 // ── Trig pipeline ────────────────────────────────────────────
 export const TRIG = [
-  { label: 'id',  fn: z => z },
+  { label: 'base', fn: z => z },
   { label: 'sin', fn: cSin },
   { label: 'cos', fn: cCos },
   { label: 'tan', fn: cTan },
