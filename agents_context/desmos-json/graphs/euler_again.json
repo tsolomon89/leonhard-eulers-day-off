@@ -3,53 +3,906 @@
   "randomSeed": "43e569c2efcc071e22ab46bc0a23c829",
   "graph": {
     "viewport": {
-      "xmin": -2.9745496716483113,
-      "ymin": -2.262782428789607,
-      "xmax": 2.9745496716483113,
-      "ymax": 2.262782428789607
+      "xmin": -1.6124982344457948,
+      "ymin": -1.601699515911219,
+      "xmax": 1.6321067721925702,
+      "ymax": 2.021371867648271
     },
     "complex": true,
     "__v12ViewportLatexStash": {
-      "xmin": "-2.9745496716483113",
-      "xmax": "2.9745496716483113",
-      "ymin": "-2.262782428789607",
-      "ymax": "2.262782428789607"
+      "xmin": "-1.6124982344457948",
+      "xmax": "1.6321067721925702",
+      "ymin": "-1.601699515911219",
+      "ymax": "2.021371867648271"
     }
   },
   "expressions": {
     "list": [
       {
+        "type": "folder",
+        "id": "356",
+        "title": "IMPORTANT",
+        "collapsed": true
+      },
+      {
+        "type": "text",
+        "id": "358",
+        "folderId": "356",
+        "text": "Things are looking good and we are getting there, but i still feel like there are parameters and things that are not properly wired or connected to everything.\n\nwe should have one root function\n`f=k_{1}e^{i\\tau^{k}}`\n\nthis function we plot as  where n is our list of integers that we start with when plotting. \nwe use n to set the list of point (as per how desmos works)\n\n`\\sin\\left(nf\\right)k_{2}`\nor\n`\\cos\\left(nf\\right)k_{2}`\nor \n`\\tan\\left(nf\\right)k_{2}`\n\nfor each function we also do it as log\n```\n\\log_{l_{base}}\\left(\\sin\\left(nf\\right)k_{2}\\right)\n\\log_{l_{base}}\\left(\\cos\\left(nf\\right)k_{2}\\right)\n\\log_{l_{base}}\\left(\\tan\\left(nf\\right)k_{2}\\right)\n```\n\nk is simply `k=\\frac{\\log_{l_{func}}\\left(T\\ \\frac{\\tau}{2}\\right)}{\\log_{l_{func}}\\left(\\tau\\right)}`\nin this way `k` is one scaling parameter\n`k_{2}` and `k_{3}` scale the size of the points rendered relative to a unit circle effectively\n\n\n\nwhere `T` is one parameter the moves 'Time' forward in the system. \nCritically setting the bounds for T is a major part of program because for example lots happens between `1.999` and `2` but generally as we approached any integer. \n\n`Z` then is defining how may points are plotted in some group in the demos file there are point limitations to what demos can handle but this also creates a rainbow visuals and a grouping effect as we analyze sets of 710 points going from 0 to 709 -> as we start counting from 0. Z is directly to related to handling the `n` lists because that's how we control the number of points in desmos\n`\nk_{1} then is `k_{1}=\\left\\{q_{a}=0:q_{1},\\frac{\\tau}{\\frac{q}{2}\\left\\{q_{correction}=0:2,q_{correction}>0:\\left\\{d=0:1,d\\right\\}\\right\\}}\\right\\}` and another way we scale or transform the functions. \n\nq_{a}=1 is a boolean option it turns the 'correction' on or off . how or why this corrects the function is unclear to mean but it means we always fall on some exact thing as when it comes to how the points plotted form the 'spokes' . with the correct being d=\\operatorname{abs}\\left(2\\cos\\left(\\frac{\\tau}{2}T\\right)\\right)\n\n`q=q_{1}\\tau^{q_{2}}` has to do with the correction mechanic that plots the points in these 'spokes'\nwhere `q_{1}` defines the number , and the correction of `d` is what them to fall on the real or imaginary line at core points (when T is integer or half integer depending)\n\n`s=\\frac{1}{b}` and and the parameter `b` should be parameter relative to T for which we change the resolution of how we progress `T` forward because at some point you need to define (this is the wrong word but the first one the comes to mind the FPS) how we count up and do so consistently because of course the reals are infinite so how to step consistently?"
+      },
+      {
+        "type": "folder",
+        "id": "355",
+        "title": "i positive",
+        "collapsed": true
+      },
+      {
         "type": "expression",
         "id": "1",
+        "folderId": "355",
         "color": "#000000",
-        "latex": "f=k_{1}e^{i\\tau^{k}}",
-        "hidden": true,
+        "latex": "f_{positiveImaginary}=k_{1}e^{i\\tau^{k}}",
+        "colorLatex": "c_{14}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
         "lineWidth": "4"
       },
       {
         "type": "expression",
-        "id": "69",
+        "id": "352",
+        "folderId": "355",
         "color": "#2d70b3",
-        "latex": "k=\\frac{\\log_{l_{func}}\\left(T\\ \\frac{\\tau}{2}\\right)}{\\log_{l_{func}}\\left(\\tau\\right)}",
+        "latex": "f_{positiveImaginaryReciprocal}=f_{positiveImaginary}^{-1}",
+        "colorLatex": "c_{14}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}"
+      },
+      {
+        "type": "expression",
+        "id": "348",
+        "folderId": "355",
+        "color": "#388c46",
+        "latex": "f_{positiveImaginaryVectorA}=Jf_{positiveImaginary}",
+        "lines": true,
+        "colorLatex": "c_{14}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "349",
+        "folderId": "355",
+        "color": "#6042a6",
+        "latex": "f_{positiveImaginaryVectorReciprocal}=J^{-1}f_{positiveImaginary}",
+        "lines": true,
+        "colorLatex": "c_{14}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "354",
+        "folderId": "355",
+        "color": "#6042a6",
+        "latex": "f_{positiveImaginaryVectorB}=nf_{positiveImaginary}",
+        "lines": true,
+        "colorLatex": "c_{14}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "350",
+        "folderId": "355",
+        "color": "#000000",
+        "latex": "f_{positiveImaginaryCircleA}=e^{i\\tau^{n}}",
+        "lines": false,
+        "colorLatex": "c_{14}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "351",
+        "folderId": "355",
+        "color": "#c74440",
+        "latex": "f_{positiveImaginaryCircleB}=k_{1}\\ e^{i\\ \\frac{\\tau}{n}^{k}}",
+        "lines": true,
+        "colorLatex": "c_{14}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "367",
+        "folderId": "355",
+        "color": "#c74440",
+        "latex": "f_{positiveImaginaryCircleC}=-k_{1}\\ e^{i\\ \\frac{\\tau}{n}^{k}}",
+        "lines": true,
+        "colorLatex": "c_{14}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "353",
+        "folderId": "355",
+        "color": "#388c46",
+        "latex": "f_{positiveImaginaryCircleBReciprocal}=f_{positiveImaginaryCircleB}^{-1}",
+        "lines": true,
+        "colorLatex": "c_{14}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "368",
+        "folderId": "355",
+        "color": "#2d70b3",
+        "latex": "f_{positiveImaginaryCircleCReciprocal}=f_{positiveImaginaryCircleC}^{-1}",
+        "lines": true,
+        "colorLatex": "c_{14}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "folder",
+        "id": "456",
+        "title": "Sin i positive Plots",
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "457",
+        "folderId": "456",
+        "color": "#6042a6",
+        "latex": "\\sin\\left(f_{positiveImaginary}\\right)k_{2}",
+        "colorLatex": "c_{12}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}"
+      },
+      {
+        "type": "expression",
+        "id": "458",
+        "folderId": "456",
+        "color": "#6042a6",
+        "latex": "\\sin\\left(f_{positiveImaginaryReciprocal}\\right)k_{2}",
+        "colorLatex": "c_{12}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}"
+      },
+      {
+        "type": "expression",
+        "id": "459",
+        "folderId": "456",
+        "color": "#388c46",
+        "latex": "\\sin\\left(f_{positiveImaginaryVectorA}\\right)k_{2}",
+        "lines": true,
+        "colorLatex": "c_{12}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "460",
+        "folderId": "456",
+        "color": "#6042a6",
+        "latex": "\\sin\\left(f_{positiveImaginaryVectorReciprocal}\\right)k_{2}",
+        "lines": true,
+        "colorLatex": "c_{12}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "461",
+        "folderId": "456",
+        "color": "#000000",
+        "latex": "\\sin\\left(f_{positiveImaginaryVectorB}\\right)k_{2}",
+        "lines": true,
+        "colorLatex": "c_{12}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "462",
+        "folderId": "456",
+        "color": "#c74440",
+        "latex": "\\sin\\left(f_{positiveImaginaryCircleC}\\right)k_{2}",
+        "lines": true,
+        "colorLatex": "c_{12}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "463",
+        "folderId": "456",
+        "color": "#2d70b3",
+        "latex": "\\sin\\left(f_{positiveImaginaryCircleBReciprocal}\\right)",
+        "lines": true,
+        "colorLatex": "c_{12}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "464",
+        "folderId": "456",
+        "color": "#388c46",
+        "latex": "\\sin\\left(f_{positiveImaginaryCircleCReciprocal}\\right)",
+        "lines": true,
+        "colorLatex": "c_{12}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "folder",
+        "id": "465",
+        "title": "Log Sin i positive Plots",
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "466",
+        "folderId": "465",
+        "color": "#6042a6",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginary}\\right)k_{2}\\right)",
+        "colorLatex": "c_{18}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}"
+      },
+      {
+        "type": "expression",
+        "id": "467",
+        "folderId": "465",
+        "color": "#6042a6",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryReciprocal}\\right)k_{2}\\right)",
+        "colorLatex": "c_{18}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}"
+      },
+      {
+        "type": "expression",
+        "id": "468",
+        "folderId": "465",
+        "color": "#388c46",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryVectorA}\\right)k_{2}\\right)",
+        "lines": true,
+        "colorLatex": "c_{18}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "469",
+        "folderId": "465",
+        "color": "#6042a6",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryVectorReciprocal}\\right)k_{2}\\right)",
+        "lines": true,
+        "colorLatex": "c_{18}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "470",
+        "folderId": "465",
+        "color": "#000000",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryVectorB}\\right)k_{2}\\right)",
+        "lines": true,
+        "colorLatex": "c_{18}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "471",
+        "folderId": "465",
+        "color": "#c74440",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryCircleC}\\right)k_{2}\\right)",
+        "lines": true,
+        "colorLatex": "c_{18}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "472",
+        "folderId": "465",
+        "color": "#2d70b3",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryCircleBReciprocal}\\right)\\right)",
+        "lines": true,
+        "colorLatex": "c_{18}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "473",
+        "folderId": "465",
+        "color": "#388c46",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryCircleCReciprocal}\\right)\\right)",
+        "lines": true,
+        "colorLatex": "c_{18}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "folder",
+        "id": "436",
+        "title": "i negative",
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "437",
+        "folderId": "436",
+        "color": "#000000",
+        "latex": "f_{negativeImaginary}=k_{1}e^{-i\\tau^{k}}",
+        "colorLatex": "c_{20}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "4"
+      },
+      {
+        "type": "expression",
+        "id": "438",
+        "folderId": "436",
+        "color": "#2d70b3",
+        "latex": "f_{negativeImaginaryReciprocal}=f_{positiveImaginary}^{-1}",
+        "colorLatex": "c_{20}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}"
+      },
+      {
+        "type": "expression",
+        "id": "439",
+        "folderId": "436",
+        "color": "#388c46",
+        "latex": "f_{negativeImaginaryVectorA}=Jf_{positiveImaginary}",
+        "lines": true,
+        "colorLatex": "c_{20}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "440",
+        "folderId": "436",
+        "color": "#6042a6",
+        "latex": "f_{negativeImaginaryVectorReciprocal}=J^{-1}f_{positiveImaginary}",
+        "lines": true,
+        "colorLatex": "c_{20}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "441",
+        "folderId": "436",
+        "color": "#6042a6",
+        "latex": "f_{negativeImaginaryVectorB}=nf_{positiveImaginary}",
+        "lines": true,
+        "colorLatex": "c_{20}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "442",
+        "folderId": "436",
+        "color": "#000000",
+        "latex": "f_{negativeImaginaryCircleA}=e^{-i\\tau^{n}}",
+        "lines": false,
+        "colorLatex": "c_{20}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "443",
+        "folderId": "436",
+        "color": "#c74440",
+        "latex": "f_{negativeImaginaryCircleB}=k_{1}\\ e^{-i\\ \\frac{\\tau}{n}^{k}}",
+        "lines": true,
+        "colorLatex": "c_{20}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "444",
+        "folderId": "436",
+        "color": "#c74440",
+        "latex": "f_{negativeImaginaryCircleC}=-k_{1}\\ e^{-i\\ \\frac{\\tau}{n}^{k}}",
+        "lines": true,
+        "colorLatex": "c_{20}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "445",
+        "folderId": "436",
+        "color": "#388c46",
+        "latex": "f_{negativeImaginaryCircleBReciprocal}=f_{positiveImaginaryCircleB}^{-1}",
+        "lines": true,
+        "colorLatex": "c_{20}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "446",
+        "folderId": "436",
+        "color": "#2d70b3",
+        "latex": "f_{negativeImaginaryCircleCReciprocal}=f_{positiveImaginaryCircleC}^{-1}",
+        "lines": true,
+        "colorLatex": "c_{20}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "folder",
+        "id": "122",
+        "title": "Sin i negative Plots",
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "364",
+        "folderId": "122",
+        "color": "#6042a6",
+        "latex": "\\sin\\left(f_{negativeImaginary}\\right)k_{2}",
+        "colorLatex": "c_{24}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}"
+      },
+      {
+        "type": "expression",
+        "id": "418",
+        "folderId": "122",
+        "color": "#6042a6",
+        "latex": "\\sin\\left(f_{negativeImaginaryReciprocal}\\right)k_{2}",
+        "colorLatex": "c_{24}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}"
+      },
+      {
+        "type": "expression",
+        "id": "380",
+        "folderId": "122",
+        "color": "#388c46",
+        "latex": "\\sin\\left(f_{negativeImaginaryVectorA}\\right)k_{2}",
+        "lines": true,
+        "colorLatex": "c_{24}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "381",
+        "folderId": "122",
+        "color": "#6042a6",
+        "latex": "\\sin\\left(f_{negativeImaginaryVectorReciprocal}\\right)k_{2}",
+        "lines": true,
+        "colorLatex": "c_{24}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "382",
+        "folderId": "122",
+        "color": "#000000",
+        "latex": "\\sin\\left(f_{negativeImaginaryVectorB}\\right)k_{2}",
+        "lines": true,
+        "colorLatex": "c_{24}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "383",
+        "folderId": "122",
+        "color": "#c74440",
+        "latex": "\\sin\\left(f_{negativeImaginaryCircleC}\\right)k_{2}",
+        "lines": true,
+        "colorLatex": "c_{24}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "384",
+        "folderId": "122",
+        "color": "#2d70b3",
+        "latex": "\\sin\\left(f_{negativeImaginaryCircleBReciprocal}\\right)",
+        "lines": true,
+        "colorLatex": "c_{24}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "385",
+        "folderId": "122",
+        "color": "#388c46",
+        "latex": "\\sin\\left(f_{negativeImaginaryCircleCReciprocal}\\right)",
+        "lines": true,
+        "colorLatex": "c_{24}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "folder",
+        "id": "427",
+        "title": "Log Sin i negative Plots",
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "428",
+        "folderId": "427",
+        "color": "#6042a6",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginary}\\right)k_{2}\\right)",
+        "colorLatex": "c_{22}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}"
+      },
+      {
+        "type": "expression",
+        "id": "429",
+        "folderId": "427",
+        "color": "#6042a6",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryReciprocal}\\right)k_{2}\\right)",
+        "colorLatex": "c_{22}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}"
+      },
+      {
+        "type": "expression",
+        "id": "430",
+        "folderId": "427",
+        "color": "#388c46",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryVectorA}\\right)k_{2}\\right)",
+        "lines": true,
+        "colorLatex": "c_{22}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "431",
+        "folderId": "427",
+        "color": "#6042a6",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryVectorReciprocal}\\right)k_{2}\\right)",
+        "lines": true,
+        "colorLatex": "c_{22}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "432",
+        "folderId": "427",
+        "color": "#000000",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryVectorB}\\right)k_{2}\\right)",
+        "lines": true,
+        "colorLatex": "c_{22}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "433",
+        "folderId": "427",
+        "color": "#c74440",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryCircleC}\\right)k_{2}\\right)",
+        "lines": true,
+        "colorLatex": "c_{22}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "434",
+        "folderId": "427",
+        "color": "#2d70b3",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryCircleBReciprocal}\\right)\\right)",
+        "lines": true,
+        "colorLatex": "c_{22}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "expression",
+        "id": "435",
+        "folderId": "427",
+        "color": "#388c46",
+        "latex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryCircleCReciprocal}\\right)\\right)",
+        "lines": true,
+        "colorLatex": "c_{22}",
+        "lineOpacity": "l_{lineOpacity}",
+        "pointOpacity": "p_{pointOpacity}",
+        "pointSize": "p_{pointSize}",
+        "movablePointSize": "p_{pointSize}",
+        "lineWidth": "l_{lineWidth}"
+      },
+      {
+        "type": "folder",
+        "id": "59",
+        "title": "Parameter Stepping Control / Ranges",
+        "hidden": true,
+        "collapsed": true
+      },
+      {
+        "type": "text",
+        "id": "58",
+        "folderId": "59",
+        "text": "s=\\frac{1}{b} is for the stepping function for fine tuning the progressing of scaling variables and seeing behavior at rational intervals "
+      },
+      {
+        "type": "expression",
+        "id": "341",
+        "folderId": "59",
+        "color": "#c74440",
+        "latex": "J=\\frac{n\\left[01...\\left(k+1\\right)\\right]}{k}",
         "hidden": true
       },
       {
         "type": "expression",
-        "id": "21",
+        "id": "11",
+        "folderId": "59",
         "color": "#c74440",
-        "latex": "k_{1}=\\left\\{q_{a}=0:q_{1},\\frac{\\tau}{\\frac{q}{2}\\left\\{q_{correction}=0:2,q_{correction}>0:\\left\\{d=0:1,d\\right\\}\\right\\}}\\right\\}",
+        "latex": "Z=710",
         "hidden": true,
         "slider": {
           "hardMin": true,
-          "animationPeriod": 80000,
-          "min": "1"
+          "hardMax": true,
+          "min": "0",
+          "max": "710",
+          "step": "1"
         }
       },
       {
         "type": "expression",
-        "id": "323",
+        "id": "4",
+        "folderId": "59",
+        "color": "#6042a6",
+        "latex": "T=2",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "animationPeriod": 80000,
+          "min": "T_{start}",
+          "max": "T_{stop}",
+          "step": "s"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "345",
+        "folderId": "59",
         "color": "#000000",
-        "latex": "q_{a}=1",
+        "latex": "Z_{max}=710",
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "0",
+          "max": "Z"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "346",
+        "folderId": "59",
+        "color": "#c74440",
+        "latex": "Z_{min}=0",
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "-Z",
+          "max": "0",
+          "step": "1"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "342",
+        "folderId": "59",
+        "color": "#2d70b3",
+        "latex": "T_{start}=1.99999"
+      },
+      {
+        "type": "expression",
+        "id": "343",
+        "folderId": "59",
+        "color": "#388c46",
+        "latex": "T_{stop}=2"
+      },
+      {
+        "type": "expression",
+        "id": "15",
+        "folderId": "59",
+        "color": "#000000",
+        "latex": "s=\\frac{1}{b}",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "19",
+        "folderId": "59",
+        "color": "#6042a6",
+        "latex": "b=36000000",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "min": "0",
+          "step": "1"
+        }
+      },
+      {
+        "type": "folder",
+        "id": "291",
+        "title": "k Scaling Parameters & Booleans",
+        "hidden": true,
+        "collapsed": true
+      },
+      {
+        "type": "expression",
+        "id": "292",
+        "folderId": "291",
+        "color": "#388c46",
+        "latex": "l_{base}=10",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "3",
+        "folderId": "291",
+        "color": "#388c46",
+        "latex": "l_{func}=10",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "362",
+        "folderId": "291",
+        "color": "#388c46",
+        "latex": "k_{StepsInAlignmentsBool}=1",
         "hidden": true,
         "slider": {
           "hardMin": true,
@@ -61,9 +914,46 @@
       },
       {
         "type": "expression",
-        "id": "50",
+        "id": "361",
+        "folderId": "291",
+        "color": "#2d70b3",
+        "latex": "k=\\left\\{k_{StepsInAlignmentsBool}=0:T,k_{StepsInAlignmentsBool}>0:\\operatorname{real}\\left(k_{Aligned}\\right)\\right\\}"
+      },
+      {
+        "type": "expression",
+        "id": "69",
+        "folderId": "291",
+        "color": "#2d70b3",
+        "latex": "k_{Aligned}=\\frac{\\log_{l_{base}}\\left(T\\ \\frac{\\tau}{2}\\right)}{\\log_{l_{base}}\\left(\\tau\\right)}",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "21",
+        "folderId": "291",
         "color": "#c74440",
-        "latex": "d=\\operatorname{abs}\\left(2\\cos\\left(\\frac{\\tau}{2}T\\right)\\right)",
+        "latex": "k_{1}=\\left\\{q_{bool}=0:q_{scale},\\frac{\\tau}{\\frac{q}{2}\\left\\{q_{correction}=0:2,q_{correction}>0:\\left\\{d_{CorrectionFunction}=0:1,d_{CorrectionFunction}\\right\\}\\right\\}}\\right\\}",
+        "hidden": true,
+        "slider": {
+          "hardMin": true,
+          "animationPeriod": 80000,
+          "min": "1"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "287",
+        "folderId": "291",
+        "color": "#c74440",
+        "latex": "q=q_{scale}\\tau^{q_{tauScale}}",
+        "hidden": true
+      },
+      {
+        "type": "expression",
+        "id": "50",
+        "folderId": "291",
+        "color": "#c74440",
+        "latex": "d_{CorrectionFunction}=\\operatorname{abs}\\left(2\\cos\\left(\\frac{\\tau}{2}T\\right)\\right)",
         "slider": {
           "hardMin": true,
           "hardMax": true,
@@ -74,24 +964,25 @@
       },
       {
         "type": "expression",
-        "id": "7",
-        "color": "#2d70b3",
-        "latex": "nf",
-        "label": "${n}",
+        "id": "323",
+        "folderId": "291",
+        "color": "#000000",
+        "latex": "q_{bool}=0",
         "hidden": true,
-        "lines": true
-      },
-      {
-        "type": "folder",
-        "id": "290",
-        "title": "Correction Toggles"
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "0",
+          "max": "1",
+          "step": "1"
+        }
       },
       {
         "type": "expression",
         "id": "288",
-        "folderId": "290",
+        "folderId": "291",
         "color": "#c74440",
-        "latex": "q_{correction}=1",
+        "latex": "q_{correction}=0",
         "hidden": true,
         "slider": {
           "hardMin": true,
@@ -100,141 +991,30 @@
           "max": "1",
           "step": "1"
         }
-      },
-      {
-        "type": "folder",
-        "id": "289",
-        "title": "Core Parameters"
-      },
-      {
-        "type": "expression",
-        "id": "11",
-        "folderId": "289",
-        "color": "#c74440",
-        "latex": "Z=710",
-        "hidden": true,
-        "slider": {
-          "min": "-710",
-          "max": "7100"
-        }
-      },
-      {
-        "type": "expression",
-        "id": "4",
-        "folderId": "289",
-        "color": "#6042a6",
-        "latex": "T=1.9999",
-        "hidden": true,
-        "slider": {
-          "hardMin": true,
-          "hardMax": true,
-          "animationPeriod": 80000,
-          "min": "1.9999",
-          "max": "2"
-        }
-      },
-      {
-        "type": "expression",
-        "id": "322",
-        "folderId": "289",
-        "color": "#6042a6",
-        "latex": "k_{1}",
-        "hidden": true
-      },
-      {
-        "type": "expression",
-        "id": "287",
-        "folderId": "289",
-        "color": "#c74440",
-        "latex": "q=q_{1}\\tau^{q_{2}}",
-        "hidden": true
       },
       {
         "type": "expression",
         "id": "42",
-        "folderId": "289",
+        "folderId": "291",
         "color": "#c74440",
-        "latex": "q_{1}=\\left\\{Z_{eta}=1:Z_{etaZero}\\left[Z_{etaZeroIndex}\\right],q_{1A}\\right\\}",
+        "latex": "q_{scale}=1",
         "slider": {
           "animationPeriod": 80000,
-          "loopMode": "PLAY_ONCE"
+          "loopMode": "PLAY_ONCE",
+          "max": "23"
         }
-      },
-      {
-        "type": "expression",
-        "id": "336",
-        "folderId": "289",
-        "color": "#388c46",
-        "latex": "Z_{eta}=0",
-        "hidden": true,
-        "slider": {
-          "hardMin": true,
-          "hardMax": true,
-          "min": "0",
-          "max": "1",
-          "step": "1"
-        }
-      },
-      {
-        "type": "expression",
-        "id": "337",
-        "folderId": "289",
-        "color": "#6042a6",
-        "latex": "q_{1A}=26.3",
-        "hidden": true,
-        "slider": {
-          "max": "71"
-        }
-      },
-      {
-        "type": "expression",
-        "id": "335",
-        "folderId": "289",
-        "color": "#2d70b3",
-        "latex": "Z_{etaZeroIndex}=5",
-        "hidden": true,
-        "slider": {
-          "hardMin": true,
-          "hardMax": true,
-          "min": "1",
-          "max": "\\operatorname{length}\\left(Z_{etaZero}\\right)",
-          "step": "1"
-        }
-      },
-      {
-        "type": "expression",
-        "id": "334",
-        "folderId": "289",
-        "color": "#c74440",
-        "latex": "Z_{etaZero}=\\left[14.134725141734693790457251983562470270784257115699243175685567460149,21.022039638771554992628479593896902777334340524902781754629520403587,25.010857580145688763213790992562821818659549672557996672496542006745,30.424876125859513210311897530584091320181560023715440180962146036993,32.935061587739189690662368964074903488812715603517039009280003440784,40.918719012147495187398126914633254395726165962777279536161303667253,43.327073280914999519496122165406805782645668371836871446878893685521,48.005150881167159727942472749427516041686844001144425117775312519814,49.773832477672302181916784678563724057723178299676662100781955750433,52.970321477714460644147296608880990063825017888821224779900748140317,56.446247697063394804367759476706127552782264471716631845450969843958,59.347044002602353079653648674992219031098772806466669698122451754746,60.831778524609809844259901824524003802910090451219178257101348824808\\right]"
-      },
-      {
-        "type": "text",
-        "id": "316",
-        "folderId": "289",
-        "text": "something like even though when q_2 is 0 and q is integer do we get a count of spokes but also we get the same count on the log10 values for example 1.7 will give us 17 spokes just as much as 17 will. and i think in between there is a counting up and down of spokes. I should have been paying attention to the k_1 value, natural the rational divisions of tau make the number of spokes. \n\nq=0.01230425 (q_{1}=3.052072 &q_{2}=-3)\nq=0.00201342 (q_{1}=3.138011 & q_{2}=-4) (3 spokes)\nq=0.00201309 (q_{1}=3.1374845000000002&q_{2}=-4) (4spokes)\nq=0.00201288(q_{1}=3.1371689&q_{2}=-4)(5 spokes)\n\nno it is we have spokes 3 spokes a and .3 and .03.\n\nand that means to continously go from 7 to 7.1 we go from 7 spokes to 71. just the same to get to from 7 to 7.1 (71 spokes) we must pass through 7.05 which I can't count but looks like 705 spokes. however this doesn't seem true fro all n though i can be sure"
       },
       {
         "type": "expression",
         "id": "286",
-        "folderId": "289",
+        "folderId": "291",
         "color": "#000000",
-        "latex": "q_{2}=0",
+        "latex": "q_{tauScale}=0",
         "slider": {
+          "hardMin": true,
           "hardMax": true,
-          "max": "2",
           "step": "1"
         }
-      },
-      {
-        "type": "text",
-        "id": "329",
-        "text": "q_{1}=\\sin\\left(\\frac{\\pi}{4}\\right)=0.707106781187...\nq_{z}=\\operatorname{floor}\\left(\\frac{15548}{q_{1}}\\right)\n\\frac{1}{\\frac{q_{z}}{15548}}=0.707112970711\nk_{1}=0.70710678\n\n15548 was the point closest to zero for when q_{1} is equal to `e`\n\nthis seems generlly true that when q1 is some but only like 4 decimals of accuracy even when q1 is rational"
-      },
-      {
-        "type": "folder",
-        "id": "291",
-        "title": "Scaling Parameters"
       },
       {
         "type": "expression",
@@ -260,48 +1040,9 @@
         }
       },
       {
-        "type": "expression",
-        "id": "292",
-        "folderId": "291",
-        "color": "#388c46",
-        "latex": "l_{base}=10",
-        "hidden": true
-      },
-      {
-        "type": "expression",
-        "id": "3",
-        "folderId": "291",
-        "color": "#388c46",
-        "latex": "l_{func}=10",
-        "hidden": true
-      },
-      {
         "type": "folder",
         "id": "61",
         "title": "Integers / Prime List",
-        "hidden": true,
-        "collapsed": true
-      },
-      {
-        "type": "expression",
-        "id": "244",
-        "folderId": "61",
-        "color": "#000000",
-        "latex": "C_{a}=\\left(\\frac{710}{113\\tau}\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "245",
-        "folderId": "61",
-        "color": "#c74440",
-        "latex": "C_{b}=\\frac{1}{C_{a}}"
-      },
-      {
-        "type": "expression",
-        "id": "75",
-        "folderId": "61",
-        "color": "#c74440",
-        "latex": "n_{x}\\left(x\\right)=n+xZ",
         "hidden": true
       },
       {
@@ -309,105 +1050,7 @@
         "id": "26",
         "folderId": "61",
         "color": "#c74440",
-        "latex": "n=\\left[0...Z-1\\right]"
-      },
-      {
-        "type": "expression",
-        "id": "298",
-        "folderId": "61",
-        "color": "#c74440",
-        "latex": "n_{1}=n_{x}\\left(1\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "79",
-        "folderId": "61",
-        "color": "#000000",
-        "latex": "n_{2}=n_{x}\\left(2\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "80",
-        "folderId": "61",
-        "color": "#c74440",
-        "latex": "n_{3}=n_{x}\\left(3\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "81",
-        "folderId": "61",
-        "color": "#2d70b3",
-        "latex": "n_{4}=n_{x}\\left(4\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "310",
-        "folderId": "61",
-        "color": "#2d70b3",
-        "latex": "n_{5}=n_{x}\\left(5\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "311",
-        "folderId": "61",
-        "color": "#2d70b3",
-        "latex": "n_{6}=n_{x}\\left(6\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "312",
-        "folderId": "61",
-        "color": "#2d70b3",
-        "latex": "n_{7}=n_{x}\\left(7\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "313",
-        "folderId": "61",
-        "color": "#2d70b3",
-        "latex": "n_{8}=n_{x}\\left(8\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "314",
-        "folderId": "61",
-        "color": "#2d70b3",
-        "latex": "n_{9}=n_{x}\\left(9\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "328",
-        "folderId": "61",
-        "color": "#2d70b3",
-        "latex": "n_{13}=n_{x}\\left(13\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "333",
-        "folderId": "61",
-        "color": "#c74440",
-        "latex": "n_{14}=n_{x}\\left(14\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "327",
-        "folderId": "61",
-        "color": "#c74440",
-        "latex": "n_{17}=n_{x}\\left(17\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "332",
-        "folderId": "61",
-        "color": "#000000",
-        "latex": "n_{18}=n_{x}\\left(18\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "326",
-        "folderId": "61",
-        "color": "#388c46",
-        "latex": "n_{21}=n_{x}\\left(21\\right)"
+        "latex": "n=\\left[Z_{min}+1...Z_{max}-1\\right]"
       },
       {
         "type": "expression",
@@ -417,749 +1060,10 @@
         "latex": "n_{p}=p_{join}"
       },
       {
-        "type": "expression",
-        "id": "128",
-        "folderId": "61",
-        "color": "#c74440",
-        "latex": "n_{pa}=\\left\\{p_{join}\\le Z:p_{join},p_{join}>Z:0\\right\\}"
-      },
-      {
-        "type": "folder",
-        "id": "59",
-        "title": "Parameter Stepping Control",
-        "hidden": true,
-        "collapsed": true
-      },
-      {
-        "type": "text",
-        "id": "58",
-        "folderId": "59",
-        "text": "s=\\frac{1}{b} is for the stepping function for fine tuning the progressing of scaling variables and seeing behavior at rational intervals "
-      },
-      {
-        "type": "expression",
-        "id": "15",
-        "folderId": "59",
-        "color": "#000000",
-        "latex": "s=\\frac{1}{b}",
-        "hidden": true
-      },
-      {
-        "type": "expression",
-        "id": "19",
-        "folderId": "59",
-        "color": "#6042a6",
-        "latex": "b=360",
-        "hidden": true,
-        "slider": {
-          "hardMin": true,
-          "hardMax": true,
-          "min": "0",
-          "max": "360",
-          "step": "1"
-        }
-      },
-      {
-        "type": "folder",
-        "id": "122",
-        "title": "Sin Plots"
-      },
-      {
-        "type": "expression",
-        "id": "6",
-        "folderId": "122",
-        "color": "#c74440",
-        "latex": "\\sin\\left(nf\\right)k_{2}",
-        "label": "${n} : 0",
-        "lines": true,
-        "colorLatex": "c_{1}",
-        "lineOpacity": "l_{lineopacity}",
-        "pointSize": "8",
-        "movablePointSize": "8",
-        "lineWidth": "l_{linewidth}"
-      },
-      {
-        "type": "expression",
-        "id": "73",
-        "folderId": "122",
-        "color": "#000000",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(1\\right)\\right)f\\right)k_{2}",
-        "label": "${n_1} : 1",
-        "lines": true,
-        "colorLatex": "c_{2}",
-        "lineOpacity": "l_{lineopacity}",
-        "lineWidth": "l_{linewidth}"
-      },
-      {
-        "type": "expression",
-        "id": "123",
-        "folderId": "122",
-        "color": "#c74440",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(2\\right)\\right)f\\right)k_{2}",
-        "label": "${n_2} : 2",
-        "lines": true,
-        "colorLatex": "c_{3}",
-        "lineOpacity": "l_{lineopacity}",
-        "lineWidth": "l_{linewidth}"
-      },
-      {
-        "type": "expression",
-        "id": "124",
-        "folderId": "122",
-        "color": "#2d70b3",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(3\\right)\\right)f\\right)k_{2}",
-        "label": "${n_3} : 3",
-        "lines": true,
-        "colorLatex": "c_{4}",
-        "lineOpacity": "l_{lineopacity}",
-        "lineWidth": "l_{linewidth}"
-      },
-      {
-        "type": "expression",
-        "id": "125",
-        "folderId": "122",
-        "color": "#388c46",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(4\\right)\\right)f\\right)k_{2}",
-        "label": "${n_4} : 4",
-        "lines": true,
-        "colorLatex": "c_{5}",
-        "lineOpacity": "l_{lineopacity}",
-        "lineWidth": "1l_{linewidth}"
-      },
-      {
-        "type": "expression",
-        "id": "126",
-        "folderId": "122",
-        "color": "#6042a6",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(5\\right)\\right)f\\right)k_{2}",
-        "label": "${n_5} : 5",
-        "lines": true,
-        "colorLatex": "c_{6}",
-        "lineOpacity": "l_{lineopacity}",
-        "lineWidth": "l_{linewidth}"
-      },
-      {
-        "type": "expression",
-        "id": "127",
-        "folderId": "122",
-        "color": "#000000",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(6\\right)\\right)f\\right)k_{2}",
-        "label": "${n_6} : 6",
-        "colorLatex": "c_{9}"
-      },
-      {
-        "type": "expression",
-        "id": "129",
-        "folderId": "122",
-        "color": "#2d70b3",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(7\\right)\\right)f\\right)k_{2}",
-        "label": "${n_7} : 7",
-        "colorLatex": "c_{11}"
-      },
-      {
-        "type": "expression",
-        "id": "130",
-        "folderId": "122",
-        "color": "#388c46",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(8\\right)\\right)f\\right)k_{2}",
-        "label": "${n_8} : 8",
-        "colorLatex": "c_{12}"
-      },
-      {
-        "type": "expression",
-        "id": "131",
-        "folderId": "122",
-        "color": "#6042a6",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(9\\right)\\right)f\\right)k_{2}",
-        "label": "${n_9} : 9",
-        "colorLatex": "c_{13}"
-      },
-      {
-        "type": "expression",
-        "id": "132",
-        "folderId": "122",
-        "color": "#000000",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(10\\right)\\right)f\\right)k_{2}",
-        "label": "${n_10} : 10",
-        "colorLatex": "c_{14}"
-      },
-      {
-        "type": "expression",
-        "id": "133",
-        "folderId": "122",
-        "color": "#c74440",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(11\\right)\\right)f\\right)k_{2}",
-        "label": "${n_11} : 11",
-        "colorLatex": "c_{15}"
-      },
-      {
-        "type": "expression",
-        "id": "134",
-        "folderId": "122",
-        "color": "#2d70b3",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(12\\right)\\right)f\\right)k_{2}",
-        "label": "${n_12} : 12",
-        "colorLatex": "c_{16}"
-      },
-      {
-        "type": "expression",
-        "id": "135",
-        "folderId": "122",
-        "color": "#388c46",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(13\\right)\\right)f\\right)k_{2}",
-        "label": "${n_13} : 13",
-        "colorLatex": "c_{17}"
-      },
-      {
-        "type": "expression",
-        "id": "136",
-        "folderId": "122",
-        "color": "#c74440",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(14\\right)\\right)f\\right)k_{2}",
-        "label": "${n_14} : 14",
-        "colorLatex": "c_{18}"
-      },
-      {
-        "type": "expression",
-        "id": "137",
-        "folderId": "122",
-        "color": "#2d70b3",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(15\\right)\\right)f\\right)k_{2}",
-        "label": "${n_15} : 15",
-        "colorLatex": "c_{19}"
-      },
-      {
-        "type": "expression",
-        "id": "138",
-        "folderId": "122",
-        "color": "#388c46",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(16\\right)\\right)f\\right)k_{2}",
-        "label": "${n}",
-        "colorLatex": "c_{20}"
-      },
-      {
-        "type": "expression",
-        "id": "139",
-        "folderId": "122",
-        "color": "#388c46",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(17\\right)\\right)f\\right)k_{2}",
-        "label": "${n_17} : 17",
-        "colorLatex": "c_{21}"
-      },
-      {
-        "type": "expression",
-        "id": "140",
-        "folderId": "122",
-        "color": "#388c46",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(18\\right)\\right)f\\right)k_{2}",
-        "label": "${n_18} : 18",
-        "colorLatex": "c_{22}"
-      },
-      {
-        "type": "expression",
-        "id": "141",
-        "folderId": "122",
-        "color": "#c74440",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(19\\right)\\right)f\\right)k_{2}",
-        "label": "${n} : 19",
-        "colorLatex": "c_{23}"
-      },
-      {
-        "type": "expression",
-        "id": "142",
-        "folderId": "122",
-        "color": "#2d70b3",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(20\\right)\\right)f\\right)k_{2}",
-        "label": "${n} : 20",
-        "colorLatex": "c_{24}"
-      },
-      {
-        "type": "expression",
-        "id": "143",
-        "folderId": "122",
-        "color": "#388c46",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(21\\right)\\right)f\\right)k_{2}",
-        "label": "${n_21} : 21",
-        "colorLatex": "c_{1}"
-      },
-      {
-        "type": "expression",
-        "id": "144",
-        "folderId": "122",
-        "color": "#6042a6",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(22\\right)\\right)f\\right)k_{2}",
-        "label": "${n}",
-        "colorLatex": "c_{2}"
-      },
-      {
-        "type": "expression",
-        "id": "145",
-        "folderId": "122",
-        "color": "#000000",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(23\\right)\\right)f\\right)k_{2}",
-        "label": "${n}",
-        "colorLatex": "c_{3}"
-      },
-      {
-        "type": "expression",
-        "id": "146",
-        "folderId": "122",
-        "color": "#c74440",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(24\\right)\\right)f\\right)k_{2}",
-        "label": "${n}",
-        "colorLatex": "c_{4}"
-      },
-      {
-        "type": "expression",
-        "id": "147",
-        "folderId": "122",
-        "color": "#2d70b3",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(25\\right)\\right)f\\right)k_{2}",
-        "label": "${n}",
-        "colorLatex": "c_{5}"
-      },
-      {
-        "type": "expression",
-        "id": "148",
-        "folderId": "122",
-        "color": "#388c46",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(26\\right)\\right)f\\right)k_{2}",
-        "label": "${n}",
-        "colorLatex": "c_{6}"
-      },
-      {
-        "type": "expression",
-        "id": "149",
-        "folderId": "122",
-        "color": "#6042a6",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(27\\right)\\right)f\\right)k_{2}",
-        "label": "${n} : 27",
-        "colorLatex": "c_{7}"
-      },
-      {
-        "type": "expression",
-        "id": "34",
-        "folderId": "122",
-        "color": "#000000",
-        "latex": "\\sin\\left(n_{p}f\\right)k_{2}",
-        "label": "${n_p}",
-        "hidden": true,
-        "lines": false,
-        "pointSize": "10",
-        "movablePointSize": "10",
-        "__stashed_V12PointStyle": "PLUS"
-      },
-      {
-        "type": "folder",
-        "id": "281",
-        "title": "Point Sin Plots",
-        "hidden": true,
-        "collapsed": true
-      },
-      {
-        "type": "expression",
-        "id": "231",
-        "folderId": "281",
-        "color": "#6042a6",
-        "latex": "P=1",
-        "hidden": true,
-        "slider": {
-          "hardMin": true,
-          "animationPeriod": 80000,
-          "loopMode": "PLAY_ONCE",
-          "min": "1",
-          "max": "104220"
-        }
-      },
-      {
-        "type": "expression",
-        "id": "294",
-        "folderId": "281",
-        "color": "#2d70b3",
-        "latex": "\\frac{26054.000000048395}{\\tau^{2}}"
-      },
-      {
-        "type": "expression",
-        "id": "279",
-        "folderId": "281",
-        "color": "#000000",
-        "latex": "P_{1}=P\\ \\left(1+\\frac{\\tau}{Z}\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "230",
-        "folderId": "281",
-        "color": "#000000",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(P\\right)\\right)f\\right)k_{2}",
-        "label": "${n} : ${P}",
-        "pointSize": "15",
-        "movablePointSize": "15",
-        "__stashed_V12PointStyle": "STAR"
-      },
-      {
-        "type": "expression",
-        "id": "278",
-        "folderId": "281",
-        "color": "#6042a6",
-        "latex": "\\sin\\left(\\left(n_{x}\\left(P_{1}\\right)\\right)f\\right)k_{2}",
-        "showLabel": true,
-        "label": "${n} : ${P}",
-        "colorLatex": "c_{22}",
-        "__stashed_V12PointStyle": "STAR"
-      },
-      {
-        "type": "expression",
-        "id": "280",
-        "folderId": "281",
-        "color": "#c74440",
-        "latex": "E_{EqualProof}=\\operatorname{total}\\left(\\sin\\left(\\left(n_{x}\\left(P\\right)\\right)f\\right)k_{2}-\\sin\\left(\\left(n_{x}\\left(P_{1}\\right)\\right)f\\right)k_{2}\\right)",
-        "hidden": true
-      },
-      {
-        "type": "expression",
-        "id": "284",
-        "folderId": "281",
-        "color": "#388c46",
-        "latex": "n_{x}\\left(P\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "285",
-        "folderId": "281",
-        "color": "#6042a6",
-        "latex": "n_{x}\\left(P_{1}\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "257",
-        "folderId": "281",
-        "color": "#000000",
-        "latex": "\\sin\\left(ZP_{1}f\\right)k_{2}",
-        "label": "${n} : ${P}",
-        "hidden": true,
-        "pointSize": "15",
-        "movablePointSize": "15",
-        "__stashed_V12PointStyle": "STAR"
-      },
-      {
-        "type": "expression",
-        "id": "283",
-        "folderId": "281",
-        "color": "#000000",
-        "latex": "\\sin\\left(ZPf\\right)k_{2}",
-        "label": "${n} : ${P}",
-        "colorLatex": "c_{22}",
-        "pointSize": "8",
-        "movablePointSize": "8",
-        "__stashed_V12PointStyle": "STAR"
-      },
-      {
-        "type": "folder",
-        "id": "276",
-        "title": "Special Primes / N",
-        "hidden": true,
-        "collapsed": true
-      },
-      {
-        "type": "expression",
-        "id": "254",
-        "folderId": "276",
-        "color": "#000000",
-        "latex": "z=710",
-        "hidden": true,
-        "slider": {
-          "hardMin": true,
-          "min": "0",
-          "max": "710"
-        }
-      },
-      {
-        "type": "expression",
-        "id": "236",
-        "folderId": "276",
-        "color": "#388c46",
-        "latex": "P_{a}=\\operatorname{floor}\\left(\\frac{z}{\\tau}\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "246",
-        "folderId": "276",
-        "color": "#2d70b3",
-        "latex": "P_{a1}=\\operatorname{floor}\\left(P_{a}\\cdot\\tau\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "243",
-        "folderId": "276",
-        "color": "#6042a6",
-        "latex": "P_{b}=\\operatorname{floor}\\left(\\frac{z\\cdot104220}{\\tau}\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "247",
-        "folderId": "276",
-        "color": "#388c46",
-        "latex": "P_{b1}=\\operatorname{floor}\\left(P_{b}\\cdot\\tau\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "249",
-        "folderId": "276",
-        "color": "#000000",
-        "latex": "N_{a}=\\operatorname{ceil}\\left(P_{a}\\cdot\\tau\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "250",
-        "folderId": "276",
-        "color": "#c74440",
-        "latex": "N_{b}=\\operatorname{ceil}\\left(P_{b}\\cdot\\tau\\right)"
-      },
-      {
-        "type": "expression",
-        "id": "252",
-        "folderId": "276",
-        "color": "#388c46",
-        "latex": "\\frac{N_{a}}{710}"
-      },
-      {
-        "type": "expression",
-        "id": "256",
-        "folderId": "276",
-        "color": "#2d70b3",
-        "latex": "\\frac{\\left(25560\\cdot2\\right)}{z}"
-      },
-      {
-        "type": "folder",
-        "id": "56",
-        "title": "Log Sin Plots",
-        "hidden": true,
-        "collapsed": true
-      },
-      {
-        "type": "expression",
-        "id": "33",
-        "folderId": "56",
-        "color": "#c74440",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(nf\\right)k_{2}\\right)",
-        "label": "${n}",
-        "pointStyle": "OPEN",
-        "colorLatex": "c_{1}",
-        "pointSize": "8",
-        "movablePointSize": "8"
-      },
-      {
-        "type": "expression",
-        "id": "74",
-        "folderId": "56",
-        "color": "#000000",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(1\\right)f\\right)k_{2}\\right)",
-        "label": "${n_1}",
-        "colorLatex": "c_{2}"
-      },
-      {
-        "type": "expression",
-        "id": "76",
-        "folderId": "56",
-        "color": "#2d70b3",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(2\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{3}"
-      },
-      {
-        "type": "expression",
-        "id": "78",
-        "folderId": "56",
-        "color": "#6042a6",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(3\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{4}"
-      },
-      {
-        "type": "expression",
-        "id": "36",
-        "folderId": "56",
-        "color": "#388c46",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(4\\right)f\\right)k_{2}\\right)",
-        "label": "${n_p}",
-        "colorLatex": "c_{5}",
-        "pointSize": "8",
-        "movablePointSize": "8"
-      },
-      {
-        "type": "expression",
-        "id": "82",
-        "folderId": "56",
-        "color": "#388c46",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(5\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{6}"
-      },
-      {
-        "type": "expression",
-        "id": "83",
-        "folderId": "56",
-        "color": "#6042a6",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(6\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{7}"
-      },
-      {
-        "type": "expression",
-        "id": "84",
-        "folderId": "56",
-        "color": "#000000",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(7\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{9}"
-      },
-      {
-        "type": "expression",
-        "id": "85",
-        "folderId": "56",
-        "color": "#c74440",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(8\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{11}"
-      },
-      {
-        "type": "expression",
-        "id": "86",
-        "folderId": "56",
-        "color": "#2d70b3",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(9\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{12}"
-      },
-      {
-        "type": "expression",
-        "id": "87",
-        "folderId": "56",
-        "color": "#388c46",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(10\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{13}"
-      },
-      {
-        "type": "expression",
-        "id": "88",
-        "folderId": "56",
-        "color": "#6042a6",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(11\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{14}"
-      },
-      {
-        "type": "expression",
-        "id": "89",
-        "folderId": "56",
-        "color": "#000000",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(12\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{15}"
-      },
-      {
-        "type": "expression",
-        "id": "90",
-        "folderId": "56",
-        "color": "#c74440",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(13\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{16}"
-      },
-      {
-        "type": "expression",
-        "id": "91",
-        "folderId": "56",
-        "color": "#2d70b3",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(14\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{17}"
-      },
-      {
-        "type": "expression",
-        "id": "92",
-        "folderId": "56",
-        "color": "#388c46",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(15\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{18}"
-      },
-      {
-        "type": "expression",
-        "id": "93",
-        "folderId": "56",
-        "color": "#6042a6",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(16\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{19}"
-      },
-      {
-        "type": "expression",
-        "id": "94",
-        "folderId": "56",
-        "color": "#000000",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(17\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{20}"
-      },
-      {
-        "type": "expression",
-        "id": "95",
-        "folderId": "56",
-        "color": "#c74440",
-        "latex": "\\log_{l_{base}}\\left(\\sin\\left(n_{x}\\left(18\\right)f\\right)k_{2}\\right)",
-        "colorLatex": "c_{21}"
-      },
-      {
-        "type": "folder",
-        "id": "55",
-        "title": "Golden / Tau / Log Spirals",
-        "hidden": true,
-        "collapsed": true
-      },
-      {
-        "type": "expression",
-        "id": "53",
-        "folderId": "55",
-        "color": "#388c46",
-        "latex": "a=1",
-        "hidden": true
-      },
-      {
-        "type": "expression",
-        "id": "54",
-        "folderId": "55",
-        "color": "#6042a6",
-        "latex": "r\\ =ae^{\\frac{\\left(\\ln\\left(1+\\frac{\\log\\left(\\pi\\right)}{\\log\\left(\\tau\\right)}\\right)\\right)}{\\frac{\\tau}{4}}\\theta}",
-        "hidden": true
-      },
-      {
-        "type": "expression",
-        "id": "52",
-        "folderId": "55",
-        "color": "#2d70b3",
-        "latex": "r\\ =ae^{\\frac{\\left(\\ln\\left(\\frac{1+\\sqrt{5}}{2}\\right)\\right)}{\\frac{\\tau}{4}}\\theta}",
-        "hidden": true
-      },
-      {
-        "type": "expression",
-        "id": "66",
-        "folderId": "55",
-        "color": "#6042a6",
-        "latex": "r=ae^{k_{s}\\theta}",
-        "hidden": true,
-        "polarDomain": {
-          "min": "",
-          "max": "c"
-        }
-      },
-      {
-        "type": "expression",
-        "id": "67",
-        "folderId": "55",
-        "color": "#000000",
-        "latex": "k_{s}=0.43",
-        "hidden": true,
-        "slider": {
-          "hardMin": true,
-          "hardMax": true,
-          "playDirection": -1,
-          "min": "0",
-          "max": ".5"
-        }
-      },
-      {
         "type": "folder",
         "id": "57",
         "title": "Primes Data",
-        "hidden": true,
-        "collapsed": true
+        "hidden": true
       },
       {
         "type": "expression",
@@ -1230,6 +1134,18 @@
         "id": "261",
         "folderId": "60",
         "text": "P=1.00221230795*710 we've gone 1/4 around\nP=1.0044247 were back to about zero \nand indeed if we just do P*1.00221230795 as `\\sin\\left(\\left(\\left[710\\right]\\left(P1.00221230795\\right)\\right)f\\right)k_{2}` then we going around just about perfect per interger\n\nLater we find that \n\n\n\n### Examples with $Z=710$\n\n* quarter turn $\\phi=\\pi/2$: $\\Delta P=\\dfrac{\\pi/2}{710}\\approx 0.00221238938$\n* half turn $\\phi=\\pi$: $\\Delta P=\\dfrac{\\pi}{710}\\approx 0.00442477876$\n* full turn $\\phi=2\\pi$: $\\Delta P=\\dfrac{2\\pi}{710}\\approx 0.00884955751$\n\n(Those match your measured constants; your `1.00221230795` is simply $1+\\Delta P(\\pi/2)$ to machine precision.)\n\n---\n\nP_{1}=P\\ \\left(1+\\frac{\\tau}{Z}\\right)"
+      },
+      {
+        "type": "text",
+        "id": "316",
+        "folderId": "60",
+        "text": "something like even though when q_2 is 0 and q is integer do we get a count of spokes but also we get the same count on the log10 values for example 1.7 will give us 17 spokes just as much as 17 will. and i think in between there is a counting up and down of spokes. I should have been paying attention to the k_1 value, natural the rational divisions of tau make the number of spokes. \n\nq=0.01230425 (q_{1}=3.052072 &q_{2}=-3)\nq=0.00201342 (q_{1}=3.138011 & q_{2}=-4) (3 spokes)\nq=0.00201309 (q_{1}=3.1374845000000002&q_{2}=-4) (4spokes)\nq=0.00201288(q_{1}=3.1371689&q_{2}=-4)(5 spokes)\n\nno it is we have spokes 3 spokes a and .3 and .03.\n\nand that means to continously go from 7 to 7.1 we go from 7 spokes to 71. just the same to get to from 7 to 7.1 (71 spokes) we must pass through 7.05 which I can't count but looks like 705 spokes. however this doesn't seem true fro all n though i can be sure"
+      },
+      {
+        "type": "text",
+        "id": "329",
+        "folderId": "60",
+        "text": "q_{1}=\\sin\\left(\\frac{\\pi}{4}\\right)=0.707106781187...\nq_{z}=\\operatorname{floor}\\left(\\frac{15548}{q_{1}}\\right)\n\\frac{1}{\\frac{q_{z}}{15548}}=0.707112970711\nk_{1}=0.70710678\n\n15548 was the point closest to zero for when q_{1} is equal to `e`\n\nthis seems generlly true that when q1 is some but only like 4 decimals of accuracy even when q1 is rational"
       },
       {
         "type": "folder",
@@ -1417,13 +1333,51 @@
         "type": "expression",
         "id": "338",
         "color": "#c74440",
-        "latex": "l_{linewidth}=.5"
+        "latex": "l_{lineOpacity}=1",
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "0",
+          "max": "1"
+        }
       },
       {
         "type": "expression",
         "id": "339",
         "color": "#2d70b3",
-        "latex": "l_{lineopacity}=.5"
+        "latex": "l_{lineWidth}=1",
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "0",
+          "max": "8",
+          "step": ".25"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "425",
+        "color": "#c74440",
+        "latex": "p_{pointSize}=5",
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "0",
+          "max": "8",
+          "step": ".25"
+        }
+      },
+      {
+        "type": "expression",
+        "id": "426",
+        "color": "#2d70b3",
+        "latex": "p_{pointOpacity}=0.24",
+        "slider": {
+          "hardMin": true,
+          "hardMax": true,
+          "min": "0",
+          "max": "1"
+        }
       }
     ]
   },

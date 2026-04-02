@@ -38,6 +38,16 @@ let idleTimer = 0;
 let isIdle = false;
 let _userInteracted = false;
 
+const FOG_COLOR = 0x050608;
+let bloomEnabled = true;
+let bloomStrength = 0.45;
+let bloomRadius = 0.45;
+let bloomThreshold = 0.8;
+let fogEnabled = true;
+let fogDensity = 0.0008;
+let toneEnabled = true;
+let toneExposure = 1.05;
+
 // ── Cinematic parameters (exposed to controls) ──────────────
 export const cinematic = {
   starRotY: 0.0002,
@@ -46,6 +56,49 @@ export const cinematic = {
   starsEnabled: true,
   starOpacity: 0.25,
 };
+
+function hasComposerPass(pass) {
+  return !!(composer && pass && composer.passes.includes(pass));
+}
+
+function setComposerPassEnabled(pass, enabled) {
+  if (!composer || !pass || !outputPass) return;
+  const hasPass = hasComposerPass(pass);
+  if (enabled && !hasPass) {
+    composer.removePass(outputPass);
+    composer.addPass(pass);
+    composer.addPass(outputPass);
+  } else if (!enabled && hasPass) {
+    composer.removePass(pass);
+  }
+}
+
+function applyBloomRuntime() {
+  if (!bloomPass) return;
+  bloomPass.strength = bloomStrength;
+  bloomPass.radius = bloomRadius;
+  bloomPass.threshold = bloomThreshold;
+  setComposerPassEnabled(bloomPass, isCinematic() && bloomEnabled);
+}
+
+function applyFogRuntime() {
+  if (!scene) return;
+  const shouldShowFog = isCinematic() && fogEnabled && fogDensity > 0;
+  scene.fog = shouldShowFog ? new THREE.FogExp2(FOG_COLOR, fogDensity) : null;
+}
+
+function applyToneRuntime() {
+  if (!renderer) return;
+  renderer.toneMapping = isCinematic() ? THREE.ACESFilmicToneMapping : THREE.LinearToneMapping;
+  renderer.toneMappingExposure = toneEnabled ? toneExposure : 1;
+}
+
+function applyStarRuntime() {
+  if (!starSystem) return;
+  const visible = isCinematic() && isDark() && cinematic.starsEnabled;
+  starSystem.visible = visible;
+  starSystem.material.opacity = cinematic.starOpacity;
+}
 
 // ── Textures ─────────────────────────────────────────────────
 
@@ -145,7 +198,7 @@ function buildStars() {
 }
 
 function animateStars() {
-  if (!starSystem || !cinematic.starsEnabled) return; // Strict performance guard
+  if (!starSystem || !starSystem.visible || !cinematic.starsEnabled) return; // Strict performance guard
   
   const pos = starSystem.geometry.attributes.position.array;
   const count = pos.length / 3;
@@ -167,13 +220,19 @@ function animateStars() {
 }
 
 export function setStarVisibility(v) {
-  cinematic.starsEnabled = v;
-  if (starSystem) starSystem.visible = v;
+  cinematic.starsEnabled = !!v;
+  applyStarRuntime();
 }
 
 export function setStarOpacity(v) {
-  cinematic.starOpacity = v;
-  if (starSystem) starSystem.material.opacity = v;
+  cinematic.starOpacity = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : cinematic.starOpacity;
+  applyStarRuntime();
+}
+
+export function setStarMotion(rotX, rotY, drift) {
+  if (Number.isFinite(rotX)) cinematic.starRotX = Math.max(0, rotX);
+  if (Number.isFinite(rotY)) cinematic.starRotY = Math.max(0, rotY);
+  if (Number.isFinite(drift)) cinematic.starDrift = Math.max(0, drift);
 }
 
 // ── Grid + axes ──────────────────────────────────────────────
@@ -263,7 +322,7 @@ function buildRefCircles() {
 
 export function initScene() {
   scene = new THREE.Scene();
-  scene.fog = isCinematic() ? new THREE.FogExp2(0x050608, 0.0008) : null;
+  scene.fog = null;
 
   // Perspective camera (3D mode) — FOV 70 matches style examples
   perspCam = new THREE.PerspectiveCamera(
@@ -291,8 +350,8 @@ export function initScene() {
   });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.toneMapping = isCinematic() ? THREE.ACESFilmicToneMapping : THREE.LinearToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMapping = THREE.LinearToneMapping;
+  renderer.toneMappingExposure = toneExposure;
 
   document.getElementById('container').appendChild(renderer.domElement);
 
@@ -314,9 +373,8 @@ export function initScene() {
 
   bloomPass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
-    0.55, 0.45, 0.8
+    bloomStrength, bloomRadius, bloomThreshold
   );
-  if (isCinematic()) composer.addPass(bloomPass);
 
   outputPass = new OutputPass();
   composer.addPass(outputPass);
@@ -325,6 +383,10 @@ export function initScene() {
   buildGrid();
   buildRefCircles();
   if (isDark()) buildStars();
+  applyBloomRuntime();
+  applyFogRuntime();
+  applyToneRuntime();
+  applyStarRuntime();
 
   // Resize
   window.addEventListener('resize', handleResize);
@@ -388,26 +450,16 @@ function handleThemeChange(theme) {
     });
   }
   buildGrid();
+  if (isDark() && !starSystem) buildStars();
+  applyStarRuntime();
 }
 
 function handleRenderChange(mode) {
-  if (mode === 'performance') {
-    composer.removePass(bloomPass);
-    scene.fog = null;
-    renderer.toneMapping = THREE.LinearToneMapping;
-    if (starSystem) starSystem.visible = false;
-  } else {
-    composer.removePass(outputPass);
-    composer.addPass(bloomPass);
-    composer.addPass(outputPass);
-    if (isDark()) {
-      scene.fog = new THREE.FogExp2(0x050608, 0.0008);
-      if (starSystem) starSystem.visible = cinematic.starsEnabled;
-      else buildStars();
-    }
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  }
-  renderer.toneMappingExposure = 1.05;
+  if (mode === 'cinematic' && isDark() && !starSystem) buildStars();
+  applyBloomRuntime();
+  applyFogRuntime();
+  applyToneRuntime();
+  applyStarRuntime();
 }
 
 function handleViewChange(mode) {
@@ -706,14 +758,44 @@ function updateFps() {
 
 // ── Bloom control ────────────────────────────────────────────
 
-export function setBloomStrength(v)  { if (bloomPass) bloomPass.strength = v; }
-export function setBloomRadius(v)    { if (bloomPass) bloomPass.radius = v; }
-export function setBloomThreshold(v) { if (bloomPass) bloomPass.threshold = v; }
-export function setToneExposure(v)   { if (renderer) renderer.toneMappingExposure = v; }
+export function setBloomEnabled(v) {
+  bloomEnabled = !!v;
+  applyBloomRuntime();
+}
+
+export function setBloomStrength(v)  {
+  if (Number.isFinite(v)) bloomStrength = Math.max(0, v);
+  applyBloomRuntime();
+}
+
+export function setBloomRadius(v)    {
+  if (Number.isFinite(v)) bloomRadius = Math.max(0, v);
+  applyBloomRuntime();
+}
+
+export function setBloomThreshold(v) {
+  if (Number.isFinite(v)) bloomThreshold = Math.max(0, Math.min(1, v));
+  applyBloomRuntime();
+}
+
+export function setToneEnabled(v) {
+  toneEnabled = !!v;
+  applyToneRuntime();
+}
+
+export function setToneExposure(v)   {
+  if (Number.isFinite(v)) toneExposure = Math.max(0.1, v);
+  applyToneRuntime();
+}
+
+export function setFogEnabled(v) {
+  fogEnabled = !!v;
+  applyFogRuntime();
+}
+
 export function setFogDensity(v)     {
-  if (!scene) return;
-  if (v <= 0) { scene.fog = null; }
-  else { scene.fog = new THREE.FogExp2(0x050608, v); }
+  if (Number.isFinite(v)) fogDensity = Math.max(0, v);
+  applyFogRuntime();
 }
 
 

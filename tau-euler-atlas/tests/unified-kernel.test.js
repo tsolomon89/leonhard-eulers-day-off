@@ -1,253 +1,227 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { TAU, cCos, cLog, cLogBase, cSin, cScl, cTan } from '../js/complex.js';
+import {
+  TAU,
+  cCos,
+  cLogBase,
+  cSin,
+  cScl,
+  cTan,
+} from '../js/complex.js';
 import {
   buildDerivedState,
-  buildNList,
-  computeAlignedK,
-  computeKFromT,
-  shouldAdvanceStep,
+  computeCorr,
+  computeD,
+  computeK1,
+  computeKAligned,
+  computeQ,
 } from '../js/derivation.js';
 import {
-  computeEProofFromState,
-  computeF,
+  defaultExpressionModel,
+  NEGATIVE_CHILDREN,
+  POSITIVE_CHILDREN,
+  TRANSFORM_KEYS,
+} from '../js/expression-model.js';
+import {
   evaluateDirectFamily,
+  evaluateTransform,
   generateAllPoints,
   generateAtlasPaths,
-  generatePrimaryPaths,
-  H_LABELS,
+  getActiveExpressionCombos,
 } from '../js/generators.js';
 
 const EPS = 1e-9;
 
-function approxEqual(a, b, eps = EPS) {
+function approx(a, b, eps = EPS) {
   return Math.abs(a - b) <= eps;
 }
 
 function approxComplex(a, b, eps = EPS) {
-  return approxEqual(a[0], b[0], eps) && approxEqual(a[1], b[1], eps);
+  return approx(a[0], b[0], eps) && approx(a[1], b[1], eps);
 }
 
-function makeVisGroup(vals) {
-  return {
-    vals: [...vals],
-    sizes: vals.map(() => 1),
-    ptScale: 1,
-    lineW: 1,
-    lineOp: 1,
-  };
+function makeExpressionModel(enableAllTransforms = false) {
+  const model = defaultExpressionModel();
+  if (enableAllTransforms) {
+    for (const key of TRANSFORM_KEYS) model.transforms[key].enabled = true;
+  }
+  return model;
 }
 
-function makeVis(overrides = {}) {
-  const defaults = {
-    A: [1, 1],
-    B: [1, 0],
-    C: [1, 0],
-    D: [1, 0, 0, 0],
-    E: [1, 0, 0],
-    F: [1, 1],
-    G: [0, 0, 0, 0],
-    H: Array(H_LABELS.length).fill(1),
-  };
-  const merged = { ...defaults, ...overrides };
-  return {
-    A: makeVisGroup(merged.A),
-    B: makeVisGroup(merged.B),
-    C: makeVisGroup(merged.C),
-    D: makeVisGroup(merged.D),
-    E: makeVisGroup(merged.E),
-    F: makeVisGroup(merged.F),
-    G: makeVisGroup(merged.G),
-    H: makeVisGroup(merged.H),
-  };
-}
-
-function baseParams(overrides = {}) {
+function baseState(overrides = {}) {
   return {
     T: 2,
-    kMode: 'derived',
-    q1: 1,
-    q2: 0,
-    q_a: 0,
-    q_correction: 1,
-    manual_k1: false,
+    T_start: 1.99999,
+    T_stop: 2,
+    b: 1000,
+    stepRate: 1,
+    Z: 720,
+    Z_min: 0,
+    Z_max: 720,
+    l_base: 10,
+    l_func: 10,
+    kStepsInAlignmentsBool: 1,
+    q_scale: 1,
+    q_tauScale: 0,
+    q_bool: 0,
+    q_correction: 0,
     k2: 1,
-    Z: 20,
-    n: 20,
+    k3: 1,
     numStrands: 1,
-    ptSize: 1,
-    vis: makeVis(),
+    pathBudget: 2000,
+    expressionModel: makeExpressionModel(),
     ...overrides,
   };
 }
 
-test('k(T=2) equals 1 within tolerance', () => {
-  assert.ok(approxEqual(computeKFromT(2), 1, 1e-12));
+test('JSON-literal k semantics: bool=0 uses T, bool=1 uses kAligned', () => {
+  const direct = buildDerivedState(baseState({
+    kStepsInAlignmentsBool: 0,
+    T: 1.75,
+    T_start: 1,
+    T_stop: 3,
+  }));
+  assert.ok(approx(direct.k, 1.75, 1e-12));
+
+  const aligned = buildDerivedState(baseState({ kStepsInAlignmentsBool: 1, T: 2.0, l_base: 10 }));
+  assert.ok(approx(aligned.k, computeKAligned(2.0, 10), 1e-12));
 });
 
-test('q/k1 parity rules follow canonical derivation', () => {
-  const base = { q1: 5, q2: 0, manual_k1: false };
+test('JSON-literal q/corr/k1 derivation matches formulas', () => {
+  const q = computeQ(3.5, -1);
+  const d = computeD(2);
+  const corr0 = computeCorr(0, d);
+  const corr1 = computeCorr(1, d);
+  assert.equal(corr0, 2);
+  assert.ok(Number.isFinite(corr1));
 
-  const qaOff = buildDerivedState({ ...base, T: 2, q_a: 0, q_correction: 1 });
-  assert.ok(approxEqual(qaOff.k1, qaOff.q1));
-
-  const corrOff = buildDerivedState({ ...base, T: 2, q_a: 1, q_correction: 0 });
-  assert.ok(approxEqual(corrOff.k1, TAU / corrOff.q));
-
-  const dZero = buildDerivedState({ ...base, T: 0.5, q_a: 1, q_correction: 1 });
-  const expectedFallback = TAU / (dZero.q / 2);
-  assert.ok(Math.abs(dZero.d) < 1e-10);
-  assert.ok(approxEqual(dZero.k1, expectedFallback, 1e-10));
-});
-
-test('cLogBase(z, 10) matches cLog(z)/ln(10)', () => {
-  const z = [3, -4];
-  const lhs = cLogBase(z, 10);
-  const rhs = cScl(cLog(z), 1 / Math.log(10));
-  assert.ok(approxComplex(lhs, rhs, 1e-12));
-});
-
-test('direct trig family evaluator matches complex sin/cos/tan and D1=n·base', () => {
-  const base = [0.2, -0.1];
-  const n = 7;
-  const k2 = 1.3;
-  const nBase = cScl(base, n);
-
-  assert.ok(approxComplex(evaluateDirectFamily(base, n, 0, k2), nBase));
-  assert.ok(approxComplex(evaluateDirectFamily(base, n, 1, k2), cScl(cSin(nBase), k2), 1e-12));
-  assert.ok(approxComplex(evaluateDirectFamily(base, n, 2, k2), cScl(cCos(nBase), k2), 1e-12));
-  assert.ok(approxComplex(evaluateDirectFamily(base, n, 3, k2), cScl(cTan(nBase), k2), 1e-12));
-
-  const nested = cSin(cScl(cSin(nBase), k2));
-  const direct = evaluateDirectFamily(base, n, 1, k2);
-  assert.ok(Math.abs(nested[0] - direct[0]) > 1e-6 || Math.abs(nested[1] - direct[1]) > 1e-6);
-});
-
-test('nList derivation supports dense, prime-only, and U_unit scaling', () => {
-  assert.deepEqual(buildNList(6, 0, 1), [0, 1, 2, 3, 4, 5]);
-  assert.deepEqual(buildNList(20, 1, 1), [2, 3, 5, 7, 11, 13, 17, 19]);
-  assert.deepEqual(buildNList(10, 1, 0.5), [1, 1.5, 2.5, 3.5]);
-});
-
-test('alignment branch and X/log-base derivation are wired', () => {
-  const aligned = buildDerivedState({
-    T: 2,
-    kMode: 'derived',
-    kStepsInAlignments: 1,
-    k_value: 2,
-    logXIsIndependentVar: 1,
-    X_n: 5,
-    l_base: 10,
-    logBaseSource: 'X',
+  const k1q = computeK1({
+    qBool: 0,
+    qScale: 3.5,
+    q,
+    qCorrection: 1,
+    dCorrectionFunction: d,
   });
+  assert.ok(approx(k1q, 3.5));
 
-  assert.ok(approxEqual(aligned.k, computeAlignedK(2), 1e-12));
-  assert.equal(aligned.X, 5);
-  assert.equal(aligned.logBase, 5);
-
-  const fallback = buildDerivedState({
-    ...aligned,
-    logBaseSource: 'X',
-    X_n: 1,
-    l_base: 7,
+  const k1derived = computeK1({
+    qBool: 1,
+    qScale: 3.5,
+    q,
+    qCorrection: 0,
+    dCorrectionFunction: d,
   });
-  assert.equal(fallback.logBase, 7);
+  assert.ok(approx(k1derived, TAU / q, 1e-10));
 });
 
-test('step gating depends on play state in step/derived mode only', () => {
-  const stepDerived = buildDerivedState({ timeMode: 'step', kMode: 'derived' });
-  assert.equal(shouldAdvanceStep(stepDerived, false), false);
-  assert.equal(shouldAdvanceStep(stepDerived, true), true);
+test('n domain follows [Z_min ... Z_max-1] with clamping', () => {
+  const d = buildDerivedState(baseState({ Z: 1000, Z_min: 5, Z_max: 12 }));
+  assert.deepEqual(d.nList, [5, 6, 7, 8, 9, 10, 11]);
 
-  const stepManual = buildDerivedState({ timeMode: 'step', kMode: 'manual', k: 1 });
-  assert.equal(shouldAdvanceStep(stepManual, true), false);
-
-  const animationMode = buildDerivedState({ timeMode: 'animation', kMode: 'derived' });
-  assert.equal(shouldAdvanceStep(animationMode, true), false);
+  const clamped = buildDerivedState(baseState({ Z: 10, Z_min: 20, Z_max: 20 }));
+  assert.equal(clamped.nList.length, 1);
+  assert.equal(clamped.nList[0], 19);
 });
 
-test('primary trig selector maps to base/sin/cos/tan evaluator', () => {
-  const trigIdx = 2;
-  const params = baseParams({ Z: 8, n: 8, primaryTrigIndex: trigIdx });
-  const paths = generatePrimaryPaths(params);
-  assert.equal(paths.length, 1);
-  assert.ok(paths[0].pointCount >= 1);
-
-  const derived = buildDerivedState(params);
-  const f = computeF(derived.k1, derived.k);
-  const n0 = derived.nList[0];
-  const expected = evaluateDirectFamily(f, n0, trigIdx, derived.k2);
-
-  assert.ok(approxEqual(paths[0].positions[0], expected[0], 1e-9));
-  assert.ok(approxEqual(paths[0].positions[1], expected[1], 1e-9));
+test('registry contains exact 16 plotted base children (8 positive + 8 negative)', () => {
+  assert.equal(POSITIVE_CHILDREN.length, 8);
+  assert.equal(NEGATIVE_CHILDREN.length, 8);
+  assert.equal(POSITIVE_CHILDREN.length + NEGATIVE_CHILDREN.length, 16);
 });
 
-test('path-curve H variants (H8/H9) generate selectable atlas paths', () => {
-  const onlyPath = Array(H_LABELS.length).fill(0);
-  onlyPath[8] = 1;
-  const onlyPathInv = Array(H_LABELS.length).fill(0);
-  onlyPathInv[9] = 1;
+test('transform expansion includes base/sin/cos/tan and log wrappers', () => {
+  const combos = getActiveExpressionCombos(baseState({
+    expressionModel: makeExpressionModel(true),
+  }));
 
-  const common = {
-    T: 2,
-    kMode: 'derived',
-    Z: 4,
-    n: 4,
-    numStrands: 1,
-    vis: makeVis({
-      B: [1, 0],
-      C: [1, 0],
-      D: [1, 0, 0, 0],
-      E: [0, 0, 1],
-      F: [1, 0],
-      G: [1, 0, 0, 0],
-    }),
-  };
+  const transforms = new Set(combos.map((c) => c.transformKey));
+  assert.equal(transforms.size, 7);
+  for (const key of TRANSFORM_KEYS) assert.ok(transforms.has(key));
 
-  const pathOnly = generateAtlasPaths({
-    ...common,
-    vis: { ...common.vis, H: makeVisGroup(onlyPath) },
-  });
-  assert.ok(pathOnly.length > 0);
-  assert.ok(pathOnly.every((p) => p.tag && p.tag.hIdx === 8));
-
-  const pathInvOnly = generateAtlasPaths({
-    ...common,
-    vis: { ...common.vis, H: makeVisGroup(onlyPathInv) },
-  });
-  assert.ok(pathInvOnly.length > 0);
-  assert.ok(pathInvOnly.every((p) => p.tag && p.tag.hIdx === 9));
+  // 16 children * 7 transforms
+  assert.equal(combos.length, 16 * 7);
 });
 
-test('E_proof is finite and responds to P changes', () => {
-  const base = baseParams({ P: 1, Z: 30, n: 30 });
-  const p1 = computeEProofFromState(base);
-  const p3 = computeEProofFromState({ ...base, P: 3 });
+test('cos/tan/log(cos)/log(tan) evaluate correctly with l_func base', () => {
+  const z = [0.17, -0.23];
+  const k2 = 1.4;
+  const lFunc = 10;
 
-  assert.ok(Number.isFinite(p1.value));
-  assert.ok(Number.isFinite(p3.value));
-  assert.ok(Number.isFinite(p1.P1));
-  assert.ok(Number.isFinite(p3.P1));
-  assert.notEqual(p1.value, p3.value);
+  assert.ok(approxComplex(evaluateTransform(z, 'cos', k2, lFunc), cScl(cCos(z), k2), 1e-12));
+  assert.ok(approxComplex(evaluateTransform(z, 'tan', k2, lFunc), cScl(cTan(z), k2), 1e-12));
+  assert.ok(
+    approxComplex(
+      evaluateTransform(z, 'log_cos', k2, lFunc),
+      cLogBase(cScl(cCos(z), k2), lFunc),
+      1e-12,
+    ),
+  );
+  assert.ok(
+    approxComplex(
+      evaluateTransform(z, 'log_tan', k2, lFunc),
+      cLogBase(cScl(cTan(z), k2), lFunc),
+      1e-12,
+    ),
+  );
 });
 
-test('point and primary-path generators stay aligned for same canonical input', () => {
-  const params = baseParams({
-    vis: makeVis({
-      G: [0, 0, 0, 0], // disable atlas overlay to isolate primary points
-    }),
-  });
+test('direct trig family evaluator still maps base/sin/cos/tan branches', () => {
+  const z = [0.2, -0.1];
+  const k2 = 1.2;
+  assert.ok(approxComplex(evaluateDirectFamily(z, 0, 0, k2), z));
+  assert.ok(approxComplex(evaluateDirectFamily(z, 0, 1, k2), cScl(cSin(z), k2), 1e-12));
+  assert.ok(approxComplex(evaluateDirectFamily(z, 0, 2, k2), cScl(cCos(z), k2), 1e-12));
+  assert.ok(approxComplex(evaluateDirectFamily(z, 0, 3, k2), cScl(cTan(z), k2), 1e-12));
+});
 
+test('disabled parent gates compute paths for points and lines', () => {
+  const expressionModel = makeExpressionModel(true);
+  expressionModel.parent.enabled = false;
+  const params = baseState({ expressionModel });
   const points = generateAllPoints(params);
-  const paths = generatePrimaryPaths(params);
+  const lines = generateAtlasPaths(params);
+  assert.equal(points.count, 0);
+  assert.equal(lines.length, 0);
+});
 
-  assert.equal(paths.length, 1);
-  assert.equal(paths[0].pointCount, points.count);
+test('style composition is multiplicative across parent × set × transform × child', () => {
+  const expressionModel = makeExpressionModel(false);
+  expressionModel.parent.pointSize = 2;
+  expressionModel.sets.positive.pointSize = 3;
+  expressionModel.transforms.sin.enabled = true;
+  expressionModel.transforms.sin.pointSize = 0.5;
+  expressionModel.children.positiveImaginary.pointSize = 4;
 
-  for (let i = 0; i < points.count; i++) {
-    const pIdx = i * 3;
-    assert.ok(approxEqual(points.positions[pIdx], paths[0].positions[pIdx], 1e-9));
-    assert.ok(approxEqual(points.positions[pIdx + 1], paths[0].positions[pIdx + 1], 1e-9));
+  const combos = getActiveExpressionCombos(baseState({ expressionModel }));
+  const combo = combos.find((c) =>
+    c.setKey === 'positive' &&
+    c.childKey === 'positiveImaginary' &&
+    c.transformKey === 'sin');
+  assert.ok(combo);
+  assert.ok(approx(combo.style.pointSize, 2 * 3 * 0.5 * 4, 1e-12));
+});
+
+test('paths split across fixed 710-color boundary blocks when range exceeds 710', () => {
+  const expressionModel = makeExpressionModel(false);
+  for (const key of TRANSFORM_KEYS) expressionModel.transforms[key].enabled = false;
+  expressionModel.transforms.sin.enabled = true;
+  for (const child of [...POSITIVE_CHILDREN, ...NEGATIVE_CHILDREN]) {
+    expressionModel.children[child.key].enabled = false;
   }
+  expressionModel.children.positiveImaginary.enabled = true;
+  expressionModel.sets.negative.enabled = false;
+
+  const paths = generateAtlasPaths(baseState({
+    Z: 2000,
+    Z_min: 0,
+    Z_max: 720,
+    expressionModel,
+    pathBudget: 5000,
+  }));
+
+  assert.ok(paths.length > 0);
+  const blocks = new Set(paths.map((p) => p.tag?.block));
+  assert.ok(blocks.has(0));
+  assert.ok(blocks.has(1));
 });

@@ -1,74 +1,477 @@
-// ═══════════════════════════════════════════════════════════════
-//  generators.js — Mathematical point generation (v6)
-//  τ-Euler Atlas · Leonhard Euler's Day Off
-//
-//  The driving function in τ-native form:
-//    f = k₁ · τ^{i · τ^k / ln(τ)}  ≡  k₁ · e^{iτ^k}
-//
-//  α-comparison:  α^{i · nα / ln(α)} closes at n=1  ⟺  α = τ
-//
-//  Visibility system (8-axis Desmos parity):
-//    visible(item) = A[a]·B[b]·C[c]·D[d]·E[e]·F[f]·G[g]·H[h]
-//    A = render primitive (handled in controls.js regenerate)
-//    B–H = mathematical axes (handled here in generation loop)
-//    Each group also has ptScale, lineW, lineOp multipliers.
-//    When a group has all vals=0, its entire loop is skipped.
-// ═══════════════════════════════════════════════════════════════
-
 import {
-  TAU, LN_TAU, QUADS, TRIG,
-  cCos, cTan, cLogBase, cSin, cScl, cNeg, cInv, cTauPow, cAlphaPow, ok
+  TAU,
+  LN_TAU,
+  cSin,
+  cCos,
+  cTan,
+  cLogBase,
+  cScl,
+  cNeg,
+  cInv,
+  cTauPow,
+  cAlphaPow,
+  ok,
 } from './complex.js';
-import { buildDerivedState } from './derivation.js';
+import { buildDerivedState, COLOR_BLOCK_SIZE } from './derivation.js';
+import {
+  CHILDREN_BY_SET,
+  POSITIVE_CHILDREN,
+  NEGATIVE_CHILDREN,
+  SET_KEYS,
+  TRANSFORM_KEYS,
+  defaultExpressionModel,
+  normalizeExpressionModel,
+} from './expression-model.js';
 
-export { TRIG }; // re-export so controls.js can build expression labels
+export const TRIG = [
+  { label: 'base', key: 'base' },
+  { label: 'sin', key: 'sin' },
+  { label: 'cos', key: 'cos' },
+  { label: 'tan', key: 'tan' },
+  { label: 'log(sin)', key: 'log_sin' },
+  { label: 'log(cos)', key: 'log_cos' },
+  { label: 'log(tan)', key: 'log_tan' },
+];
 
-export function evaluateDirectFamily(base, nValue, dIndex, k2) {
-  const nBase = cScl(base, nValue);
+export const EXPRESSION_CHILDREN = {
+  positive: POSITIVE_CHILDREN,
+  negative: NEGATIVE_CHILDREN,
+};
+
+export const H_LABELS = []; // Legacy no-op export retained for compatibility.
+
+const BLOCK_TINTS = [
+  [1.0, 1.0, 1.0],
+  [1.0, 0.86, 0.78],
+  [0.88, 1.0, 0.82],
+  [0.82, 0.9, 1.0],
+  [0.92, 0.84, 1.0],
+  [1.0, 0.8, 0.92],
+];
+
+let _pointBudget = 200_000;
+export function setPointBudget(n) {
+  _pointBudget = Math.max(1, Math.floor(Number.isFinite(n) ? n : 200_000));
+}
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function hexToRgb(hex) {
+  const raw = typeof hex === 'string' ? hex.trim() : '';
+  const h = raw.startsWith('#') ? raw.slice(1) : raw;
+  if (h.length !== 6) return [1, 1, 1];
+  const int = Number.parseInt(h, 16);
+  if (!Number.isFinite(int)) return [1, 1, 1];
+  return [
+    ((int >> 16) & 0xff) / 255,
+    ((int >> 8) & 0xff) / 255,
+    (int & 0xff) / 255,
+  ];
+}
+
+function mulRgb(a, b) {
+  return [a[0] * b[0], a[1] * b[1], a[2] * b[2]];
+}
+
+function withBloom(rgb, bloomWeight) {
+  const glow = clamp(Number.isFinite(bloomWeight) ? bloomWeight : 1, 0, 4);
+  const gain = 0.75 + glow * 0.45;
+  return [
+    clamp(rgb[0] * gain, 0, 1),
+    clamp(rgb[1] * gain, 0, 1),
+    clamp(rgb[2] * gain, 0, 1),
+  ];
+}
+
+function blockTintForN(n) {
+  const idx = Math.floor(Math.max(0, n) / COLOR_BLOCK_SIZE) % BLOCK_TINTS.length;
+  return BLOCK_TINTS[idx];
+}
+
+function sanitizeComplex(z) {
+  if (!ok(z)) return null;
+  if (Math.abs(z[0]) > 1e4 || Math.abs(z[1]) > 1e4) return null;
+  return z;
+}
+
+export function evaluateTransform(baseZ, transformKey, k2, lFunc) {
+  switch (transformKey) {
+    case 'base':
+      return baseZ;
+    case 'sin':
+      return cScl(cSin(baseZ), k2);
+    case 'cos':
+      return cScl(cCos(baseZ), k2);
+    case 'tan':
+      return cScl(cTan(baseZ), k2);
+    case 'log_sin':
+      return cLogBase(cScl(cSin(baseZ), k2), lFunc);
+    case 'log_cos':
+      return cLogBase(cScl(cCos(baseZ), k2), lFunc);
+    case 'log_tan':
+      return cLogBase(cScl(cTan(baseZ), k2), lFunc);
+    default:
+      return [NaN, NaN];
+  }
+}
+
+export function evaluateDirectFamily(base, _nValue, dIndex, k2) {
   switch (dIndex) {
-    case 0: return nBase;
-    case 1: return cScl(cSin(nBase), k2);
-    case 2: return cScl(cCos(nBase), k2);
-    case 3: return cScl(cTan(nBase), k2);
+    case 0: return base;
+    case 1: return cScl(cSin(base), k2);
+    case 2: return cScl(cCos(base), k2);
+    case 3: return cScl(cTan(base), k2);
     default: return [NaN, NaN];
   }
 }
 
-
-// ── Core τ-native computation ────────────────────────────────
-
-export function computeF(k1, k) {
+export function computeF(k1, k, imagSign = 1) {
   const tauK = Math.pow(TAU, k);
-  const tauNativeExp = [0, tauK / LN_TAU];
+  const tauNativeExp = [0, (imagSign * tauK) / LN_TAU];
   return cScl(cTauPow(tauNativeExp), k1);
 }
 
-export function computeEProof(f, k2, Z, P, nList = null) {
-  const safeZ = Math.max(1, Math.floor(Number.isFinite(Z) ? Z : 1));
-  const safeP = Number.isFinite(P) ? P : 1;
-  const P1 = safeP * (1 + TAU / safeZ);
-  const samples = Array.isArray(nList) && nList.length > 0
-    ? nList
-    : Array.from({ length: safeZ }, (_, i) => i);
-  let sum = 0;
+function computeCircle(k1, k, nValue, imagSign) {
+  if (nValue === 0) return [NaN, NaN];
+  const theta = imagSign * Math.pow(TAU / nValue, k);
+  return cScl(cTauPow([0, theta / LN_TAU]), k1);
+}
 
-  for (const nBase of samples) {
-    const v0 = evaluateDirectFamily(f, nBase + safeP * safeZ, 1, k2);
-    const v1 = evaluateDirectFamily(f, nBase + P1 * safeZ, 1, k2);
-    if (!ok(v0) || !ok(v1)) continue;
-    sum += Math.hypot(v0[0] - v1[0], v0[1] - v1[1]);
+function computeBaseContext(derived, nValue, nOrdinal) {
+  const fPositive = computeF(derived.k1, derived.k, +1);
+  const fNegative = computeF(derived.k1, derived.k, -1);
+
+  const kWindow = Math.max(1, Math.floor(Math.abs(derived.k) + 1));
+  const jScale = (nOrdinal < kWindow && Math.abs(derived.k) > 1e-12)
+    ? (nValue / derived.k)
+    : NaN;
+
+  const circleBPositive = computeCircle(derived.k1, derived.k, nValue, +1);
+  const circleCPositive = ok(circleBPositive) ? cNeg(circleBPositive) : [NaN, NaN];
+  const circleBNegative = computeCircle(derived.k1, derived.k, nValue, -1);
+  const circleCNegative = ok(circleBNegative) ? cNeg(circleBNegative) : [NaN, NaN];
+
+  return {
+    fPositive,
+    fNegative,
+    jScale,
+    circleBPositive,
+    circleCPositive,
+    circleBNegative,
+    circleCNegative,
+  };
+}
+
+function evaluateBaseChild(setKey, childKey, ctx, nValue) {
+  const {
+    fPositive,
+    fNegative,
+    jScale,
+    circleBPositive,
+    circleCPositive,
+    circleBNegative,
+    circleCNegative,
+  } = ctx;
+
+  if (setKey === 'positive') {
+    switch (childKey) {
+      case 'positiveImaginary': return fPositive;
+      case 'positiveImaginaryReciprocal': return cInv(fPositive);
+      case 'positiveImaginaryVectorA': return Number.isFinite(jScale) ? cScl(fPositive, jScale) : [NaN, NaN];
+      case 'positiveImaginaryVectorReciprocal': return Number.isFinite(jScale) && Math.abs(jScale) > 1e-12 ? cScl(fPositive, 1 / jScale) : [NaN, NaN];
+      case 'positiveImaginaryVectorB': return cScl(fPositive, nValue);
+      case 'positiveImaginaryCircleC': return circleCPositive;
+      case 'positiveImaginaryCircleBReciprocal': return cInv(circleBPositive);
+      case 'positiveImaginaryCircleCReciprocal': return cInv(circleCPositive);
+      default: return [NaN, NaN];
+    }
   }
 
-  return { value: sum, P1 };
+  // JSON-literal negative branch definitions (including positive cross-references).
+  switch (childKey) {
+    case 'negativeImaginary': return fNegative;
+    case 'negativeImaginaryReciprocal': return cInv(fPositive);
+    case 'negativeImaginaryVectorA': return Number.isFinite(jScale) ? cScl(fPositive, jScale) : [NaN, NaN];
+    case 'negativeImaginaryVectorReciprocal': return Number.isFinite(jScale) && Math.abs(jScale) > 1e-12 ? cScl(fPositive, 1 / jScale) : [NaN, NaN];
+    case 'negativeImaginaryVectorB': return cScl(fPositive, nValue);
+    case 'negativeImaginaryCircleC': return circleCNegative;
+    case 'negativeImaginaryCircleBReciprocal': return cInv(circleBPositive);
+    case 'negativeImaginaryCircleCReciprocal': return cInv(circleCPositive);
+    default: return [NaN, NaN];
+  }
 }
 
-export function computeEProofFromState(params) {
+function getSetStyle(model, setKey) {
+  return model.sets?.[setKey] || defaultExpressionModel().sets[setKey];
+}
+
+function getTransformStyle(model, transformKey) {
+  return model.transforms?.[transformKey] || defaultExpressionModel().transforms[transformKey];
+}
+
+function getChildStyle(model, childKey) {
+  return model.children?.[childKey] || defaultExpressionModel().children[childKey];
+}
+
+function resolveEffectiveStyle(model, setKey, transformKey, childKey) {
+  const parent = model.parent;
+  const setStyle = getSetStyle(model, setKey);
+  const transformStyle = getTransformStyle(model, transformKey);
+  const childStyle = getChildStyle(model, childKey);
+
+  const enabled = !!(
+    parent.enabled &&
+    setStyle.enabled &&
+    transformStyle.enabled &&
+    childStyle.enabled
+  );
+
+  return {
+    enabled,
+    pointSize: parent.pointSize * setStyle.pointSize * transformStyle.pointSize * childStyle.pointSize,
+    pointOpacity: parent.pointOpacity * setStyle.pointOpacity * transformStyle.pointOpacity * childStyle.pointOpacity,
+    lineWidth: parent.lineWidth * setStyle.lineWidth * transformStyle.lineWidth * childStyle.lineWidth,
+    lineOpacity: parent.lineOpacity * setStyle.lineOpacity * transformStyle.lineOpacity * childStyle.lineOpacity,
+    pointBloom: parent.pointBloom * setStyle.pointBloom * transformStyle.pointBloom * childStyle.pointBloom,
+    lineBloom: parent.lineBloom * setStyle.lineBloom * transformStyle.lineBloom * childStyle.lineBloom,
+    color: childStyle.color,
+  };
+}
+
+function activeCombos(model) {
+  const combos = [];
+  for (const setKey of SET_KEYS) {
+    const children = CHILDREN_BY_SET[setKey];
+    for (const child of children) {
+      for (const transformKey of TRANSFORM_KEYS) {
+        const style = resolveEffectiveStyle(model, setKey, transformKey, child.key);
+        if (!style.enabled) continue;
+        if (style.pointOpacity <= 0.0001 && style.lineOpacity <= 0.0001) continue;
+        combos.push({
+          setKey,
+          childKey: child.key,
+          childLabel: child.label,
+          transformKey,
+          style,
+        });
+      }
+    }
+  }
+  return combos;
+}
+
+export function getActiveExpressionCombos(params) {
   const derived = buildDerivedState(params);
-  const f = computeF(derived.k1, derived.k);
-  return computeEProof(f, derived.k2, derived.Z, derived.P, derived.nList);
+  const expressionModel = normalizeExpressionModel(derived.expressionModel);
+  return activeCombos(expressionModel).map((combo) => ({
+    setKey: combo.setKey,
+    childKey: combo.childKey,
+    transformKey: combo.transformKey,
+    style: { ...combo.style },
+  }));
 }
 
-// ── α-base trace (the proof) ─────────────────────────────────
+function metadataFromDerived(derived, fPositive, computeMs) {
+  return {
+    T: derived.T,
+    k: derived.k,
+    k1: derived.k1,
+    q: derived.q,
+    d: derived.d_CorrectionFunction,
+    f: fPositive,
+    computeMs,
+  };
+}
+
+export function generateAllPoints(params) {
+  const t0 = performance.now();
+  const derived = buildDerivedState(params);
+  const expressionModel = normalizeExpressionModel(derived.expressionModel);
+  const combos = activeCombos(expressionModel);
+  const numStrands = Math.max(1, Math.floor(Number.isFinite(derived.numStrands) ? derived.numStrands : 1));
+
+  if (!expressionModel.parent.enabled || combos.length === 0 || derived.nList.length === 0) {
+    return {
+      positions: new Float32Array(0),
+      colors: new Float32Array(0),
+      sizes: new Float32Array(0),
+      count: 0,
+      meta: metadataFromDerived(derived, computeF(derived.k1, derived.k, +1), performance.now() - t0),
+      budget: _pointBudget,
+    };
+  }
+
+  const maxPts = _pointBudget;
+  const positions = new Float32Array(maxPts * 3);
+  const colors = new Float32Array(maxPts * 3);
+  const sizes = new Float32Array(maxPts);
+
+  let count = 0;
+
+  for (let strand = 0; strand < numStrands; strand++) {
+    const offset = strand * derived.Z;
+    for (const combo of combos) {
+      if (count >= maxPts) break;
+      const baseRgb = hexToRgb(combo.style.color);
+
+      for (let i = 0; i < derived.nList.length; i++) {
+        if (count >= maxPts) break;
+        if (combo.style.pointOpacity <= 0.0001) continue;
+
+        const nBase = derived.nList[i];
+        const nValue = nBase + offset;
+        const ctx = computeBaseContext(derived, nValue, i);
+        const baseZ = evaluateBaseChild(combo.setKey, combo.childKey, ctx, nValue);
+        const transformed = sanitizeComplex(evaluateTransform(baseZ, combo.transformKey, derived.k2, derived.l_func));
+        if (!transformed) continue;
+
+        const tint = blockTintForN(nValue);
+        const rgb = withBloom(mulRgb(baseRgb, tint), combo.style.pointBloom);
+
+        const idx3 = count * 3;
+        positions[idx3] = transformed[0];
+        positions[idx3 + 1] = transformed[1];
+        positions[idx3 + 2] = 0;
+        colors[idx3] = clamp(rgb[0] * combo.style.pointOpacity, 0, 1);
+        colors[idx3 + 1] = clamp(rgb[1] * combo.style.pointOpacity, 0, 1);
+        colors[idx3 + 2] = clamp(rgb[2] * combo.style.pointOpacity, 0, 1);
+        sizes[count] = Math.max(0.05, combo.style.pointSize * derived.k3);
+        count++;
+      }
+    }
+  }
+
+  const computeMs = performance.now() - t0;
+  return {
+    positions: positions.subarray(0, count * 3),
+    colors: colors.subarray(0, count * 3),
+    sizes: sizes.subarray(0, count),
+    count,
+    meta: metadataFromDerived(derived, computeF(derived.k1, derived.k, +1), computeMs),
+    budget: _pointBudget,
+  };
+}
+
+function buildLinePath(points) {
+  const pos = new Float32Array(points.length * 3);
+  for (let i = 0; i < points.length; i++) {
+    pos[i * 3] = points[i][0];
+    pos[i * 3 + 1] = points[i][1];
+    pos[i * 3 + 2] = 0;
+  }
+  return pos;
+}
+
+export function generateAtlasPaths(params) {
+  const derived = buildDerivedState(params);
+  const expressionModel = normalizeExpressionModel(derived.expressionModel);
+  const combos = activeCombos(expressionModel);
+  const numStrands = Math.max(1, Math.floor(Number.isFinite(derived.numStrands) ? derived.numStrands : 1));
+  const pathBudget = Math.max(1, Math.floor(Number.isFinite(derived.pathBudget) ? derived.pathBudget : 500));
+
+  if (!expressionModel.parent.enabled || combos.length === 0 || derived.nList.length === 0) return [];
+
+  const paths = [];
+
+  for (let strand = 0; strand < numStrands; strand++) {
+    const offset = strand * derived.Z;
+    for (const combo of combos) {
+      if (paths.length >= pathBudget) break;
+      if (combo.style.lineOpacity <= 0.0001 || combo.style.lineWidth <= 0.0001) continue;
+
+      const baseRgb = hexToRgb(combo.style.color);
+      let seg = [];
+      let currentBlock = null;
+
+      const flush = () => {
+        if (seg.length < 2) {
+          seg = [];
+          return;
+        }
+        const tint = BLOCK_TINTS[currentBlock ?? 0];
+        const rgb = withBloom(mulRgb(baseRgb, tint), combo.style.lineBloom);
+        paths.push({
+          positions: buildLinePath(seg),
+          color: rgb,
+          widthMul: Math.max(0.05, combo.style.lineWidth),
+          opacityMul: clamp(combo.style.lineOpacity, 0, 1),
+          pointCount: seg.length,
+          isPrimary: false,
+          tag: {
+            set: combo.setKey,
+            child: combo.childKey,
+            transform: combo.transformKey,
+            strand,
+            block: currentBlock ?? 0,
+          },
+        });
+        seg = [];
+      };
+
+      for (let i = 0; i < derived.nList.length; i++) {
+        if (paths.length >= pathBudget) break;
+        const nBase = derived.nList[i];
+        const nValue = nBase + offset;
+        const block = Math.floor(Math.max(0, nValue) / COLOR_BLOCK_SIZE);
+
+        if (currentBlock !== null && block !== currentBlock) flush();
+        currentBlock = block;
+
+        const ctx = computeBaseContext(derived, nValue, i);
+        const baseZ = evaluateBaseChild(combo.setKey, combo.childKey, ctx, nValue);
+        const transformed = sanitizeComplex(evaluateTransform(baseZ, combo.transformKey, derived.k2, derived.l_func));
+        if (!transformed) {
+          flush();
+          continue;
+        }
+        seg.push(transformed);
+      }
+
+      flush();
+    }
+  }
+
+  return paths.slice(0, pathBudget);
+}
+
+export function generatePrimaryPaths(params) {
+  const derived = buildDerivedState(params);
+  const expressionModel = normalizeExpressionModel(derived.expressionModel);
+  const style = resolveEffectiveStyle(expressionModel, 'positive', 'sin', 'positiveImaginary');
+  if (!style.enabled || style.lineOpacity <= 0.0001 || style.lineWidth <= 0.0001) return [];
+
+  const paths = [];
+  const numStrands = Math.max(1, Math.floor(Number.isFinite(derived.numStrands) ? derived.numStrands : 1));
+  const baseRgb = hexToRgb(style.color);
+
+  for (let strand = 0; strand < numStrands; strand++) {
+    const offset = strand * derived.Z;
+    const seg = [];
+    for (let i = 0; i < derived.nList.length; i++) {
+      const nValue = derived.nList[i] + offset;
+      const ctx = computeBaseContext(derived, nValue, i);
+      const baseZ = evaluateBaseChild('positive', 'positiveImaginary', ctx, nValue);
+      const transformed = sanitizeComplex(evaluateTransform(baseZ, 'sin', derived.k2, derived.l_func));
+      if (!transformed) continue;
+      seg.push(transformed);
+    }
+    if (seg.length >= 2) {
+      paths.push({
+        positions: buildLinePath(seg),
+        color: withBloom(baseRgb, style.lineBloom),
+        widthMul: Math.max(0.05, style.lineWidth),
+        opacityMul: clamp(style.lineOpacity, 0, 1),
+        pointCount: seg.length,
+        tag: { set: 'positive', child: 'positiveImaginary', transform: 'sin', strand },
+        isPrimary: true,
+      });
+    }
+  }
+
+  return paths;
+}
 
 export function generateAlphaTrace(alpha, N, k) {
   const pts = [];
@@ -96,499 +499,27 @@ export function generateTauTrace(N, k) {
   return pts;
 }
 
-// ── Quadrant generators (τ-native form) ──────────────────────
+export function computeEProof(f, k2, nList, P) {
+  const samples = Array.isArray(nList) ? nList : [];
+  const count = Math.max(1, samples.length);
+  const safeP = Number.isFinite(P) ? P : 1;
+  const P1 = safeP * (1 + TAU / count);
+  let sum = 0;
 
-function quadF(quad, kv) {
-  const theta1 = quad.iS * Math.pow(TAU, kv);
-  const z1 = cTauPow([0, theta1 / LN_TAU]);
-  const f1 = quad.s === -1 ? cNeg(z1) : z1;
-  const theta2 = -quad.iS * Math.pow(TAU, -kv);
-  const z2 = cTauPow([0, theta2 / LN_TAU]);
-  const f2 = quad.s === -1 ? z2 : cNeg(z2);
-  return { f1, f2 };
+  for (const nBase of samples) {
+    const n0 = nBase + safeP * count;
+    const n1 = nBase + P1 * count;
+    const v0 = sanitizeComplex(cScl(cSin(cScl(f, n0)), k2));
+    const v1 = sanitizeComplex(cScl(cSin(cScl(f, n1)), k2));
+    if (!v0 || !v1) continue;
+    sum += Math.hypot(v0[0] - v1[0], v0[1] - v1[1]);
+  }
+
+  return { value: sum, P1 };
 }
 
-function quadC(quad, kv, nv) {
-  if (nv === 0) return { c1: [NaN, NaN], c2: [NaN, NaN] };
-  const theta1 = quad.iS * Math.pow(TAU / nv, kv);
-  const c1z = cTauPow([0, theta1 / LN_TAU]);
-  const c1 = quad.s === -1 ? cNeg(c1z) : c1z;
-  const theta2 = -quad.iS * Math.pow(TAU / nv, -kv);
-  const c2z = cTauPow([0, theta2 / LN_TAU]);
-  const c2 = quad.s === -1 ? c2z : cNeg(c2z);
-  return { c1, c2 };
-}
-
-function quadPath(quad, nv) {
-  const theta1 = quad.iS * Math.pow(TAU, nv);
-  const p1z = cTauPow([0, theta1 / LN_TAU]);
-  const p1 = quad.s === -1 ? cNeg(p1z) : p1z;
-
-  const theta2 = -quad.iS * Math.pow(TAU, -nv);
-  const p2z = cTauPow([0, theta2 / LN_TAU]);
-  const p2 = quad.s === -1 ? p2z : cNeg(p2z);
-  return { p1, p2 };
-}
-
-// ── HSL hue → RGB ────────────────────────────────────────────
-
-function hueToRGB(hue, satMul = 0.9, litAdd = 0.1) {
-  const hr = hue * 6;
-  const x = 1 - Math.abs(hr % 2 - 1);
-  let r, g, b;
-  if (hr < 1)      { r = 1; g = x; b = 0; }
-  else if (hr < 2) { r = x; g = 1; b = 0; }
-  else if (hr < 3) { r = 0; g = 1; b = x; }
-  else if (hr < 4) { r = 0; g = x; b = 1; }
-  else if (hr < 5) { r = x; g = 0; b = 1; }
-  else              { r = 1; g = 0; b = x; }
-  return [r * satMul + litAdd, g * satMul + litAdd, b * satMul + litAdd];
-}
-
-// ── Point budget ─────────────────────────────────────────────
-
-let _pointBudget = 200_000;
-export function setPointBudget(n) { _pointBudget = n; }
-
-// ── Variant labels (H group) ────────────────────────────────
-//  H0: raw f/c
-//  H1: k-scaled
-//  H2: n-scaled
-//  H3: inverted (1/f)
-//  H4: J-scaled (nv/kVal)
-//  H5: J-inv-scaled (kVal/nv)
-//  H6: curve-leaf raw
-//  H7: curve-leaf k-scaled / neg-k-scaled
-//  H8: curve-path raw (tau^n family)
-//  H9: curve-path inverse
-
-export const H_LABELS = [
-  'raw',        // H0
-  'k-scaled',   // H1
-  'n-scaled',   // H2
-  'inverted',   // H3
-  'J-scaled',   // H4
-  'J-inv',      // H5
-  'curve-leaf', // H6
-  'curve-leaf-k', // H7
-  'curve-path', // H8
-  'curve-path-inv', // H9
-];
-
-// ── Main generator ───────────────────────────────────────────
-//
-//  params.vis = { A, B, C, D, E, F, G, H }
-//  Each group: { vals: number[], ptScale: number, lineW: number, lineOp: number }
-//  A-group (Point/Line) is handled in controls.js regenerate() for perf skip.
-//  B–H groups are handled here in the inner generation loops.
-
-export function generateAllPoints(params) {
-  const t0 = performance.now();
+export function computeEProofFromState(params) {
   const derived = buildDerivedState(params);
-  const {
-    Z, k, k1, k2, logBase,
-    numStrands, vis, ptSize, k3, nList, primaryTrigIndex
-  } = derived;
-
-  const f = computeF(k1, k);
-  const kVal = k;
-  const kCeil = Math.max(1, Math.floor(Math.abs(kVal) + 1));
-  const sampleCount = nList.length;
-
-  // Check if any atlas dimensions are active
-  const atlasActive = vis.G.vals.some(v => v > 0) &&
-    vis.D.vals.some(v => v > 0) && vis.E.vals.some(v => v > 0) &&
-    vis.B.vals.some(v => v > 0) && vis.C.vals.some(v => v > 0);
-
-  // Budget: split between pure strand and atlas
-  const purebudget = Math.min(numStrands * sampleCount * 2, _pointBudget);
-  const atlasBudget = atlasActive ? Math.min(_pointBudget - Math.min(purebudget, _pointBudget * 0.4), _pointBudget * 0.6) : 0;
-
-  const maxPts = purebudget + atlasBudget;
-  let positions = new Float32Array(maxPts * 3);
-  let colors    = new Float32Array(maxPts * 3);
-  let sizes     = new Float32Array(maxPts);
-  let count = 0;
-
-  // ── Pure strand points (primary sin(n·f)·k₂ visual) ────
-  for (let strand = 0; strand < numStrands; strand++) {
-    const offset = strand * Z;
-    const [sr, sg, sb] = hueToRGB(strand / Math.max(1, numStrands));
-
-    for (let i = 0; i < sampleCount; i++) {
-      if (count >= purebudget) break;
-      const nv = nList[i] + offset;
-      const val = evaluateDirectFamily(f, nv, primaryTrigIndex, k2);
-
-      if (!ok(val) || Math.abs(val[0]) > 100 || Math.abs(val[1]) > 100) continue;
-
-      const idx3 = count * 3;
-      positions[idx3] = val[0];
-      positions[idx3 + 1] = val[1];
-      positions[idx3 + 2] = 0;
-      colors[idx3] = sr;
-      colors[idx3 + 1] = sg;
-      colors[idx3 + 2] = sb;
-      sizes[count] = ptSize * k3 * 0.8;
-      count++;
-    }
-  }
-
-  // ── Atlas dimensional overlay points ────────────────────
-  //  Each item is tagged: (B, C, D, E, F, G, H)
-  //  visible(item) = Π group.vals[index]
-  //  size(item) = ptSize × Π group.ptScale
-
-  if (atlasActive) {
-    for (let strand = 0; strand < numStrands && count < maxPts; strand++) {
-      const offset = strand * Z;
-
-      for (let gi = 0; gi < 4 && count < maxPts; gi++) {
-        if (vis.G.vals[gi] <= 0) continue;
-        const quad = QUADS[gi];
-        const { f1, f2 } = quadF(quad, kVal);
-
-        for (let i = 0; i < sampleCount && count < maxPts; i++) {
-          const nv = nList[i] + offset;
-          const { c1, c2 } = quadC(quad, kVal, nv === 0 ? 0.001 : nv);
-          const { p1, p2 } = quadPath(quad, nv);
-          const jScale = (i < kCeil && kVal !== 0) ? nv / kVal : null;
-
-          // Build tagged variants: [z, eIdx, fIdx, hIdx]
-          //   eIdx = E group index (0=F point, 1=V vector, 2=C curve)
-          //   fIdx = F group index (0=branch A/f1, 1=branch B/f2)
-          //   hIdx = H group index (variant type)
-          const variants = [];
-
-          // ── Branch A (f₁) — F=0 ──
-          variants.push([f1, 0, 0, 0]);                              // H0: raw
-          if (kVal !== 0) variants.push([cScl(f1, kVal), 0, 0, 1]); // H1: k-scaled
-          variants.push([cScl(f1, nv), 0, 0, 2]);                   // H2: n-scaled
-          variants.push([cInv(f1), 0, 0, 3]);                       // H3: inverted
-          if (jScale !== null && jScale !== 0) {
-            variants.push([cScl(f1, jScale), 1, 0, 4]);             // H4: J-scaled (V)
-            variants.push([cScl(f1, 1 / jScale), 1, 0, 5]);         // H5: J-inv (V)
-          }
-          if (ok(c1)) {
-            variants.push([c1, 2, 0, 6]);                           // H6: leaf curve raw (C)
-            if (kVal !== 0) variants.push([cScl(c1, -kVal), 2, 0, 7]); // H7: leaf curve k (C)
-          }
-          if (ok(p1)) {
-            variants.push([p1, 2, 0, 8]);                           // H8: path curve raw (C)
-            variants.push([cInv(p1), 2, 0, 9]);                     // H9: path curve inv (C)
-          }
-
-          // ── Branch B (f₂) — F=1 ──
-          variants.push([f2, 0, 1, 0]);
-          if (kVal !== 0) variants.push([cScl(f2, kVal), 0, 1, 1]);
-          variants.push([cScl(f2, nv), 0, 1, 2]);
-          variants.push([cInv(f2), 0, 1, 3]);
-          if (jScale !== null && jScale !== 0) {
-            variants.push([cScl(f2, jScale), 1, 1, 4]);
-            variants.push([cScl(f2, 1 / jScale), 1, 1, 5]);
-          }
-          if (ok(c2)) {
-            variants.push([c2, 2, 1, 6]);
-            if (kVal !== 0) variants.push([cScl(c2, kVal), 2, 1, 7]);
-          }
-          if (ok(p2)) {
-            variants.push([p2, 2, 1, 8]);
-            variants.push([cInv(p2), 2, 1, 9]);
-          }
-
-          for (const [baseZ, eIdx, fIdx, hIdx] of variants) {
-            if (count >= maxPts) break;
-            if (!ok(baseZ)) continue;
-
-            // E and F filter
-            if (vis.E.vals[eIdx] <= 0) continue;
-            if (vis.F.vals[fIdx] <= 0) continue;
-            // H filter
-            if (vis.H.vals[hIdx] <= 0) continue;
-
-            for (let di = 0; di < 4; di++) {
-              if (count >= maxPts) break;
-              if (vis.D.vals[di] <= 0) continue;
-              const afterTrig = evaluateDirectFamily(baseZ, nv, di, k2);
-              if (!ok(afterTrig)) continue;
-
-              for (let ci = 0; ci < 2; ci++) {
-                if (count >= maxPts) break;
-                if (vis.C.vals[ci] <= 0) continue;
-                const afterLog = ci === 0 ? afterTrig : cLogBase(afterTrig, logBase);
-                if (!ok(afterLog)) continue;
-
-                for (let bi = 0; bi < 2; bi++) {
-                  if (count >= maxPts) break;
-                  if (vis.B.vals[bi] <= 0) continue;
-                  const final = bi === 0 ? afterLog : cNeg(afterLog);
-
-                  // Product of all group opacities
-                  const totalOp = vis.G.vals[gi] * vis.E.vals[eIdx] * vis.F.vals[fIdx]
-                    * vis.H.vals[hIdx] * vis.D.vals[di] * vis.C.vals[ci] * vis.B.vals[bi];
-                  if (totalOp <= 0.01) continue;
-                  if (Math.abs(final[0]) > 100 || Math.abs(final[1]) > 100) continue;
-
-                  // Product of all group ptScale multipliers
-                  const ptMul = vis.G.ptScale * vis.E.ptScale * vis.F.ptScale
-                    * vis.H.ptScale * vis.D.ptScale * vis.C.ptScale * vis.B.ptScale;
-
-                  const idx3 = count * 3;
-                  positions[idx3] = final[0];
-                  positions[idx3 + 1] = final[1];
-                  positions[idx3 + 2] = 0;
-                  const br = Math.min(1, totalOp * 0.8);
-                  colors[idx3] = quad.color[0] * br;
-                  colors[idx3 + 1] = quad.color[1] * br;
-                  colors[idx3 + 2] = quad.color[2] * br;
-                  sizes[count] = ptSize * k3 * ptMul * (0.5 + Math.random() * 0.3);
-                  count++;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  const computeMs = performance.now() - t0;
-
-  return {
-    positions: positions.subarray(0, count * 3),
-    colors: colors.subarray(0, count * 3),
-    sizes: sizes.subarray(0, count),
-    count,
-    meta: { k, k1, f, computeMs },
-    budget: _pointBudget
-  };
-}
-
-// ── Legacy strand-path entrypoint (compat only) ───────────────
-// Deprecated: kept for one-release compatibility.
-// Delegates to canonical primary-path generator to prevent drift.
-export function generateStrandPaths(params) {
-  return generatePrimaryPaths(params);
-}
-
-// ── Atlas path generator — connected curves per expression ────
-//
-//  For each active (gi, fIdx, hIdx, di, ci, bi) combination,
-//  iterates through n=[0...Z] per strand and outputs a connected
-//  Float32Array path segment. Mirrors the atlas overlay loop in
-//  generateAllPoints() but connection-first instead of point-first.
-
-function getEIndexForH(hIdx) {
-  if (hIdx <= 3) return 0; // F (point) geometry
-  if (hIdx <= 5) return 1; // V (vector) geometry
-  return 2;                 // C (curve) geometry
-}
-
-function computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil, nOrdinal) {
-  const { f1, f2 } = quadF(quad, kVal);
-  const f = fIdx === 0 ? f1 : f2;
-
-  // J-scale factor (only valid in the early range)
-  const atJ = nOrdinal < kCeil && kVal !== 0 && nv !== 0;
-  const jScale = atJ ? nv / kVal : null;
-
-  // Curve variants
-  const safeNv = nv === 0 ? 0.001 : nv;
-  const { c1, c2 } = quadC(quad, kVal, safeNv);
-  const { p1, p2 } = quadPath(quad, nv);
-  const c = fIdx === 0 ? c1 : c2;
-  const p = fIdx === 0 ? p1 : p2;
-
-  switch (hIdx) {
-    case 0: return f;
-    case 1: return kVal !== 0 ? cScl(f, kVal) : null;
-    case 2: return cScl(f, nv);
-    case 3: return cInv(f);
-    case 4: return (jScale !== null) ? cScl(f, jScale)     : null;
-    case 5: return (jScale !== null) ? cScl(f, 1 / jScale) : null;
-    case 6: return ok(c) ? c : null;
-    case 7:
-      if (!ok(c) || kVal === 0) return null;
-      return cScl(c, fIdx === 0 ? -kVal : kVal);
-    case 8: return ok(p) ? p : null;
-    case 9: return ok(p) ? cInv(p) : null;
-    default: return null;
-  }
-}
-
-const ATLAS_PATH_BUDGET = 200; // default if not specified in params
-
-export function generateAtlasPaths(params) {
-  const derived = buildDerivedState(params);
-  const { Z, k, k2, logBase, numStrands, vis, nList, atlasBudget = ATLAS_PATH_BUDGET } = derived;
-  const kVal = k;
-  const kCeil = Math.max(1, Math.floor(Math.abs(kVal) + 1));
-  const paths = [];
-
-  // Early-out if no colour group is active
-  if (!vis.G.vals.some(v => v > 0)) return paths;
-
-  // Collect candidate combinations, sorted by totalOp descending
-  const combos = [];
-
-  for (let gi = 0; gi < 4; gi++) {
-    if (vis.G.vals[gi] <= 0) continue;
-    for (let fIdx = 0; fIdx < 2; fIdx++) {
-      if (vis.F.vals[fIdx] <= 0) continue;
-      for (let hIdx = 0; hIdx < H_LABELS.length; hIdx++) {
-        if (vis.H.vals[hIdx] <= 0) continue;
-        const eIdx = getEIndexForH(hIdx);
-        if (vis.E.vals[eIdx] <= 0) continue;
-        for (let di = 0; di < 4; di++) {
-          if (vis.D.vals[di] <= 0) continue;
-          for (let ci = 0; ci < 2; ci++) {
-            if (vis.C.vals[ci] <= 0) continue;
-            for (let bi = 0; bi < 2; bi++) {
-              if (vis.B.vals[bi] <= 0) continue;
-              // ── Opacity product (c_ system) ──────────────────
-              const totalOp = vis.G.vals[gi] * vis.E.vals[eIdx] * vis.F.vals[fIdx]
-                * vis.H.vals[hIdx] * vis.D.vals[di] * vis.C.vals[ci] * vis.B.vals[bi];
-              if (totalOp <= 0.01) continue;
-              // ── Width product (s_ system) — ALL group lineW × ALL member sizes ──
-              const sz = (grp, idx) => (grp.sizes && grp.sizes[idx] != null) ? grp.sizes[idx] : 1;
-              const widthMul =
-                (vis.G.lineW??1)*(vis.F.lineW??1)*(vis.H.lineW??1)*
-                (vis.E.lineW??1)*(vis.D.lineW??1)*(vis.C.lineW??1)*(vis.B.lineW??1)*
-                sz(vis.G,gi)*sz(vis.F,fIdx)*sz(vis.H,hIdx)*
-                sz(vis.E,eIdx)*sz(vis.D,di)*sz(vis.C,ci)*sz(vis.B,bi);
-              // ── Opacity product (lineOp system) — ALL group lineOp × totalOp ──
-              const opacityMul =
-                (vis.G.lineOp??1)*(vis.F.lineOp??1)*(vis.H.lineOp??1)*
-                (vis.E.lineOp??1)*(vis.D.lineOp??1)*(vis.C.lineOp??1)*(vis.B.lineOp??1)*
-                totalOp;
-              combos.push({ gi, fIdx, hIdx, eIdx, di, ci, bi, totalOp, widthMul, opacityMul });
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Sort highest opacity first so budget preserves the most visible paths
-  combos.sort((a, b) => b.totalOp - a.totalOp);
-
-  let pathCount = 0;
-
-  for (const { gi, fIdx, hIdx, di, ci, bi, totalOp, widthMul, opacityMul } of combos) {
-    if (pathCount >= atlasBudget) break;
-
-    const quad = QUADS[gi];
-    const br = Math.min(1, totalOp * 0.85);
-    const color = [quad.color[0] * br, quad.color[1] * br, quad.color[2] * br];
-
-    for (let strand = 0; strand < numStrands; strand++) {
-      if (pathCount >= atlasBudget) break;
-      const offset = strand * Z;
-
-      // Accumulate connected points for this (combo, strand)
-      let segment = [];
-
-      const flushSeg = () => {
-        if (segment.length >= 2) {
-          const pos = new Float32Array(segment.length * 3);
-          for (let j = 0; j < segment.length; j++) {
-            pos[j * 3]     = segment[j][0];
-            pos[j * 3 + 1] = segment[j][1];
-            pos[j * 3 + 2] = 0;
-          }
-          paths.push({
-            positions: pos,
-            color,
-            widthMul,
-            opacityMul, // lineOp product — applied multiplicatively in updateAtlasPaths
-            pointCount: segment.length,
-            tag: { gi, fIdx, hIdx, di, ci, bi },
-            isPrimary: false,
-          });
-          pathCount++;
-        }
-        segment = [];
-      };
-
-      for (let i = 0; i < nList.length; i++) {
-        const nv = nList[i] + offset;
-
-        const baseZ = computeVariantBase(quad, kVal, nv, fIdx, hIdx, kCeil, i);
-        if (!baseZ || !ok(baseZ)) { flushSeg(); continue; }
-
-        const afterTrig = evaluateDirectFamily(baseZ, nv, di, k2);
-        if (!ok(afterTrig)) { flushSeg(); continue; }
-
-        const afterLog  = ci === 0 ? afterTrig : cLogBase(afterTrig, logBase);
-        if (!ok(afterLog)) { flushSeg(); continue; }
-
-        const final = bi === 0 ? afterLog : cNeg(afterLog);
-        if (!ok(final) || Math.abs(final[0]) > 100 || Math.abs(final[1]) > 100) {
-          flushSeg(); continue;
-        }
-
-        segment.push(final);
-      }
-
-      flushSeg();
-    }
-  }
-
-  return paths;
-}
-
-// ── Primary strand paths — unified into atlas pipeline ────────
-//
-//  f = k₁·e^{iτ^k}  — the T-derived seed, mapped through sin(n·f)·k₂
-//  Returns paths in the same format as generateAtlasPaths so they flow
-//  through updateAtlasPaths for unified rendering.
-//  isPrimary: true — controls.js applies primaryLineWidth/Opacity separately.
-
-export function generatePrimaryPaths(params) {
-  const {
-    Z, k, k1, k2, numStrands, nList, primaryTrigIndex,
-  } = buildDerivedState(params);
-  const f = computeF(k1, k);
-  const paths = [];
-
-  for (let strand = 0; strand < numStrands; strand++) {
-    const offset = strand * Z;
-    const hue = strand / Math.max(1, numStrands);
-    const [r, g, b] = hueToRGB(hue);
-
-    let segment = [];
-    const flushSeg = () => {
-      if (segment.length >= 2) {
-        const pos = new Float32Array(segment.length * 3);
-        for (let j = 0; j < segment.length; j++) {
-          pos[j * 3]     = segment[j][0];
-          pos[j * 3 + 1] = segment[j][1];
-          pos[j * 3 + 2] = 0;
-        }
-        paths.push({
-          positions:  pos,
-          color:      [r, g, b],
-          widthMul:   1,   // controlled by state.primaryLineWidth directly
-          opacityMul: 1,   // controlled by state.primaryLineOpacity directly
-          pointCount: segment.length,
-          tag:        null,
-          isPrimary:  true,
-        });
-      }
-      segment = [];
-    };
-
-    for (let i = 0; i < nList.length; i++) {
-      const nv  = nList[i] + offset;
-      const val = evaluateDirectFamily(f, nv, primaryTrigIndex, k2);
-      if (!ok(val) || Math.abs(val[0]) > 100 || Math.abs(val[1]) > 100) {
-        flushSeg();
-      } else {
-        segment.push(val);
-      }
-    }
-    flushSeg();
-  }
-
-  return paths;
+  const f = computeF(derived.k1, derived.k, +1);
+  return computeEProof(f, derived.k2, derived.nList, derived.P);
 }
