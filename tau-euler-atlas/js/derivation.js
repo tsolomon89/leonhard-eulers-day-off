@@ -2,6 +2,7 @@ import { TAU } from './complex.js';
 
 const EPS = 1e-12;
 export const COLOR_BLOCK_SIZE = 710;
+export const STEP_LOOP_MODES = ['clamp', 'bounce'];
 
 export const PRIMES = [
   2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
@@ -11,6 +12,10 @@ export const PRIMES = [
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
+}
+
+function sanitizeStepLoopMode(mode) {
+  return STEP_LOOP_MODES.includes(mode) ? mode : 'clamp';
 }
 
 function sanitizeLogBase(v, fallback) {
@@ -98,6 +103,63 @@ export function computeStepDelta(derived, dtSeconds) {
   return s * stepRate * dtSeconds;
 }
 
+export function computeWindowProgress(value, start, stop) {
+  const a = Number.isFinite(start) ? start : 0;
+  const b = Number.isFinite(stop) ? stop : a + 1;
+  const v = Number.isFinite(value) ? value : a;
+  const span = b - a;
+  if (!Number.isFinite(span) || Math.abs(span) < EPS) return 0;
+  return clamp((v - a) / span, 0, 1);
+}
+
+export function advanceStepTraversal({
+  T,
+  T_start,
+  T_stop,
+  dtSeconds,
+  s,
+  stepRate,
+  stepLoopMode = 'clamp',
+  bounceDir = 1,
+}) {
+  const a = Number.isFinite(T_start) ? T_start : 0;
+  const b = Number.isFinite(T_stop) ? T_stop : a + 1;
+  const minT = Math.min(a, b);
+  const maxT = Math.max(a, b);
+  const span = maxT - minT;
+  const current = clamp(Number.isFinite(T) ? T : minT, minT, maxT);
+  const magnitude = Math.abs(Number.isFinite(s) ? s : 0) * Math.abs(Number.isFinite(stepRate) ? stepRate : 0) * Math.max(0, Number.isFinite(dtSeconds) ? dtSeconds : 0);
+  if (magnitude <= 0 || span < EPS) {
+    return { T: current, bounceDir, moved: false };
+  }
+
+  const userSign = Math.sign(Number.isFinite(stepRate) ? stepRate : 0) || 1;
+  const currentBounce = Math.sign(Number.isFinite(bounceDir) ? bounceDir : 0) || 1;
+  const effectiveSign = userSign * currentBounce;
+  const mode = sanitizeStepLoopMode(stepLoopMode);
+  const rawNext = current + (magnitude * effectiveSign);
+
+  if (mode === 'clamp') {
+    return { T: clamp(rawNext, minT, maxT), bounceDir: currentBounce, moved: true };
+  }
+
+  const period = 2 * span;
+  const linearPos = (current - minT) + (magnitude * effectiveSign);
+  let wrapped = linearPos % period;
+  if (wrapped < 0) wrapped += period;
+
+  let localPos = wrapped;
+  let segmentSign = 1;
+  if (wrapped > span) {
+    localPos = period - wrapped;
+    segmentSign = -1;
+  }
+  const nextT = minT + localPos;
+  const nextEffectiveSign = effectiveSign * segmentSign;
+  const nextBounceDir = nextEffectiveSign * userSign;
+  return { T: clamp(nextT, minT, maxT), bounceDir: nextBounceDir, moved: true };
+}
+
 export function shouldAdvanceStep(derived, isPlaying) {
   return !!isPlaying && derived.timeMode === 'step';
 }
@@ -163,6 +225,7 @@ export function buildDerivedState(input) {
 
   const stepRate = Number.isFinite(base.stepRate) ? base.stepRate : 1;
   const timeMode = base.timeMode === 'step' ? 'step' : 'animation';
+  const stepLoopMode = sanitizeStepLoopMode(base.stepLoopMode);
   const syncTStepToS = base.syncTStepToS !== false;
   const tRegion = typeof base.tRegion === 'string' ? base.tRegion : 'full';
 
@@ -199,6 +262,7 @@ export function buildDerivedState(input) {
     s,
     stepRate,
     timeMode,
+    stepLoopMode,
     syncTStepToS,
     tRegion,
     P,
@@ -218,4 +282,3 @@ export function applyDerivedState(state) {
   Object.assign(state, buildDerivedState(state));
   return state;
 }
-

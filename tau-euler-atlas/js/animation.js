@@ -1,67 +1,138 @@
-// ═══════════════════════════════════════════════════════════════
-//  animation.js — Portable Progress Engine
-//  τ-Euler Atlas · Leonhard Euler's Day Off
-//
-//  Architecture (Portable Scroll-Animation Principles):
-//    Layer B: ProgressEngine drives a single 0..1 progress value.
-//    Layer C: NumberParam links resolve baseValue → endValue via easing.
-//    Layer D: consumers (sliders, scene) read resolved values each frame.
-//
-//  Users link any slider by clicking ⚯.  Playback sweeps all linked
-//  params from their baseValue → endValue over `duration` seconds.
-//  Supported loop modes: none | wrap | bounce.
-// ═══════════════════════════════════════════════════════════════
+// ============================================================================
+// animation.js - Portable Progress Engine
+// tau-Euler Atlas
+// ============================================================================
 
 export const EASINGS = {
-  linear:        t => t,
-  'ease-in':     t => t * t,
-  'ease-out':    t => t * (2 - t),
-  'ease-in-out': t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
-  sine:          t => 0.5 - 0.5 * Math.cos(t * Math.PI),
+  linear: (t) => t,
+  'ease-in': (t) => t * t,
+  'ease-out': (t) => t * (2 - t),
+  'ease-in-out': (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t),
+  sine: (t) => 0.5 - 0.5 * Math.cos(t * Math.PI),
 };
 
-// ── NumberParam Link ─────────────────────────────────────────
-// One link per registered slider.  Represents the authoring contract:
-//   baseValue  = current "rest" position (set by normal drag)
-//   endValue   = animation target (set by Shift+drag or link auto-offset)
-//   isLinked   = whether this param participates in playback sweep
+export const LINK_SOURCES = ['off', 'anim', 'step'];
+const EPS = 1e-12;
 
-function makeLink(obj, key, index) {
-  const raw = index !== null ? obj[key][index] : obj[key];
-  return { obj, key, index, baseValue: parseFloat(raw), endValue: null, isLinked: false, easing: 'linear' };
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
 }
 
-// ── Progress Engine ──────────────────────────────────────────
+function quantize(v, min, max, step) {
+  const safeMin = Number.isFinite(min) ? min : -Infinity;
+  const safeMax = Number.isFinite(max) ? max : Infinity;
+  const clamped = clamp(v, safeMin, safeMax);
+  if (!Number.isFinite(step) || step <= 0) return clamped;
+  const snapped = Math.round((clamped - safeMin) / step) * step + safeMin;
+  return clamp(snapped, safeMin, safeMax);
+}
+
+function sanitizeSource(source) {
+  return LINK_SOURCES.includes(source) ? source : 'off';
+}
+
+export function swapLinkEndpoints(link) {
+  if (!link || !Number.isFinite(link.endValue)) return false;
+  const oldBase = link.baseValue;
+  link.baseValue = link.endValue;
+  link.endValue = oldBase;
+  return true;
+}
+
+export function computeWindowProgress(value, start, stop) {
+  const a = Number.isFinite(start) ? start : 0;
+  const b = Number.isFinite(stop) ? stop : a + 1;
+  const v = Number.isFinite(value) ? value : a;
+  const span = b - a;
+  if (!Number.isFinite(span) || Math.abs(span) < EPS) return 0;
+  return clamp((v - a) / span, 0, 1);
+}
+
+function makeLink(obj, key, index, options = {}) {
+  const raw = index !== null ? obj[key][index] : obj[key];
+  const link = {
+    obj,
+    key,
+    index,
+    min: options.min,
+    max: options.max,
+    step: options.step,
+    baseValue: parseFloat(raw),
+    endValue: null,
+    source: 'off',
+    direction: 1,
+    easing: 'linear',
+  };
+
+  // Back-compat mirror for one release.
+  Object.defineProperty(link, 'isLinked', {
+    enumerable: true,
+    configurable: true,
+    get() {
+      return this.source !== 'off';
+    },
+    set(next) {
+      if (next) {
+        if (this.source === 'off') this.source = 'anim';
+      } else {
+        this.source = 'off';
+      }
+    },
+  });
+
+  return link;
+}
 
 class ProgressEngine {
   constructor() {
-    this.links     = [];       // Array of NumberParam links
-    this.playing   = false;
-    this.progress  = 0;        // Normalized 0..1 master cursor
-    this.duration  = 30;       // Sweep duration in seconds
-    this.loop      = 'wrap';   // 'none' | 'wrap' | 'bounce'
+    this.links = [];
+    this.playing = false;
+    this.progress = 0;
+    this.duration = 30;
+    this.loop = 'wrap'; // none | wrap | bounce
 
     this._lastFrameTime = 0;
     this._stateChangeCbs = [];
   }
 
-  // ── Param Registration ──────────────────────────────────
-
-  registerLink(obj, key, index = null) {
-    const link = makeLink(obj, key, index);
+  registerLink(obj, key, index = null, options = {}) {
+    const link = makeLink(obj, key, index, options);
     this.links.push(link);
     return link;
   }
 
-  clearLinks() {
-    this.links = [];
-    this._stateChangeCbs = []; // Reset listeners; buildControls() re-registers after each build
+  setLinkSource(link, source, bounds = {}) {
+    link.source = sanitizeSource(source);
+
+    if (link.source !== 'off' && link.endValue === null) {
+      const min = Number.isFinite(bounds.min) ? bounds.min : link.min;
+      const max = Number.isFinite(bounds.max) ? bounds.max : link.max;
+      const step = Number.isFinite(bounds.step) ? bounds.step : link.step;
+      const safeMin = Number.isFinite(min) ? min : -1;
+      const safeMax = Number.isFinite(max) ? max : 1;
+      const span = safeMax - safeMin;
+      const seed = Number.isFinite(span) && span !== 0
+        ? link.baseValue + (span * 0.2)
+        : link.baseValue + 1;
+      link.endValue = quantize(seed, safeMin, safeMax, step);
+    }
+
+    this._notify();
   }
 
-  // ── Transport ────────────────────────────────────────────
+  cycleLinkSource(link, bounds = {}) {
+    const idx = LINK_SOURCES.indexOf(sanitizeSource(link.source));
+    const next = LINK_SOURCES[(idx + 1) % LINK_SOURCES.length];
+    this.setLinkSource(link, next, bounds);
+    return link.source;
+  }
+
+  clearLinks() {
+    this.links = [];
+    this._stateChangeCbs = [];
+  }
 
   play() {
-    if (!this.links.some(l => l.isLinked)) return;
     this.playing = true;
     this._lastFrameTime = performance.now();
     this._notify();
@@ -75,7 +146,7 @@ class ProgressEngine {
   stop() {
     this.playing = false;
     this.progress = 0;
-    this._applyProgress();
+    this._applyAnimProgress();
     this._notify();
   }
 
@@ -85,8 +156,8 @@ class ProgressEngine {
   }
 
   seek(p) {
-    this.progress = Math.max(0, Math.min(1, p));
-    this._applyProgress();
+    this.progress = clamp(p, 0, 1);
+    this._applyAnimProgress();
     this._notify();
   }
 
@@ -98,31 +169,37 @@ class ProgressEngine {
     for (const cb of this._stateChangeCbs) cb();
   }
 
-  // ── Frame update (called from render loop) ───────────────
-
   update() {
     if (!this.playing) return false;
 
     const now = performance.now();
-    const dt  = (now - this._lastFrameTime) / 1000;
+    const dt = (now - this._lastFrameTime) / 1000;
     this._lastFrameTime = now;
 
     this.progress += dt / this.duration;
 
     if (this.loop === 'none' && this.progress >= 1) {
       this.progress = 1;
-      this.playing  = false;
+      this.playing = false;
     }
 
-    const changed = this._applyProgress();
+    const changed = this._applyAnimProgress();
     this._notify();
     return changed;
   }
 
-  // ── Parameter Resolver (Layer C) ─────────────────────────
+  applyStepProgress(t) {
+    const clamped = clamp(Number.isFinite(t) ? t : 0, 0, 1);
+    const changed = this._applyLinksForSource('step', clamped, false);
+    if (changed) this._notify();
+    return changed;
+  }
 
-  _applyProgress() {
-    // Normalise raw progress into a looped/bounced 0..1
+  applyStepFromWindow(value, start, stop) {
+    return this.applyStepProgress(computeWindowProgress(value, start, stop));
+  }
+
+  _applyAnimProgress() {
     let t = this.progress;
     if (this.loop === 'wrap') {
       t = t % 1;
@@ -131,37 +208,39 @@ class ProgressEngine {
       t = t % 1;
       if (cycle % 2 === 1) t = 1 - t;
     } else {
-      t = Math.min(1, Math.max(0, t));
+      t = clamp(t, 0, 1);
     }
+    return this._applyLinksForSource('anim', t, true);
+  }
 
+  _applyLinksForSource(source, t, useEasing) {
     let changed = false;
+
     for (const link of this.links) {
-      if (!link.isLinked || link.endValue === null) continue;
+      if (sanitizeSource(link.source) !== source || link.endValue === null) continue;
 
-      const eased  = (EASINGS[link.easing] || EASINGS.linear)(t);
-      const next   = link.baseValue + (link.endValue - link.baseValue) * eased;
+      const direction = link.direction < 0 ? -1 : 1;
+      let localT = direction < 0 ? 1 - t : t;
+      if (useEasing) localT = (EASINGS[link.easing] || EASINGS.linear)(localT);
 
-      // Write resolved value back to the bound state object
+      const next = link.baseValue + (link.endValue - link.baseValue) * localT;
+
       if (link.index !== null) {
         if (link.obj[link.key][link.index] !== next) {
           link.obj[link.key][link.index] = next;
           changed = true;
         }
-      } else {
-        if (link.obj[link.key] !== next) {
-          link.obj[link.key] = next;
-          changed = true;
-        }
+      } else if (link.obj[link.key] !== next) {
+        link.obj[link.key] = next;
+        changed = true;
       }
     }
 
     return changed;
   }
 
-  // ── Current linked-param count (for transport display) ───
-
   get linkedCount() {
-    return this.links.filter(l => l.isLinked).length;
+    return this.links.filter((l) => sanitizeSource(l.source) !== 'off').length;
   }
 }
 

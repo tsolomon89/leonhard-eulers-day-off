@@ -10,12 +10,11 @@ import {
 } from './generators.js';
 import {
   applyDerivedState,
-  computeStepDelta,
+  advanceStepTraversal,
   shouldAdvanceStep,
 } from './derivation.js';
 import {
   defaultExpressionModel,
-  normalizeExpressionModel,
   SET_KEYS,
   TRANSFORM_KEYS,
 } from './expression-model.js';
@@ -40,7 +39,7 @@ import {
   captureScreenshot,
   setExternalUpdate,
 } from './scene.js';
-import { animation } from './animation.js';
+import { animation, swapLinkEndpoints } from './animation.js';
 import {
   getTheme,
   getRenderMode,
@@ -53,7 +52,6 @@ import {
 } from './modes.js';
 import {
   defaultCinematicFx,
-  normalizeStateCinematicFx,
   resolveEffectiveCinematicFx,
 } from './cinematic-fx.js';
 
@@ -66,6 +64,7 @@ export const state = {
   T_start: 1.99999,
   T_stop: 2,
   timeMode: 'animation',
+  stepLoopMode: 'clamp',
   b: 36000000,
   stepRate: 1,
   syncTStepToS: true,
@@ -110,11 +109,79 @@ const TRANSFORM_LABELS = {
 let regenerateTimeout = null;
 let controlsContainer = null;
 let _lastFrameMs = performance.now();
+let _stepBounceDir = 1;
+
+const linkSnapshotStore = new Map();
+const sliderUiSyncFns = [];
+const objectPathMap = new WeakMap();
+
+function snapValue(v, min, max, step) {
+  const clamped = clamp(v, min, max);
+  if (!Number.isFinite(step) || step <= 0) return clamped;
+  const snapped = Math.round((clamped - min) / step) * step + min;
+  return clamp(snapped, min, max);
+}
+
+function decimalsForStep(step) {
+  if (!Number.isFinite(step) || step >= 1) return 0;
+  const s = String(step);
+  if (s.includes('e-')) return Number(s.split('e-')[1]);
+  const dot = s.indexOf('.');
+  return dot >= 0 ? (s.length - dot - 1) : 0;
+}
+
+function seedObjectPathMap() {
+  objectPathMap.set(state, 'state');
+  objectPathMap.set(state.expressionModel.parent, 'expression.parent');
+  for (const key of TRANSFORM_KEYS) {
+    objectPathMap.set(state.expressionModel.transforms[key], `expression.transforms.${key}`);
+  }
+  for (const setKey of SET_KEYS) {
+    objectPathMap.set(state.expressionModel.sets[setKey], `expression.sets.${setKey}`);
+    for (const child of EXPRESSION_CHILDREN[setKey]) {
+      objectPathMap.set(state.expressionModel.children[child.key], `expression.children.${child.key}`);
+    }
+  }
+  objectPathMap.set(state.cinematicFx.master, 'cinematic.master');
+  objectPathMap.set(state.cinematicFx.points, 'cinematic.points');
+  objectPathMap.set(state.cinematicFx.primaryLines, 'cinematic.primaryLines');
+  objectPathMap.set(state.cinematicFx.atlasLines, 'cinematic.atlasLines');
+  objectPathMap.set(state.cinematicFx.ghostTraces, 'cinematic.ghostTraces');
+  objectPathMap.set(state.cinematicFx.stars, 'cinematic.stars');
+  objectPathMap.set(state.cinematicFx.bloom, 'cinematic.bloom');
+  objectPathMap.set(state.cinematicFx.fog, 'cinematic.fog');
+  objectPathMap.set(state.cinematicFx.tone, 'cinematic.tone');
+}
+
+function getLinkKey(obj, key, index = null, label = '') {
+  const base = objectPathMap.get(obj) || 'unknown';
+  const idx = index !== null ? `[${index}]` : '';
+  return `${base}.${key}${idx}:${label}`;
+}
+
+function rememberLink(linkKey, link) {
+  linkSnapshotStore.set(linkKey, {
+    baseValue: link.baseValue,
+    endValue: link.endValue,
+    source: link.source,
+    direction: link.direction,
+    easing: link.easing,
+  });
+}
+
+function restoreLink(linkKey, link, min, max, step) {
+  const snap = linkSnapshotStore.get(linkKey);
+  if (!snap) return;
+  if (Number.isFinite(snap.baseValue)) link.baseValue = snapValue(snap.baseValue, min, max, step);
+  if (Number.isFinite(snap.endValue)) link.endValue = snapValue(snap.endValue, min, max, step);
+  else link.endValue = null;
+  link.source = snap.source === 'anim' || snap.source === 'step' ? snap.source : 'off';
+  link.direction = snap.direction < 0 ? -1 : 1;
+  link.easing = typeof snap.easing === 'string' ? snap.easing : 'linear';
+}
 
 export function deriveState() {
   applyDerivedState(state);
-  state.expressionModel = normalizeExpressionModel(state.expressionModel);
-  normalizeStateCinematicFx(state);
 }
 
 function getTSliderStep() {
@@ -134,6 +201,8 @@ export function regenerate(isHeavy = false) {
 
   regenerateTimeout = setTimeout(() => {
     deriveState();
+    const stepLinkedChanged = animation.applyStepFromWindow(state.T, state.T_start, state.T_stop);
+    if (stepLinkedChanged) deriveState();
     const fx = resolveEffectiveCinematicFx(state.cinematicFx, { renderMode: getRenderMode() });
 
     setBloomEnabled(fx.bloom.enabled);
@@ -318,39 +387,246 @@ class UIBuilder {
   }
 
   slider(label, obj, key, min, max, step, options = {}) {
-    const { fmt, onChange, heavy = false, id = null } = options;
+    const {
+      fmt,
+      onChange,
+      heavy = false,
+      id = null,
+      index = null,
+      linkKey = null,
+    } = options;
     const row = document.createElement('div');
     row.className = 'slider-row';
     const lbl = document.createElement('span');
     lbl.className = 'slider-label';
     lbl.textContent = label;
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.className = 'slider-input';
-    input.min = String(min);
-    input.max = String(max);
-    input.step = String(step);
-    input.value = String(obj[key]);
-    if (id) input.id = id;
-    const val = document.createElement('span');
-    val.className = 'slider-value';
+
+    const resolvedLinkKey = linkKey || getLinkKey(obj, key, index, label);
+    const link = animation.registerLink(obj, key, index, { min, max, step });
+    restoreLink(resolvedLinkKey, link, min, max, step);
+
+    const getBoundValue = () => {
+      if (index !== null) return Number(obj[key][index]);
+      return Number(obj[key]);
+    };
+
+    const setBoundValue = (v) => {
+      if (index !== null) obj[key][index] = v;
+      else obj[key] = v;
+    };
+
+    if (link.source === 'off' && Number.isFinite(link.baseValue)) {
+      setBoundValue(link.baseValue);
+    } else if (!Number.isFinite(link.baseValue)) {
+      link.baseValue = snapValue(getBoundValue(), min, max, step);
+    }
+
     const format = (v) => {
       if (fmt) return fmt(v);
       if (step >= 1) return `${Math.round(v)}`;
-      return v.toFixed(3);
+      return Number(v).toFixed(Math.min(8, Math.max(1, decimalsForStep(step))));
     };
-    val.textContent = format(Number(obj[key]));
 
-    input.addEventListener('input', () => {
-      obj[key] = parseFloat(input.value);
-      val.textContent = format(Number(obj[key]));
-      if (onChange) onChange(obj[key]);
+    const linkBtn = document.createElement('button');
+    linkBtn.className = 'link-toggle ctrl-interactive';
+
+    const trackWrap = document.createElement('div');
+    trackWrap.className = 'slider-track-wrap';
+
+    const inputBase = document.createElement('input');
+    inputBase.type = 'range';
+    inputBase.className = 'slider-input base-thumb';
+    inputBase.min = String(min);
+    inputBase.max = String(max);
+    inputBase.step = String(step);
+    inputBase.value = String(link.baseValue);
+    if (id) inputBase.id = id;
+
+    const inputTarget = document.createElement('input');
+    inputTarget.type = 'range';
+    inputTarget.className = 'slider-input target-thumb hidden';
+    inputTarget.min = String(min);
+    inputTarget.max = String(max);
+    inputTarget.step = String(step);
+
+    trackWrap.appendChild(inputBase);
+    trackWrap.appendChild(inputTarget);
+
+    const valueCluster = document.createElement('div');
+    valueCluster.className = 'slider-value-cluster';
+    const baseChip = document.createElement('button');
+    baseChip.className = 'value-chip ctrl-interactive';
+    const targetChip = document.createElement('button');
+    targetChip.className = 'value-chip target ctrl-interactive hidden';
+    const swapBtn = document.createElement('button');
+    swapBtn.className = 'value-action value-swap ctrl-interactive hidden';
+    swapBtn.textContent = '↔';
+    const dirBtn = document.createElement('button');
+    dirBtn.className = 'value-action value-dir ctrl-interactive';
+
+    valueCluster.appendChild(baseChip);
+    valueCluster.appendChild(targetChip);
+    valueCluster.appendChild(swapBtn);
+    valueCluster.appendChild(dirBtn);
+
+    const updateLinkButton = () => {
+      const src = link.source === 'anim' || link.source === 'step' ? link.source : 'off';
+      const labelText = src === 'anim' ? 'anim' : (src === 'step' ? 'step' : 'off');
+      linkBtn.textContent = labelText;
+      linkBtn.classList.toggle('active', src !== 'off');
+      row.dataset.linkSource = src;
+      linkBtn.title = `Link source: ${labelText}. Click to cycle Off -> Anim -> Step`;
+    };
+
+    const updateDirectionButton = () => {
+      const dir = link.direction < 0 ? -1 : 1;
+      dirBtn.textContent = dir > 0 ? '→' : '←';
+      dirBtn.title = dir > 0 ? 'Direction: base -> end' : 'Direction: end -> base';
+    };
+
+    const syncUI = () => {
+      inputBase.value = String(link.baseValue);
+      baseChip.textContent = format(link.baseValue);
+      const hasEnd = Number.isFinite(link.endValue);
+      inputTarget.classList.toggle('hidden', !hasEnd);
+      targetChip.classList.toggle('hidden', !hasEnd);
+      swapBtn.classList.toggle('hidden', !hasEnd);
+      if (hasEnd) {
+        inputTarget.value = String(link.endValue);
+        targetChip.textContent = format(link.endValue);
+      }
+      updateLinkButton();
+      updateDirectionButton();
+    };
+
+    sliderUiSyncFns.push(syncUI);
+
+    const commitBaseValue = (raw, trigger = true) => {
+      const next = snapValue(Number(raw), min, max, step);
+      if (!Number.isFinite(next)) return;
+      link.baseValue = next;
+      setBoundValue(next);
+      if (trigger && onChange) onChange(next);
+      rememberLink(resolvedLinkKey, link);
+      syncUI();
+      regenerate(heavy);
+    };
+
+    const commitEndValue = (raw) => {
+      const next = snapValue(Number(raw), min, max, step);
+      if (!Number.isFinite(next)) return;
+      link.endValue = next;
+      rememberLink(resolvedLinkKey, link);
+      syncUI();
+      regenerate(heavy);
+    };
+
+    const startInlineEdit = (chip, getter, setter) => {
+      if (chip.classList.contains('editing')) return;
+      const original = chip.textContent;
+      chip.classList.add('editing');
+      chip.textContent = '';
+      const edit = document.createElement('input');
+      edit.type = 'text';
+      edit.className = 'value-edit-input';
+      edit.value = String(getter());
+      chip.appendChild(edit);
+      edit.focus();
+      edit.select();
+
+      let done = false;
+      const finalize = (commit) => {
+        if (done) return;
+        done = true;
+        chip.classList.remove('editing');
+        chip.removeChild(edit);
+        if (!commit) {
+          chip.textContent = original;
+          return;
+        }
+        const parsed = Number(edit.value);
+        if (Number.isFinite(parsed)) setter(parsed);
+        else syncUI();
+      };
+
+      edit.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') finalize(true);
+        if (e.key === 'Escape') finalize(false);
+      });
+      edit.addEventListener('blur', () => finalize(true));
+    };
+
+    inputBase.addEventListener('input', (e) => {
+      const raw = Number(inputBase.value);
+      if (e.shiftKey) {
+        commitEndValue(raw);
+        inputBase.value = String(link.baseValue);
+        return;
+      }
+      commitBaseValue(raw);
+    });
+
+    inputTarget.addEventListener('input', () => {
+      commitEndValue(Number(inputTarget.value));
+    });
+
+    trackWrap.addEventListener('click', (e) => {
+      if (!e.shiftKey) return;
+      const rect = trackWrap.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const ratio = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+      const raw = min + ((max - min) * ratio);
+      commitEndValue(raw);
+      e.preventDefault();
+    });
+
+    linkBtn.addEventListener('click', () => {
+      animation.cycleLinkSource(link, { min, max, step });
+      rememberLink(resolvedLinkKey, link);
+      syncUI();
       regenerate(heavy);
     });
 
+    swapBtn.addEventListener('click', () => {
+      if (!swapLinkEndpoints(link)) return;
+      setBoundValue(link.baseValue);
+      if (onChange) onChange(link.baseValue);
+      rememberLink(resolvedLinkKey, link);
+      syncUI();
+      regenerate(heavy);
+    });
+
+    dirBtn.addEventListener('click', () => {
+      link.direction = link.direction < 0 ? 1 : -1;
+      rememberLink(resolvedLinkKey, link);
+      syncUI();
+      regenerate(heavy);
+    });
+
+    baseChip.addEventListener('click', () => {
+      startInlineEdit(
+        baseChip,
+        () => link.baseValue,
+        (v) => commitBaseValue(v),
+      );
+    });
+
+    targetChip.addEventListener('click', () => {
+      if (!Number.isFinite(link.endValue)) return;
+      startInlineEdit(
+        targetChip,
+        () => link.endValue,
+        (v) => commitEndValue(v),
+      );
+    });
+
+    rememberLink(resolvedLinkKey, link);
+    syncUI();
+
     row.appendChild(lbl);
-    row.appendChild(input);
-    row.appendChild(val);
+    row.appendChild(linkBtn);
+    row.appendChild(trackWrap);
+    row.appendChild(valueCluster);
     this._parent().appendChild(row);
     return this;
   }
@@ -495,6 +771,9 @@ function addSetAndChildControls(b) {
 function buildControls() {
   if (!controlsContainer) controlsContainer = document.getElementById('controls-panel');
   deriveState();
+  seedObjectPathMap();
+  sliderUiSyncFns.length = 0;
+  animation.clearLinks();
   controlsContainer.innerHTML = '';
 
   const collapseBtn = document.createElement('button');
@@ -511,7 +790,7 @@ function buildControls() {
     .modeToggle('View', getViewMode, setViewMode, '3d', '2d', '3D', '2D');
 
   b.section('Traversal', false)
-    .info('JSON-literal k: k={bool=0:T, bool>0:kAligned}.')
+    .info('JSON-literal k: k={bool=0:T, bool>0:kAligned}. Click values to edit directly. Shift+click slider track to pin end value.')
     .slider('T', state, 'T', state.T_start, state.T_stop, getTSliderStep(), { fmt: (v) => v.toFixed(6) })
     .slider('T_start', state, 'T_start', 0.000001, 10, 0.000001, {
       fmt: (v) => v.toFixed(6),
@@ -532,6 +811,11 @@ function buildControls() {
       <button class="mode-pill ctrl-interactive" id="timemode-animation">animation</button>
       <button class="mode-pill ctrl-interactive" id="timemode-step">step</button>
     </div>`)
+    .html(`<div class="mode-row">
+      <span class="slider-label">step loop</span>
+      <button class="mode-pill ctrl-interactive" id="steploop-clamp">clamp</button>
+      <button class="mode-pill ctrl-interactive" id="steploop-bounce">bounce</button>
+    </div>`)
     .slider('b', state, 'b', 1, 100000000, 1, { fmt: (v) => v.toFixed(0) })
     .slider('stepRate', state, 'stepRate', -100, 100, 0.01, { fmt: (v) => v.toFixed(2) })
     .html(`<div class="mode-row">
@@ -546,6 +830,16 @@ function buildControls() {
     [{ value: 'animation' }, { value: 'step' }],
     () => state.timeMode,
     (v) => { state.timeMode = v; },
+  );
+  bindModeButtons(
+    controlsContainer,
+    'steploop',
+    [{ value: 'clamp' }, { value: 'bounce' }],
+    () => state.stepLoopMode,
+    (v) => {
+      state.stepLoopMode = v;
+      if (v === 'clamp') _stepBounceDir = 1;
+    },
   );
   bindModeButtons(
     controlsContainer,
@@ -693,6 +987,12 @@ function buildControls() {
         <div>n = [Z_min ... Z_max-1], with 710-block color boundaries</div>
       </div>
     `);
+
+  animation.onStateChange(() => {
+    updateTransportUI();
+    for (const sync of sliderUiSyncFns) sync();
+  });
+  for (const sync of sliderUiSyncFns) sync();
 }
 
 function buildTransportBar() {
@@ -766,9 +1066,23 @@ function animationFrame() {
 
   if (shouldAdvanceStep(state, animation.playing)) {
     deriveState();
-    const dT = computeStepDelta(state, dtSeconds);
-    if (Number.isFinite(dT) && dT !== 0) {
-      state.T = clamp(state.T + dT, state.T_start, state.T_stop);
+    const advance = advanceStepTraversal({
+      T: state.T,
+      T_start: state.T_start,
+      T_stop: state.T_stop,
+      dtSeconds,
+      s: state.s,
+      stepRate: state.stepRate,
+      stepLoopMode: state.stepLoopMode,
+      bounceDir: _stepBounceDir,
+    });
+    if (state.stepLoopMode !== 'bounce') {
+      _stepBounceDir = 1;
+    } else {
+      _stepBounceDir = advance.bounceDir;
+    }
+    if (Number.isFinite(advance.T) && advance.T !== state.T) {
+      state.T = advance.T;
       shouldRegenerate = true;
     }
   }
@@ -808,6 +1122,5 @@ export function initControls() {
   buildTransportBar();
   setupKeyboard();
   setExternalUpdate(animationFrame);
-  animation.onStateChange(() => updateTransportUI());
   regenerate();
 }
