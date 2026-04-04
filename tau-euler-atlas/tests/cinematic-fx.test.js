@@ -98,7 +98,7 @@ test('performance mode hard-disables expensive effects but preserves configured 
   assert.equal(cinematic.fog.density, 0.004);
 });
 
-test('light theme applies cinematic damping policy for stars/bloom/fog/tone', () => {
+test('light theme keeps bloom unchanged while still damping stars/fog/tone', () => {
   const fx = defaultCinematicFx();
   fx.stars.enabled = true;
   fx.bloom.enabled = true;
@@ -115,23 +115,23 @@ test('light theme applies cinematic damping policy for stars/bloom/fog/tone', ()
 
   assert.equal(dark.stars.enabled, true);
   assert.equal(light.stars.enabled, false);
-  assert.ok(light.bloom.strength < dark.bloom.strength);
-  assert.ok(light.bloom.radius < dark.bloom.radius);
-  assert.ok(light.bloom.threshold > dark.bloom.threshold);
+  assert.equal(light.bloom.strength, dark.bloom.strength);
+  assert.equal(light.bloom.radius, dark.bloom.radius);
+  assert.equal(light.bloom.threshold, dark.bloom.threshold);
   assert.ok(light.fog.density < dark.fog.density);
   assert.ok(light.tone.exposure < dark.tone.exposure);
 });
 
-test('style bloom gain is mode/theme aware', () => {
+test('style bloom gain is mode-aware only (theme agnostic)', () => {
   const cinematicDark = resolveStyleBloomGain({ renderMode: 'cinematic', theme: 'dark' });
   const cinematicLight = resolveStyleBloomGain({ renderMode: 'cinematic', theme: 'light' });
   const performanceDark = resolveStyleBloomGain({ renderMode: 'performance', theme: 'dark' });
   const performanceLight = resolveStyleBloomGain({ renderMode: 'performance', theme: 'light' });
 
   assert.equal(cinematicDark, 1);
-  assert.ok(cinematicLight < cinematicDark);
+  assert.equal(cinematicLight, cinematicDark);
   assert.ok(performanceDark < cinematicDark);
-  assert.ok(performanceLight < performanceDark);
+  assert.equal(performanceLight, performanceDark);
 });
 
 test('state mirror sync updates legacy keys from canonical cinematic state', () => {

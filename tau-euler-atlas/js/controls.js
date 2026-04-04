@@ -1,4 +1,4 @@
-import { TAU } from './complex.js';
+﻿import { TAU } from './complex.js';
 import {
   computeProofPayloadFromState,
   EXPRESSION_CHILDREN,
@@ -139,6 +139,21 @@ const TRANSFORM_LABELS = {
   log_cos: 'log(cos)',
   log_tan: 'log(tan)',
 };
+
+const ICON_EYE = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M1.5 12s3.8-7 10.5-7 10.5 7 10.5 7-3.8 7-10.5 7S1.5 12 1.5 12Z"></path>
+    <circle cx="12" cy="12" r="3.2"></circle>
+  </svg>
+`;
+
+const ICON_EYE_OFF = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M1.5 12s3.8-7 10.5-7c2 0 3.8.6 5.4 1.5"></path>
+    <path d="M22.5 12s-3.8 7-10.5 7c-2 0-3.8-.6-5.4-1.5"></path>
+    <path d="M3 3l18 18"></path>
+  </svg>
+`;
 
 let regenerateTimeout = null;
 let controlsContainer = null;
@@ -331,8 +346,8 @@ function updateBufferStatus() {
     const active = state.bufferEnabled && phase === 'prefill';
     overlay.classList.toggle('active', active);
     overlay.setAttribute('aria-hidden', active ? 'false' : 'true');
-    const hint = active ? ' · quality mode active' : '';
-    setText('buffer-overlay-detail', `depth ${depth}/${target} · ${pct}%${hint}`);
+    const hint = active ? ' Â· quality mode active' : '';
+    setText('buffer-overlay-detail', `depth ${depth}/${target} Â· ${pct}%${hint}`);
   }
 }
 
@@ -608,12 +623,62 @@ class UIBuilder {
     return this.activeChildBody || this.currentBody;
   }
 
-  section(title, collapsed = false) {
+  _createVisibilityButton(visibility = null) {
+    if (!visibility || typeof visibility !== 'object') return null;
+    const {
+      obj,
+      key,
+      onChange = null,
+      heavy = false,
+    } = visibility;
+    if (!obj || typeof key !== 'string') return null;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'panel-visibility-btn ctrl-interactive';
+
+    const sync = () => {
+      const enabled = !!obj[key];
+      btn.classList.toggle('disabled', !enabled);
+      btn.setAttribute('aria-label', enabled ? 'Hide section' : 'Show section');
+      btn.title = enabled ? 'Visible' : 'Hidden';
+      btn.innerHTML = enabled ? ICON_EYE : ICON_EYE_OFF;
+    };
+
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      obj[key] = !obj[key];
+      sync();
+      if (typeof onChange === 'function') onChange(obj[key]);
+      regenerate(heavy);
+    });
+
+    sync();
+    return btn;
+  }
+
+  _createHeaderMain(title, visibility = null, isChild = false) {
+    const main = document.createElement('div');
+    main.className = isChild ? 'accordion-child-header-main' : 'accordion-header-main';
+
+    const label = document.createElement('span');
+    label.className = isChild ? 'accordion-child-header-label' : 'accordion-header-label';
+    label.textContent = title;
+    main.appendChild(label);
+
+    const visBtn = this._createVisibilityButton(visibility);
+    if (visBtn) main.appendChild(visBtn);
+
+    return main;
+  }
+
+  section(title, collapsed = false, options = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'accordion-panel';
     const head = document.createElement('div');
     head.className = `accordion-header${collapsed ? ' collapsed' : ''}`;
-    head.textContent = title;
+    head.appendChild(this._createHeaderMain(title, options.visibility, false));
     const body = document.createElement('div');
     body.className = `accordion-body${collapsed ? ' collapsed' : ''}`;
     head.addEventListener('click', () => {
@@ -628,12 +693,12 @@ class UIBuilder {
     return this;
   }
 
-  childSection(title, collapsed = true) {
+  childSection(title, collapsed = true, options = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'accordion-child-panel';
     const head = document.createElement('div');
     head.className = `accordion-child-header${collapsed ? ' collapsed' : ''}`;
-    head.textContent = title;
+    head.appendChild(this._createHeaderMain(title, options.visibility, true));
     const body = document.createElement('div');
     body.className = `accordion-child-body${collapsed ? ' collapsed' : ''}`;
     head.addEventListener('click', (e) => {
@@ -949,45 +1014,53 @@ function addTransformControls(b) {
 
   for (const key of TRANSFORM_KEYS) {
     const style = state.expressionModel.transforms[key];
-    b.childSection(`${TRANSFORM_LABELS[key]}`, true)
-      .toggle('enabled', style, 'enabled')
-      .slider('point size ×', style, 'pointSize', 0, 4, 0.05)
-      .slider('point opacity ×', style, 'pointOpacity', 0, 1, 0.05)
-      .slider('line width ×', style, 'lineWidth', 0, 4, 0.05)
-      .slider('line opacity ×', style, 'lineOpacity', 0, 1, 0.05)
-      .slider('point bloom ×', style, 'pointBloom', 0, 4, 0.05)
-      .slider('line bloom ×', style, 'lineBloom', 0, 4, 0.05);
+    b.childSection(`${TRANSFORM_LABELS[key]}`, true, {
+      visibility: { obj: style, key: 'enabled' },
+    })
+      .slider('point size x', style, 'pointSize', 0, 4, 0.05)
+      .slider('point opacity x', style, 'pointOpacity', 0, 1, 0.05)
+      .slider('line width x', style, 'lineWidth', 0, 4, 0.05)
+      .slider('line opacity x', style, 'lineOpacity', 0, 1, 0.05)
+      .slider('point bloom x', style, 'pointBloom', 0, 4, 0.05)
+      .slider('line bloom x', style, 'lineBloom', 0, 4, 0.05);
     b.endChild();
   }
 }
 
 function addSetAndChildControls(b) {
   b.section('Function Sets', false)
-    .info('Hierarchical controls: parent × set × transform × child.');
+    .info('Hierarchical controls: parent x set x transform x child.');
 
   for (const setKey of SET_KEYS) {
+    const setLabel = setKey === 'positive' ? 'Positive' : 'Negative';
     const setStyle = state.expressionModel.sets[setKey];
-    b.childSection(`${setKey} set`, false)
-      .toggle('enabled', setStyle, 'enabled')
-      .slider('point size ×', setStyle, 'pointSize', 0, 4, 0.05)
-      .slider('point opacity ×', setStyle, 'pointOpacity', 0, 1, 0.05)
-      .slider('line width ×', setStyle, 'lineWidth', 0, 4, 0.05)
-      .slider('line opacity ×', setStyle, 'lineOpacity', 0, 1, 0.05)
-      .slider('point bloom ×', setStyle, 'pointBloom', 0, 4, 0.05)
-      .slider('line bloom ×', setStyle, 'lineBloom', 0, 4, 0.05);
+    b.childSection(setLabel, false, {
+      visibility: { obj: setStyle, key: 'enabled' },
+    })
+      .slider('point size x', setStyle, 'pointSize', 0, 4, 0.05)
+      .slider('point opacity x', setStyle, 'pointOpacity', 0, 1, 0.05)
+      .slider('line width x', setStyle, 'lineWidth', 0, 4, 0.05)
+      .slider('line opacity x', setStyle, 'lineOpacity', 0, 1, 0.05)
+      .slider('point bloom x', setStyle, 'pointBloom', 0, 4, 0.05)
+      .slider('line bloom x', setStyle, 'lineBloom', 0, 4, 0.05);
 
-    for (const child of EXPRESSION_CHILDREN[setKey]) {
-      const childStyle = state.expressionModel.children[child.key];
-      b.childSection(child.label, true)
-        .toggle('enabled', childStyle, 'enabled')
-        .color('color', childStyle, 'color')
-        .slider('point size ×', childStyle, 'pointSize', 0, 4, 0.05)
-        .slider('point opacity ×', childStyle, 'pointOpacity', 0, 1, 0.05)
-        .slider('line width ×', childStyle, 'lineWidth', 0, 4, 0.05)
-        .slider('line opacity ×', childStyle, 'lineOpacity', 0, 1, 0.05)
-        .slider('point bloom ×', childStyle, 'pointBloom', 0, 4, 0.05)
-        .slider('line bloom ×', childStyle, 'lineBloom', 0, 4, 0.05);
-      b.endChild();
+    const parentBody = b.activeChildBody;
+    if (parentBody) {
+      const nested = new UIBuilder(parentBody);
+      for (const child of EXPRESSION_CHILDREN[setKey]) {
+        const childStyle = state.expressionModel.children[child.key];
+        nested.childSection(child.label, true, {
+          visibility: { obj: childStyle, key: 'enabled' },
+        })
+          .color('color', childStyle, 'color')
+          .slider('point size x', childStyle, 'pointSize', 0, 4, 0.05)
+          .slider('point opacity x', childStyle, 'pointOpacity', 0, 1, 0.05)
+          .slider('line width x', childStyle, 'lineWidth', 0, 4, 0.05)
+          .slider('line opacity x', childStyle, 'lineOpacity', 0, 1, 0.05)
+          .slider('point bloom x', childStyle, 'pointBloom', 0, 4, 0.05)
+          .slider('line bloom x', childStyle, 'lineBloom', 0, 4, 0.05);
+        nested.endChild();
+      }
     }
     b.endChild();
   }
@@ -1304,8 +1377,9 @@ function buildControls() {
     (v) => { state.q_correction = Number(v); },
   );
 
-  b.section('Expression Parent', false)
-    .toggle('enabled', state.expressionModel.parent, 'enabled')
+  b.section('Expression Parent', false, {
+    visibility: { obj: state.expressionModel.parent, key: 'enabled' },
+  })
     .slider('point size', state.expressionModel.parent, 'pointSize', 0, 6, 0.05)
     .slider('point opacity', state.expressionModel.parent, 'pointOpacity', 0, 1, 0.01)
     .slider('line width', state.expressionModel.parent, 'lineWidth', 0, 6, 0.05)
@@ -1313,8 +1387,8 @@ function buildControls() {
     .slider('point bloom', state.expressionModel.parent, 'pointBloom', 0, 4, 0.05)
     .slider('line bloom', state.expressionModel.parent, 'lineBloom', 0, 4, 0.05);
 
-  addTransformControls(b);
   addSetAndChildControls(b);
+  addTransformControls(b);
 
   b.section('Cinematic', isPerformance())
     .info('Keep effects active; style bloom is controlled per hierarchy above.')
@@ -1340,11 +1414,11 @@ function buildControls() {
   b.endChild();
 
   b.section('Atlas', false)
-    .html('<div class="hud-row" style="margin-top:4px"><span class="hud-key">Active paths</span><span class="hud-val" id="atlas-paths-display-panel">—</span></div>')
-    .html('<div class="hud-row"><span class="hud-key">Expressions</span><pre class="hud-val" id="atlas-expr-display" style="font-size:9px;margin:2px 0 0;white-space:pre-line;line-height:1.4;font-family:var(--mono)">—</pre></div>');
+    .html('<div class="hud-row" style="margin-top:4px"><span class="hud-key">Active paths</span><span class="hud-val" id="atlas-paths-display-panel">â€”</span></div>')
+    .html('<div class="hud-row"><span class="hud-key">Expressions</span><pre class="hud-val" id="atlas-expr-display" style="font-size:9px;margin:2px 0 0;white-space:pre-line;line-height:1.4;font-family:var(--mono)">â€”</pre></div>');
 
   b.section('View')
-    .html('<div class="preset-row"><button class="preset-btn ctrl-interactive" id="btn-reset-camera">↻ Reset Camera</button><button class="preset-btn ctrl-interactive" id="btn-screenshot">📷 Screenshot</button></div>');
+    .html('<div class="preset-row"><button class="preset-btn ctrl-interactive" id="btn-reset-camera">â†» Reset Camera</button><button class="preset-btn ctrl-interactive" id="btn-screenshot">ðŸ“· Screenshot</button></div>');
   const resetBtn = controlsContainer.querySelector('#btn-reset-camera');
   const shotBtn = controlsContainer.querySelector('#btn-screenshot');
   if (resetBtn) resetBtn.addEventListener('click', () => resetCamera());
