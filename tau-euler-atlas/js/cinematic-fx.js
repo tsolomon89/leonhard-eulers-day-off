@@ -11,6 +11,14 @@ const DEFAULT_CINEMATIC_FX = Object.freeze({
 });
 
 const EXPENSIVE_SUBSYSTEMS = new Set(['bloom', 'stars', 'fog']);
+const LIGHT_THEME_POLICY = Object.freeze({
+  bloomStrengthMul: 0.62,
+  bloomRadiusMul: 0.85,
+  bloomThresholdAdd: 0.08,
+  fogDensityMul: 0.5,
+  toneExposureMul: 0.92,
+  styleBloomMul: 0.7,
+});
 
 function pickNum(primary, fallback, defaultValue) {
   if (Number.isFinite(primary)) return primary;
@@ -26,6 +34,14 @@ function pickBool(primary, fallback, defaultValue) {
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
+}
+
+function sanitizeRenderMode(mode) {
+  return mode === 'performance' ? 'performance' : 'cinematic';
+}
+
+function sanitizeTheme(theme) {
+  return theme === 'light' ? 'light' : 'dark';
 }
 
 function cloneDefaults() {
@@ -132,8 +148,18 @@ function effectiveSubsystemEnabled(masterEnabled, subsystemEnabled, renderMode, 
   return true;
 }
 
+export function resolveStyleBloomGain(options = {}) {
+  const renderMode = sanitizeRenderMode(options.renderMode);
+  const theme = sanitizeTheme(options.theme);
+  let gain = 1;
+  if (renderMode === 'performance') gain *= 0.55;
+  if (theme === 'light') gain *= LIGHT_THEME_POLICY.styleBloomMul;
+  return clamp(gain, 0, 1);
+}
+
 export function resolveEffectiveCinematicFx(rawFx, options = {}) {
-  const renderMode = options.renderMode === 'performance' ? 'performance' : 'cinematic';
+  const renderMode = sanitizeRenderMode(options.renderMode);
+  const theme = sanitizeTheme(options.theme);
   const fx = normalizeCinematicFx(rawFx);
 
   const masterEnabled = fx.master.enabled && fx.master.intensity > 0;
@@ -144,13 +170,23 @@ export function resolveEffectiveCinematicFx(rawFx, options = {}) {
   const primaryEnabled = effectiveSubsystemEnabled(masterEnabled, fx.primaryLines.enabled, renderMode, 'primaryLines');
   const atlasEnabled = effectiveSubsystemEnabled(masterEnabled, fx.atlasLines.enabled, renderMode, 'atlasLines');
   const ghostEnabled = effectiveSubsystemEnabled(masterEnabled, fx.ghostTraces.enabled, renderMode, 'ghostTraces');
-  const starsEnabled = effectiveSubsystemEnabled(masterEnabled, fx.stars.enabled, renderMode, 'stars');
+  const starsEnabled = (
+    effectiveSubsystemEnabled(masterEnabled, fx.stars.enabled, renderMode, 'stars')
+    && theme !== 'light'
+  );
   const bloomEnabled = effectiveSubsystemEnabled(masterEnabled, fx.bloom.enabled, renderMode, 'bloom');
   const fogEnabled = effectiveSubsystemEnabled(masterEnabled, fx.fog.enabled, renderMode, 'fog');
   const toneEnabled = effectiveSubsystemEnabled(masterEnabled, fx.tone.enabled, renderMode, 'tone');
 
+  const bloomStrengthMul = theme === 'light' ? LIGHT_THEME_POLICY.bloomStrengthMul : 1;
+  const bloomRadiusMul = theme === 'light' ? LIGHT_THEME_POLICY.bloomRadiusMul : 1;
+  const bloomThresholdAdd = theme === 'light' ? LIGHT_THEME_POLICY.bloomThresholdAdd : 0;
+  const fogDensityMul = theme === 'light' ? LIGHT_THEME_POLICY.fogDensityMul : 1;
+  const toneExposureMul = theme === 'light' ? LIGHT_THEME_POLICY.toneExposureMul : 1;
+
   return {
     renderMode,
+    theme,
     master: {
       enabled: masterEnabled,
       intensity,
@@ -185,17 +221,17 @@ export function resolveEffectiveCinematicFx(rawFx, options = {}) {
     },
     bloom: {
       enabled: bloomEnabled,
-      strength: bloomEnabled ? scaled(fx.bloom.strength) : 0,
-      radius: bloomEnabled ? clamp(scaled(fx.bloom.radius), 0, 2) : 0,
-      threshold: fx.bloom.threshold,
+      strength: bloomEnabled ? (scaled(fx.bloom.strength) * bloomStrengthMul) : 0,
+      radius: bloomEnabled ? clamp(scaled(fx.bloom.radius) * bloomRadiusMul, 0, 2) : 0,
+      threshold: clamp(fx.bloom.threshold + bloomThresholdAdd, 0, 1),
     },
     fog: {
       enabled: fogEnabled,
-      density: fogEnabled ? scaled(fx.fog.density) : 0,
+      density: fogEnabled ? (scaled(fx.fog.density) * fogDensityMul) : 0,
     },
     tone: {
       enabled: toneEnabled,
-      exposure: toneEnabled ? scaled(fx.tone.exposure) : 1,
+      exposure: toneEnabled ? (scaled(fx.tone.exposure) * toneExposureMul) : 1,
     },
   };
 }
@@ -233,4 +269,3 @@ export function normalizeStateCinematicFx(state) {
   state.cinematicFx = normalizeCinematicFx(state.cinematicFx, state);
   return syncLegacyCinematicMirrors(state);
 }
-

@@ -19,71 +19,82 @@
     <!-- Three.js viewport -->
     <div id="container"></div>
 
-    <!-- HUD: top-left -->
-    <div id="hud" class="glass">
-      <div class="hud-title">
-        <span class="status-dot"></span>
-        τ-Euler Atlas
+    <!-- Left column: HUD + Proofs -->
+    <div id="left-column">
+      <div id="hud" class="accordion-panel">
+        <div id="hud-header" class="accordion-header">
+          <span class="hud-title"><span class="status-dot"></span> Tau-Euler Atlas</span>
+        </div>
+        <div id="hud-body" class="accordion-body">
+        <div class="hud-row">
+          <span class="hud-key">FPS</span>
+          <span class="hud-val" id="fps-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">Points</span>
+          <span class="hud-val" id="budget-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">Compute</span>
+          <span class="hud-val" id="compute-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">Buffer</span>
+          <span class="hud-val" id="buffer-status-display">-</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">Buffer mode</span>
+          <span class="hud-val" id="buffer-mode-display-hud">OFF</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">T</span>
+          <span class="hud-val" id="T-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">k</span>
+          <span class="hud-val" id="k-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">k₁</span>
+          <span class="hud-val" id="k1-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">q</span>
+          <span class="hud-val" id="q-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">d</span>
+          <span class="hud-val" id="d-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">l_base</span>
+          <span class="hud-val" id="lbase-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">s = 1/b</span>
+          <span class="hud-val" id="s-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">τ^k</span>
+          <span class="hud-val" id="tauk-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">f</span>
+          <span class="hud-val" id="f-display">—</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">Formula</span>
+          <span class="hud-val" id="formula-display">Tau</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-key">Atlas paths</span>
+          <span class="hud-val" id="atlas-paths-display">—</span>
+        </div>
       </div>
-      <div class="hud-row">
-        <span class="hud-key">FPS</span>
-        <span class="hud-val" id="fps-display">—</span>
       </div>
-      <div class="hud-row">
-        <span class="hud-key">Points</span>
-        <span class="hud-val" id="budget-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">Compute</span>
-        <span class="hud-val" id="compute-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">T</span>
-        <span class="hud-val" id="T-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">k</span>
-        <span class="hud-val" id="k-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">k₁</span>
-        <span class="hud-val" id="k1-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">q</span>
-        <span class="hud-val" id="q-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">d</span>
-        <span class="hud-val" id="d-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">l_base</span>
-        <span class="hud-val" id="lbase-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">s = 1/b</span>
-        <span class="hud-val" id="s-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">τ^k</span>
-        <span class="hud-val" id="tauk-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">f</span>
-        <span class="hud-val" id="f-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">Closure</span>
-        <span class="hud-val" id="closure-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">E_proof</span>
-        <span class="hud-val" id="eproof-display">—</span>
-      </div>
-      <div class="hud-row">
-        <span class="hud-key">Atlas paths</span>
-        <span class="hud-val" id="atlas-paths-display">—</span>
+
+      <div id="proofs-panel">
+        <!-- Populated by js/controls.js -->
       </div>
     </div>
 
@@ -102,6 +113,13 @@
       f = k₁·τ<sup>i·τ<sup>k</sup>/ln(τ)</sup> · {base,sin,cos,tan}(n·f)·k₂ &nbsp;|&nbsp; α closes at n=1 ⟺ α=τ
     </div>
 
+    <div id="buffer-overlay" class="buffer-overlay" aria-hidden="true">
+      <div class="buffer-overlay-card glass">
+        <div class="buffer-overlay-title">Buffering...</div>
+        <div class="buffer-overlay-detail" id="buffer-overlay-detail">depth 0/0 - 0%</div>
+      </div>
+    </div>
+
   </div><!-- /app-root -->
 
   <!-- Three.js import map -->
@@ -118,3 +136,6 @@
 
 </body>
 </html>
+
+
+

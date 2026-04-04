@@ -37,6 +37,7 @@ let frameCount = 0, lastFpsTime = performance.now(), fps = 60;
 let idleTimer = 0;
 let isIdle = false;
 let _userInteracted = false;
+let suspendHeavyEffects = false;
 
 const FOG_COLOR = 0x050608;
 let bloomEnabled = true;
@@ -78,12 +79,12 @@ function applyBloomRuntime() {
   bloomPass.strength = bloomStrength;
   bloomPass.radius = bloomRadius;
   bloomPass.threshold = bloomThreshold;
-  setComposerPassEnabled(bloomPass, isCinematic() && bloomEnabled);
+  setComposerPassEnabled(bloomPass, isCinematic() && bloomEnabled && !suspendHeavyEffects);
 }
 
 function applyFogRuntime() {
   if (!scene) return;
-  const shouldShowFog = isCinematic() && fogEnabled && fogDensity > 0;
+  const shouldShowFog = isCinematic() && fogEnabled && fogDensity > 0 && !suspendHeavyEffects;
   scene.fog = shouldShowFog ? new THREE.FogExp2(FOG_COLOR, fogDensity) : null;
 }
 
@@ -95,7 +96,7 @@ function applyToneRuntime() {
 
 function applyStarRuntime() {
   if (!starSystem) return;
-  const visible = isCinematic() && isDark() && cinematic.starsEnabled;
+  const visible = isCinematic() && isDark() && cinematic.starsEnabled && !suspendHeavyEffects;
   starSystem.visible = visible;
   starSystem.material.opacity = cinematic.starOpacity;
 }
@@ -198,7 +199,7 @@ function buildStars() {
 }
 
 function animateStars() {
-  if (!starSystem || !starSystem.visible || !cinematic.starsEnabled) return; // Strict performance guard
+  if (!starSystem || !starSystem.visible || !cinematic.starsEnabled || suspendHeavyEffects) return; // Strict performance guard
   
   const pos = starSystem.geometry.attributes.position.array;
   const count = pos.length / 3;
@@ -233,6 +234,13 @@ export function setStarMotion(rotX, rotY, drift) {
   if (Number.isFinite(rotX)) cinematic.starRotX = Math.max(0, rotX);
   if (Number.isFinite(rotY)) cinematic.starRotY = Math.max(0, rotY);
   if (Number.isFinite(drift)) cinematic.starDrift = Math.max(0, drift);
+}
+
+export function setHeavyEffectsSuspended(v) {
+  suspendHeavyEffects = !!v;
+  applyBloomRuntime();
+  applyFogRuntime();
+  applyStarRuntime();
 }
 
 // ── Grid + axes ──────────────────────────────────────────────
@@ -439,7 +447,7 @@ function handleResize() {
 function handleThemeChange(theme) {
   // CSS filter: invert(1) hue-rotate(180deg) handles light mode visually.
   // Scene stays dark in both modes — the filter inverts it for the user.
-  // Just rebuild the grid in case it has theme-sensitive colors.
+  // Re-apply runtime effect gates too so theme-linked policies are immediate.
 
   // Rebuild grid with new colors
   if (gridGroup) {
@@ -451,6 +459,9 @@ function handleThemeChange(theme) {
   }
   buildGrid();
   if (isDark() && !starSystem) buildStars();
+  applyBloomRuntime();
+  applyFogRuntime();
+  applyToneRuntime();
   applyStarRuntime();
 }
 
@@ -866,3 +877,4 @@ export function startRenderLoop() {
 // ── Renderer access (for screenshot) ─────────────────────────
 
 export function getRenderer() { return renderer; }
+export function getCurrentFps() { return fps; }

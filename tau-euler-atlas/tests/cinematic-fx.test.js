@@ -6,6 +6,7 @@ import {
   normalizeCinematicFx,
   normalizeStateCinematicFx,
   resolveEffectiveCinematicFx,
+  resolveStyleBloomGain,
 } from '../js/cinematic-fx.js';
 
 test('canonical cinematic normalization ingests legacy mirror values', () => {
@@ -97,6 +98,42 @@ test('performance mode hard-disables expensive effects but preserves configured 
   assert.equal(cinematic.fog.density, 0.004);
 });
 
+test('light theme applies cinematic damping policy for stars/bloom/fog/tone', () => {
+  const fx = defaultCinematicFx();
+  fx.stars.enabled = true;
+  fx.bloom.enabled = true;
+  fx.bloom.strength = 1.0;
+  fx.bloom.radius = 0.8;
+  fx.bloom.threshold = 0.7;
+  fx.fog.enabled = true;
+  fx.fog.density = 0.004;
+  fx.tone.enabled = true;
+  fx.tone.exposure = 1.2;
+
+  const dark = resolveEffectiveCinematicFx(fx, { renderMode: 'cinematic', theme: 'dark' });
+  const light = resolveEffectiveCinematicFx(fx, { renderMode: 'cinematic', theme: 'light' });
+
+  assert.equal(dark.stars.enabled, true);
+  assert.equal(light.stars.enabled, false);
+  assert.ok(light.bloom.strength < dark.bloom.strength);
+  assert.ok(light.bloom.radius < dark.bloom.radius);
+  assert.ok(light.bloom.threshold > dark.bloom.threshold);
+  assert.ok(light.fog.density < dark.fog.density);
+  assert.ok(light.tone.exposure < dark.tone.exposure);
+});
+
+test('style bloom gain is mode/theme aware', () => {
+  const cinematicDark = resolveStyleBloomGain({ renderMode: 'cinematic', theme: 'dark' });
+  const cinematicLight = resolveStyleBloomGain({ renderMode: 'cinematic', theme: 'light' });
+  const performanceDark = resolveStyleBloomGain({ renderMode: 'performance', theme: 'dark' });
+  const performanceLight = resolveStyleBloomGain({ renderMode: 'performance', theme: 'light' });
+
+  assert.equal(cinematicDark, 1);
+  assert.ok(cinematicLight < cinematicDark);
+  assert.ok(performanceDark < cinematicDark);
+  assert.ok(performanceLight < performanceDark);
+});
+
 test('state mirror sync updates legacy keys from canonical cinematic state', () => {
   const state = {
     cinematicFx: {
@@ -130,4 +167,3 @@ test('state mirror sync updates legacy keys from canonical cinematic state', () 
   assert.equal(state.fogDensity, 0.0015);
   assert.equal(state.toneExposure, 1.2);
 });
-

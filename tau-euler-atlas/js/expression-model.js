@@ -16,6 +16,8 @@ export const POSITIVE_CHILDREN = [
   { key: 'positiveImaginaryVectorA', label: 'f_positiveImaginaryVectorA' },
   { key: 'positiveImaginaryVectorReciprocal', label: 'f_positiveImaginaryVectorReciprocal' },
   { key: 'positiveImaginaryVectorB', label: 'f_positiveImaginaryVectorB' },
+  { key: 'positiveImaginaryCircleA', label: 'f_positiveImaginaryCircleA' },
+  { key: 'positiveImaginaryCircleB', label: 'f_positiveImaginaryCircleB' },
   { key: 'positiveImaginaryCircleC', label: 'f_positiveImaginaryCircleC' },
   { key: 'positiveImaginaryCircleBReciprocal', label: 'f_positiveImaginaryCircleBReciprocal' },
   { key: 'positiveImaginaryCircleCReciprocal', label: 'f_positiveImaginaryCircleCReciprocal' },
@@ -27,6 +29,8 @@ export const NEGATIVE_CHILDREN = [
   { key: 'negativeImaginaryVectorA', label: 'f_negativeImaginaryVectorA' },
   { key: 'negativeImaginaryVectorReciprocal', label: 'f_negativeImaginaryVectorReciprocal' },
   { key: 'negativeImaginaryVectorB', label: 'f_negativeImaginaryVectorB' },
+  { key: 'negativeImaginaryCircleA', label: 'f_negativeImaginaryCircleA' },
+  { key: 'negativeImaginaryCircleB', label: 'f_negativeImaginaryCircleB' },
   { key: 'negativeImaginaryCircleC', label: 'f_negativeImaginaryCircleC' },
   { key: 'negativeImaginaryCircleBReciprocal', label: 'f_negativeImaginaryCircleBReciprocal' },
   { key: 'negativeImaginaryCircleCReciprocal', label: 'f_negativeImaginaryCircleCReciprocal' },
@@ -78,6 +82,8 @@ const POSITIVE_COLORS = [
   '#ffb347',
   '#ffd166',
   '#9be564',
+  '#35d07f',
+  '#2dbca8',
   '#4ecdc4',
   '#4da3ff',
   '#9d6bff',
@@ -89,6 +95,8 @@ const NEGATIVE_COLORS = [
   '#f28bff',
   '#c58bff',
   '#9f96ff',
+  '#8798ff',
+  '#6aa4ff',
   '#73abff',
   '#51c8ff',
   '#4ee4d0',
@@ -173,4 +181,3 @@ export function normalizeExpressionModel(raw = null) {
 
   return model;
 }
-

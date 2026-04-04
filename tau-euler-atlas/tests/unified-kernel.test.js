@@ -2,11 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  LN_TAU,
   TAU,
+  cExp,
   cCos,
   cLogBase,
   cSin,
   cScl,
+  cTauPow,
   cTan,
 } from '../js/complex.js';
 import {
@@ -24,7 +27,9 @@ import {
   TRANSFORM_KEYS,
 } from '../js/expression-model.js';
 import {
+  computeEquivalenceProofRows,
   evaluateDirectFamily,
+  evaluateBaseChildForMode,
   evaluateTransform,
   generateAllPoints,
   generateAtlasPaths,
@@ -55,7 +60,6 @@ function baseState(overrides = {}) {
     T_start: 1.99999,
     T_stop: 2,
     b: 1000,
-    stepRate: 1,
     Z: 720,
     Z_min: 0,
     Z_max: 720,
@@ -68,7 +72,6 @@ function baseState(overrides = {}) {
     q_correction: 0,
     k2: 1,
     k3: 1,
-    numStrands: 1,
     pathBudget: 2000,
     expressionModel: makeExpressionModel(),
     ...overrides,
@@ -86,6 +89,28 @@ test('JSON-literal k semantics: bool=0 uses T, bool=1 uses kAligned', () => {
 
   const aligned = buildDerivedState(baseState({ kStepsInAlignmentsBool: 1, T: 2.0, l_base: 10 }));
   assert.ok(approx(aligned.k, computeKAligned(2.0, 10), 1e-12));
+});
+
+test('playback mode is normalized to unified stepping with legacy mirror retained', () => {
+  const derived = buildDerivedState(baseState({
+    timeMode: 'off',
+    stepRate: 7,
+    precomputeBufferUnit: 'seconds',
+    precomputeBufferValue: 0.5,
+    bufferEnabled: true,
+    bufferPhase: 'prefill',
+    bufferProgress: 0.4,
+  }));
+  assert.equal(derived.timeMode, 'step');
+  assert.equal(derived.legacyTimeMode, 'off');
+  assert.equal(derived.legacyStepRate, 7);
+  assert.equal(derived.stepRate, undefined);
+  assert.equal(derived.precomputeBufferUnit, 'seconds');
+  assert.equal(derived.precomputeBufferFrames, 30);
+  assert.equal(derived.bufferEnabled, true);
+  assert.equal(derived.bufferPhase, 'prefill');
+  assert.equal(derived.bufferTargetFrames, 30);
+  assert.equal(derived.bufferProgress, 0.4);
 });
 
 test('JSON-literal q/corr/k1 derivation matches formulas', () => {
@@ -115,19 +140,21 @@ test('JSON-literal q/corr/k1 derivation matches formulas', () => {
   assert.ok(approx(k1derived, TAU / q, 1e-10));
 });
 
-test('n domain follows [Z_min ... Z_max-1] with clamping', () => {
+test('n domain follows JSON-literal [Z_min+1 ... Z_max-1] with negative Z_min support', () => {
   const d = buildDerivedState(baseState({ Z: 1000, Z_min: 5, Z_max: 12 }));
-  assert.deepEqual(d.nList, [5, 6, 7, 8, 9, 10, 11]);
+  assert.deepEqual(d.nList, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
-  const clamped = buildDerivedState(baseState({ Z: 10, Z_min: 20, Z_max: 20 }));
-  assert.equal(clamped.nList.length, 1);
-  assert.equal(clamped.nList[0], 19);
+  const neg = buildDerivedState(baseState({ Z: 10, Z_min: -3, Z_max: 3 }));
+  assert.deepEqual(neg.nList, [-2, -1, 0, 1, 2]);
+
+  const minGap = buildDerivedState(baseState({ Z: 10, Z_min: 0, Z_max: 1 }));
+  assert.deepEqual(minGap.nList, [1]);
 });
 
-test('registry contains exact 16 plotted base children (8 positive + 8 negative)', () => {
-  assert.equal(POSITIVE_CHILDREN.length, 8);
-  assert.equal(NEGATIVE_CHILDREN.length, 8);
-  assert.equal(POSITIVE_CHILDREN.length + NEGATIVE_CHILDREN.length, 16);
+test('registry contains exact 20 plotted base children (10 positive + 10 negative)', () => {
+  assert.equal(POSITIVE_CHILDREN.length, 10);
+  assert.equal(NEGATIVE_CHILDREN.length, 10);
+  assert.equal(POSITIVE_CHILDREN.length + NEGATIVE_CHILDREN.length, 20);
 });
 
 test('transform expansion includes base/sin/cos/tan and log wrappers', () => {
@@ -139,8 +166,87 @@ test('transform expansion includes base/sin/cos/tan and log wrappers', () => {
   assert.equal(transforms.size, 7);
   for (const key of TRANSFORM_KEYS) assert.ok(transforms.has(key));
 
-  // 16 children * 7 transforms
-  assert.equal(combos.length, 16 * 7);
+  // 20 children * 7 transforms
+  assert.equal(combos.length, 20 * 7);
+});
+
+test('formula mode tau/euler base kernels are both evaluable and deterministic', () => {
+  const params = baseState({
+    T: 2,
+    T_start: 1.5,
+    T_stop: 2.5,
+    Z: 12,
+    Z_min: 0,
+    Z_max: 12,
+  });
+  const tau = evaluateBaseChildForMode(params, 'positive', 'positiveImaginary', 1, 0, 'tau');
+  const euler = evaluateBaseChildForMode(params, 'positive', 'positiveImaginary', 1, 0, 'euler');
+  assert.ok(Number.isFinite(tau[0]) && Number.isFinite(tau[1]));
+  assert.ok(Number.isFinite(euler[0]) && Number.isFinite(euler[1]));
+
+  const circleTau = evaluateBaseChildForMode(params, 'positive', 'positiveImaginaryCircleA', 1, 0, 'tau');
+  const circleEuler = evaluateBaseChildForMode(params, 'positive', 'positiveImaginaryCircleA', 1, 0, 'euler');
+  assert.ok(Number.isFinite(circleTau[0]) && Number.isFinite(circleTau[1]));
+  assert.ok(Number.isFinite(circleEuler[0]) && Number.isFinite(circleEuler[1]));
+});
+
+test('CircleA uses shared canonical k so T updates drive both imaginary sets', () => {
+  const paramsA = baseState({
+    kStepsInAlignmentsBool: 0,
+    T: 1.8,
+    T_start: 1.7,
+    T_stop: 2.2,
+  });
+  const paramsB = {
+    ...paramsA,
+    T: 2.1,
+  };
+
+  const tauPosA = evaluateBaseChildForMode(paramsA, 'positive', 'positiveImaginaryCircleA', 2, 0, 'tau');
+  const tauPosB = evaluateBaseChildForMode(paramsB, 'positive', 'positiveImaginaryCircleA', 2, 0, 'tau');
+  const tauNegA = evaluateBaseChildForMode(paramsA, 'negative', 'negativeImaginaryCircleA', 2, 0, 'tau');
+  const tauNegB = evaluateBaseChildForMode(paramsB, 'negative', 'negativeImaginaryCircleA', 2, 0, 'tau');
+
+  assert.ok(!approxComplex(tauPosA, tauPosB, 1e-8));
+  assert.ok(!approxComplex(tauNegA, tauNegB, 1e-8));
+});
+
+test('CircleA tau/euler implementations share equivalent angle construction with signed parity', () => {
+  const params = baseState({
+    kStepsInAlignmentsBool: 0,
+    T: 2.05,
+    T_start: 2,
+    T_stop: 2.2,
+  });
+  const nValue = 1;
+  const derived = buildDerivedState(params);
+  const theta = derived.k * Math.pow(TAU, nValue);
+
+  const expectedTauPositive = cTauPow([0, theta / LN_TAU]);
+  const expectedTauNegative = cTauPow([0, -theta / LN_TAU]);
+  const expectedEulerPositive = cExp([0, theta]);
+  const expectedEulerNegative = cExp([0, -theta]);
+
+  const tauPositive = evaluateBaseChildForMode(params, 'positive', 'positiveImaginaryCircleA', nValue, 0, 'tau');
+  const tauNegative = evaluateBaseChildForMode(params, 'negative', 'negativeImaginaryCircleA', nValue, 0, 'tau');
+  const eulerPositive = evaluateBaseChildForMode(params, 'positive', 'positiveImaginaryCircleA', nValue, 0, 'euler');
+  const eulerNegative = evaluateBaseChildForMode(params, 'negative', 'negativeImaginaryCircleA', nValue, 0, 'euler');
+
+  assert.ok(approxComplex(tauPositive, expectedTauPositive, 1e-10));
+  assert.ok(approxComplex(tauNegative, expectedTauNegative, 1e-10));
+  assert.ok(approxComplex(eulerPositive, expectedEulerPositive, 1e-10));
+  assert.ok(approxComplex(eulerNegative, expectedEulerNegative, 1e-10));
+});
+
+test('equivalence proof rows cover all base children across both sets', () => {
+  const proof = computeEquivalenceProofRows(baseState({
+    Z: 16,
+    Z_min: 0,
+    Z_max: 16,
+  }));
+  assert.equal(proof.rows.length, 20);
+  assert.ok(proof.rows.every((row) => typeof row.childKey === 'string'));
+  assert.ok(Number.isFinite(proof.summary.samples));
 });
 
 test('cos/tan/log(cos)/log(tan) evaluate correctly with l_func base', () => {
@@ -224,4 +330,48 @@ test('paths split across fixed 710-color boundary blocks when range exceeds 710'
   const blocks = new Set(paths.map((p) => p.tag?.block));
   assert.ok(blocks.has(0));
   assert.ok(blocks.has(1));
+});
+
+test('legacy numStrands field does not affect canonical outputs', () => {
+  const base = baseState();
+  const a = generateAllPoints({ ...base, numStrands: 1 });
+  const b = generateAllPoints({ ...base, numStrands: 16 });
+  assert.equal(a.count, b.count);
+  assert.deepEqual(
+    Array.from(a.positions.slice(0, 120)),
+    Array.from(b.positions.slice(0, 120)),
+  );
+  assert.deepEqual(
+    Array.from(a.colors.slice(0, 120)),
+    Array.from(b.colors.slice(0, 120)),
+  );
+});
+
+test('q_scale materially changes spoke-driving output family', () => {
+  const model = makeExpressionModel(false);
+  for (const key of TRANSFORM_KEYS) model.transforms[key].enabled = false;
+  model.transforms.sin.enabled = true;
+  for (const child of [...POSITIVE_CHILDREN, ...NEGATIVE_CHILDREN]) {
+    model.children[child.key].enabled = false;
+  }
+  model.children.positiveImaginaryVectorB.enabled = true;
+  model.sets.negative.enabled = false;
+
+  const a = generateAllPoints(baseState({
+    q_bool: 0,
+    q_scale: 1,
+    expressionModel: model,
+  }));
+  const b = generateAllPoints(baseState({
+    q_bool: 0,
+    q_scale: 2,
+    expressionModel: model,
+  }));
+
+  assert.ok(a.count > 0);
+  assert.ok(b.count > 0);
+  assert.notDeepEqual(
+    Array.from(a.positions.slice(0, 12)),
+    Array.from(b.positions.slice(0, 12)),
+  );
 });

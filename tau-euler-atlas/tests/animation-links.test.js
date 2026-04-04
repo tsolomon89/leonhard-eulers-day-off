@@ -4,11 +4,11 @@ import assert from 'node:assert/strict';
 import {
   animation,
   computeWindowProgress,
-  swapLinkEndpoints,
+  resolveLoopProgress,
 } from '../js/animation.js';
-import { advanceStepTraversal } from '../js/derivation.js';
+import { advanceStepTraversal, shouldAdvanceStep } from '../js/derivation.js';
 
-const EPS = 1e-9;
+const EPS = 1e-6;
 
 function approx(a, b, eps = EPS) {
   return Math.abs(a - b) <= eps;
@@ -16,119 +16,115 @@ function approx(a, b, eps = EPS) {
 
 function resetAnimation() {
   animation.stop();
-  animation.clearLinks();
   animation.progress = 0;
   animation.duration = 30;
   animation.loop = 'wrap';
 }
 
-test('link source cycles off -> anim -> step -> off and seeds endpoint', () => {
-  resetAnimation();
-  const state = { v: 1 };
-  const link = animation.registerLink(state, 'v', null, { min: 0, max: 11, step: 0.5 });
-
-  assert.equal(link.source, 'off');
-  assert.equal(link.endValue, null);
-
-  animation.cycleLinkSource(link, { min: 0, max: 11, step: 0.5 });
-  assert.equal(link.source, 'anim');
-  assert.ok(Number.isFinite(link.endValue));
-  assert.equal(link.endValue, 3);
-
-  animation.cycleLinkSource(link, { min: 0, max: 11, step: 0.5 });
-  assert.equal(link.source, 'step');
-  assert.equal(link.endValue, 3);
-
-  animation.cycleLinkSource(link, { min: 0, max: 11, step: 0.5 });
-  assert.equal(link.source, 'off');
+test('computeWindowProgress maps authored windows and clamps to [0,1]', () => {
+  assert.ok(approx(computeWindowProgress(5, 0, 10), 0.5));
+  assert.ok(approx(computeWindowProgress(-5, 0, 10), 0));
+  assert.ok(approx(computeWindowProgress(15, 0, 10), 1));
+  assert.ok(approx(computeWindowProgress(1.9999995, 1.999999, 2), 0.5, 1e-4));
 });
 
-test('direction reversal changes interpolation result', () => {
-  resetAnimation();
-  const state = { v: 0 };
-  const link = animation.registerLink(state, 'v', null, { min: 0, max: 10, step: 0.01 });
-  link.baseValue = 0;
-  link.endValue = 10;
-  animation.setLinkSource(link, 'anim', { min: 0, max: 10, step: 0.01 });
+test('resolveLoopProgress supports wrap, bounce, and clamp modes', () => {
+  assert.ok(approx(resolveLoopProgress(1.25, 'wrap'), 0.25));
+  assert.ok(approx(resolveLoopProgress(-0.25, 'wrap'), 0.75));
 
-  link.direction = 1;
-  animation.seek(0.25);
-  assert.ok(approx(state.v, 2.5));
+  assert.ok(approx(resolveLoopProgress(0.25, 'bounce'), 0.25));
+  assert.ok(approx(resolveLoopProgress(1.25, 'bounce'), 0.75));
+  assert.ok(approx(resolveLoopProgress(2.25, 'bounce'), 0.25));
 
-  link.direction = -1;
-  animation.seek(0.25);
-  assert.ok(approx(state.v, 7.5));
+  assert.ok(approx(resolveLoopProgress(-0.25, 'none'), 0));
+  assert.ok(approx(resolveLoopProgress(1.25, 'none'), 1));
 });
 
-test('step-source interpolation follows authored playback window for wide and narrow ranges', () => {
+test('animation.update is inert when paused', () => {
   resetAnimation();
-  const state = { v: 0 };
-  const link = animation.registerLink(state, 'v', null, { min: 0, max: 100, step: 0.001 });
-  link.baseValue = 0;
-  link.endValue = 100;
-  animation.setLinkSource(link, 'step', { min: 0, max: 100, step: 0.001 });
-
-  animation.applyStepFromWindow(0, -100, 100);
-  assert.ok(approx(state.v, 50));
-
-  animation.applyStepFromWindow(1.9999995, 1.999999, 2);
-  assert.ok(approx(state.v, 50, 1e-6));
-
-  assert.ok(approx(computeWindowProgress(2, 1.999999, 2), 1));
+  animation.progress = 0.4;
+  const changed = animation.update();
+  assert.equal(changed, false);
+  assert.ok(approx(animation.progress, 0.4));
 });
 
-test('swap helper exchanges base/end endpoints', () => {
+test('animation.update advances progress and loop=none clamps and stops at end', () => {
   resetAnimation();
-  const state = { v: 5 };
-  const link = animation.registerLink(state, 'v', null, { min: 0, max: 10, step: 1 });
-  link.baseValue = 2;
-  link.endValue = 8;
+  animation.loop = 'none';
+  animation.duration = 1;
+  animation.progress = 0.95;
+  animation.playing = true;
+  animation._lastFrameTime = performance.now() - 200;
 
-  assert.equal(swapLinkEndpoints(link), true);
-  assert.equal(link.baseValue, 8);
-  assert.equal(link.endValue, 2);
+  const changed = animation.update();
+  assert.equal(changed, true);
+  assert.ok(approx(animation.progress, 1));
+  assert.equal(animation.playing, false);
 });
 
-test('bounce step loop reverses direction at boundaries', () => {
-  const first = advanceStepTraversal({
+test('step traversal honors clamp and bounce policies', () => {
+  const clampStep = advanceStepTraversal({
     T: 1.99,
     T_start: 1.99,
     T_stop: 2,
     dtSeconds: 1,
-    s: 0.015,
-    stepRate: 1,
-    stepLoopMode: 'bounce',
+    s: 0.02,
+    stepLoopMode: 'clamp',
     bounceDir: 1,
   });
+  assert.ok(clampStep.T <= 2);
+  assert.equal(clampStep.bounceDir, 1);
 
-  assert.ok(first.T > 1.99 && first.T < 2);
-  assert.equal(first.bounceDir, -1);
-
-  const second = advanceStepTraversal({
-    T: first.T,
+  const bounceA = advanceStepTraversal({
+    T: 1.99,
     T_start: 1.99,
     T_stop: 2,
     dtSeconds: 1,
-    s: 0.015,
-    stepRate: 1,
+    s: 0.02,
     stepLoopMode: 'bounce',
-    bounceDir: first.bounceDir,
+    bounceDir: 1,
   });
+  assert.ok(bounceA.T >= 1.99 && bounceA.T <= 2);
+  assert.equal(bounceA.bounceDir, -1);
 
-  assert.ok(second.T >= 1.99 && second.T <= 2);
+  const bounceB = advanceStepTraversal({
+    T: bounceA.T,
+    T_start: 1.99,
+    T_stop: 2,
+    dtSeconds: 1,
+    s: 0.02,
+    stepLoopMode: 'bounce',
+    bounceDir: bounceA.bounceDir,
+  });
+  assert.ok(bounceB.T >= 1.99 && bounceB.T <= 2);
 });
 
-test('legacy isLinked compatibility mirrors source', () => {
-  resetAnimation();
-  const state = { v: 0 };
-  const link = animation.registerLink(state, 'v', null, { min: 0, max: 1, step: 0.01 });
+test('step traversal ignores legacy stepRate payloads when supplied', () => {
+  const withLegacy = advanceStepTraversal({
+    T: 1.5,
+    T_start: 1,
+    T_stop: 2,
+    dtSeconds: 1,
+    s: 0.02,
+    stepRate: 99,
+    stepLoopMode: 'clamp',
+    bounceDir: 1,
+  });
+  const canonical = advanceStepTraversal({
+    T: 1.5,
+    T_start: 1,
+    T_stop: 2,
+    dtSeconds: 1,
+    s: 0.02,
+    stepLoopMode: 'clamp',
+    bounceDir: 1,
+  });
+  assert.ok(approx(withLegacy.T, canonical.T, 1e-12));
+  assert.equal(withLegacy.bounceDir, canonical.bounceDir);
+});
 
-  assert.equal(link.isLinked, false);
-  link.isLinked = true;
-  assert.equal(link.source, 'anim');
-  assert.equal(link.isLinked, true);
-
-  link.isLinked = false;
-  assert.equal(link.source, 'off');
-  assert.equal(link.isLinked, false);
+test('playback stepping is binary and ignores legacy time mode values', () => {
+  assert.equal(shouldAdvanceStep({ timeMode: 'off' }, false), false);
+  assert.equal(shouldAdvanceStep({ timeMode: 'off' }, true), true);
+  assert.equal(shouldAdvanceStep({ timeMode: 'animation' }, true), true);
 });

@@ -241,6 +241,8 @@ Open `http://localhost:8080/`.
 
 > **Note:** Must be served over HTTP, not opened as a `file://` path (browser blocks ES module imports from file:// for security).
 
+Safe shutdown runbook for local dev listeners (ports `5173/8080/3000`): [docs/local-dev-shutdown-runbook.md](docs/local-dev-shutdown-runbook.md)
+
 ---
 
 ## Browser Compatibility

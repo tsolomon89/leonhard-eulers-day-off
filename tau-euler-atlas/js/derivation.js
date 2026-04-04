@@ -1,14 +1,12 @@
 import { TAU } from './complex.js';
+import {
+  resolvePrecomputeBufferFrames,
+  sanitizeBufferPhase,
+} from './playback-buffer.js';
 
 const EPS = 1e-12;
 export const COLOR_BLOCK_SIZE = 710;
 export const STEP_LOOP_MODES = ['clamp', 'bounce'];
-
-export const PRIMES = [
-  2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
-  31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
-  73, 79, 83, 89, 97,
-];
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
@@ -80,27 +78,9 @@ export function buildNListFromRange(ZMin, ZMaxExclusive) {
   return Array.from({ length: hi - lo }, (_, i) => lo + i);
 }
 
-export function buildNList(Z, nIsPrimeOnly = 0, U_unit = 1, ZMin = 0, ZMax = null) {
-  const safeZ = Math.max(1, Math.floor(Number.isFinite(Z) ? Z : 710));
-  const usePrimes = Number(nIsPrimeOnly) > 0;
-
-  const maxExclusive = Number.isFinite(ZMax) ? Math.floor(ZMax) : safeZ;
-  const minInclusive = Number.isFinite(ZMin) ? Math.floor(ZMin) : 0;
-  const lo = clamp(minInclusive, 0, Math.max(0, maxExclusive - 1));
-  const hi = clamp(maxExclusive, lo + 1, safeZ);
-
-  const source = usePrimes
-    ? PRIMES.filter((p) => p >= lo && p < hi)
-    : buildNListFromRange(lo, hi);
-
-  const unit = Number.isFinite(U_unit) ? U_unit : 1;
-  return source.map((n) => n * unit);
-}
-
 export function computeStepDelta(derived, dtSeconds) {
   const s = Number.isFinite(derived.s) ? derived.s : 0;
-  const stepRate = Number.isFinite(derived.stepRate) ? derived.stepRate : 1;
-  return s * stepRate * dtSeconds;
+  return s * dtSeconds;
 }
 
 export function computeWindowProgress(value, start, stop) {
@@ -118,7 +98,6 @@ export function advanceStepTraversal({
   T_stop,
   dtSeconds,
   s,
-  stepRate,
   stepLoopMode = 'clamp',
   bounceDir = 1,
 }) {
@@ -128,14 +107,15 @@ export function advanceStepTraversal({
   const maxT = Math.max(a, b);
   const span = maxT - minT;
   const current = clamp(Number.isFinite(T) ? T : minT, minT, maxT);
-  const magnitude = Math.abs(Number.isFinite(s) ? s : 0) * Math.abs(Number.isFinite(stepRate) ? stepRate : 0) * Math.max(0, Number.isFinite(dtSeconds) ? dtSeconds : 0);
+  const safeS = Number.isFinite(s) ? s : 0;
+  const magnitude = Math.abs(safeS) * Math.max(0, Number.isFinite(dtSeconds) ? dtSeconds : 0);
   if (magnitude <= 0 || span < EPS) {
     return { T: current, bounceDir, moved: false };
   }
 
-  const userSign = Math.sign(Number.isFinite(stepRate) ? stepRate : 0) || 1;
+  const baseSign = Math.sign(safeS) || 1;
   const currentBounce = Math.sign(Number.isFinite(bounceDir) ? bounceDir : 0) || 1;
-  const effectiveSign = userSign * currentBounce;
+  const effectiveSign = baseSign * currentBounce;
   const mode = sanitizeStepLoopMode(stepLoopMode);
   const rawNext = current + (magnitude * effectiveSign);
 
@@ -156,12 +136,12 @@ export function advanceStepTraversal({
   }
   const nextT = minT + localPos;
   const nextEffectiveSign = effectiveSign * segmentSign;
-  const nextBounceDir = nextEffectiveSign * userSign;
+  const nextBounceDir = nextEffectiveSign * baseSign;
   return { T: clamp(nextT, minT, maxT), bounceDir: nextBounceDir, moved: true };
 }
 
 export function shouldAdvanceStep(derived, isPlaying) {
-  return !!isPlaying && derived.timeMode === 'step';
+  return !!isPlaying;
 }
 
 export function buildDerivedState(input) {
@@ -170,16 +150,27 @@ export function buildDerivedState(input) {
   let Z = Math.max(1, Math.floor(Number.isFinite(base.Z) ? base.Z : 710));
   const ZMaxInput = Number.isFinite(base.Z_max) ? Math.floor(base.Z_max) : Z;
   const ZMinInput = Number.isFinite(base.Z_min) ? Math.floor(base.Z_min) : 0;
-  let Z_max = clamp(ZMaxInput, 1, Math.max(1, Z));
-  let Z_min = clamp(ZMinInput, 0, Math.max(0, Z_max - 1));
+  let Z_max = clamp(ZMaxInput, 0, Z);
+  let Z_min = clamp(ZMinInput, -Z, 0);
 
   if (ZMaxInput > Z) {
     Z = ZMaxInput;
     Z_max = ZMaxInput;
-    Z_min = clamp(ZMinInput, 0, Math.max(0, Z_max - 1));
+    Z_min = clamp(ZMinInput, -Z, 0);
   }
 
-  const nList = buildNListFromRange(Z_min, Z_max);
+  // JSON-literal domain: n = [Z_min + 1 ... Z_max - 1]
+  // Keep deterministic validity by ensuring at least one sample (Z_max - Z_min >= 2).
+  if ((Z_max - Z_min) < 2) {
+    if (ZMaxInput <= ZMinInput) {
+      Z_min = clamp(Z_max - 2, -Z, 0);
+    } else {
+      Z_max = clamp(Z_min + 2, 0, Z);
+      if ((Z_max - Z_min) < 2) Z_min = clamp(Z_max - 2, -Z, 0);
+    }
+  }
+
+  const nList = buildNListFromRange(Z_min + 1, Z_max);
   const n = nList.length;
 
   let T_start = Number.isFinite(base.T_start) ? base.T_start : 1.99999;
@@ -223,15 +214,37 @@ export function buildDerivedState(input) {
   if (Math.abs(b) < EPS) b = 1;
   const s = 1 / b;
 
-  const stepRate = Number.isFinite(base.stepRate) ? base.stepRate : 1;
-  const timeMode = base.timeMode === 'step' ? 'step' : 'animation';
+  const legacyStepRate = Number.isFinite(base.stepRate) ? base.stepRate : 1;
+  delete base.stepRate;
+  const legacyTimeMode = base.timeMode === 'off'
+    ? 'off'
+    : (base.timeMode === 'animation' ? 'animation' : 'step');
+  const timeMode = 'step';
   const stepLoopMode = sanitizeStepLoopMode(base.stepLoopMode);
   const syncTStepToS = base.syncTStepToS !== false;
   const tRegion = typeof base.tRegion === 'string' ? base.tRegion : 'full';
+  const precomputeBufferUnit = base.precomputeBufferUnit === 'seconds' ? 'seconds' : 'frames';
+  const rawBufferValue = Number.isFinite(base.precomputeBufferValue) ? base.precomputeBufferValue : 24;
+  const precomputeBufferValue = precomputeBufferUnit === 'seconds'
+    ? clamp(rawBufferValue, 0.1, 10)
+    : clamp(Math.floor(rawBufferValue), 1, 600);
+  const precomputeBufferFrames = resolvePrecomputeBufferFrames(precomputeBufferUnit, precomputeBufferValue);
+  const bufferEnabled = base.bufferEnabled === true;
+  const bufferPhase = sanitizeBufferPhase(base.bufferPhase);
+  const rawBufferProgress = Number.isFinite(base.bufferProgress) ? base.bufferProgress : 0;
+  const bufferProgress = clamp(rawBufferProgress, 0, 1);
+  const bufferTargetFrames = Math.max(1, Math.floor(
+    Number.isFinite(base.bufferTargetFrames) ? base.bufferTargetFrames : precomputeBufferFrames,
+  ));
 
   const P = Number.isFinite(base.P) ? base.P : 1;
   const P1 = P * (1 + TAU / Math.max(1, n));
   const eProof = Number.isFinite(base.eProof) ? base.eProof : NaN;
+  const formulaMode = base.formulaMode === 'euler' ? 'euler' : 'tau';
+  const proofPanelOpen = base.proofPanelOpen === true;
+  const proofResults = (base.proofResults && typeof base.proofResults === 'object')
+    ? base.proofResults
+    : null;
 
   return {
     ...base,
@@ -260,14 +273,25 @@ export function buildDerivedState(input) {
     k3,
     b,
     s,
-    stepRate,
+    legacyStepRate,
     timeMode,
+    legacyTimeMode,
     stepLoopMode,
     syncTStepToS,
     tRegion,
+    precomputeBufferUnit,
+    precomputeBufferValue,
+    precomputeBufferFrames,
+    bufferEnabled,
+    bufferPhase,
+    bufferProgress,
+    bufferTargetFrames,
     P,
     P1,
     eProof,
+    formulaMode,
+    proofPanelOpen,
+    proofResults,
 
     // Back-compat mirrors retained for utility code/tests now.
     q1: q_scale,

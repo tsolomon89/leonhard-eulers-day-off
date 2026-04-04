@@ -1,11 +1,13 @@
 import {
   TAU,
   LN_TAU,
+  cExp,
   cSin,
   cCos,
   cTan,
   cLogBase,
   cScl,
+  cDiv,
   cNeg,
   cInv,
   cTauPow,
@@ -75,13 +77,15 @@ function mulRgb(a, b) {
   return [a[0] * b[0], a[1] * b[1], a[2] * b[2]];
 }
 
-function withBloom(rgb, bloomWeight) {
-  const glow = clamp(Number.isFinite(bloomWeight) ? bloomWeight : 1, 0, 4);
-  const gain = 0.75 + glow * 0.45;
+function withBloom(rgb, bloomWeight, bloomGain = 1) {
+  const base = Number.isFinite(bloomWeight) ? bloomWeight : 1;
+  const weightGain = Number.isFinite(bloomGain) ? bloomGain : 1;
+  const glow = clamp(base * weightGain, 0, 4);
+  const bloomScale = 0.75 + glow * 0.45;
   return [
-    clamp(rgb[0] * gain, 0, 1),
-    clamp(rgb[1] * gain, 0, 1),
-    clamp(rgb[2] * gain, 0, 1),
+    clamp(rgb[0] * bloomScale, 0, 1),
+    clamp(rgb[1] * bloomScale, 0, 1),
+    clamp(rgb[2] * bloomScale, 0, 1),
   ];
 }
 
@@ -127,36 +131,50 @@ export function evaluateDirectFamily(base, _nValue, dIndex, k2) {
   }
 }
 
-export function computeF(k1, k, imagSign = 1) {
+export function computeF(k1, k, imagSign = 1, formulaMode = 'tau') {
   const tauK = Math.pow(TAU, k);
+  if (formulaMode === 'euler') {
+    return cScl(cExp([0, imagSign * tauK]), k1);
+  }
   const tauNativeExp = [0, (imagSign * tauK) / LN_TAU];
   return cScl(cTauPow(tauNativeExp), k1);
 }
 
-function computeCircle(k1, k, nValue, imagSign) {
+function computeCircleA(k, nValue, imagSign, formulaMode = 'tau') {
+  const theta = imagSign * k * Math.pow(TAU, nValue);
+  if (formulaMode === 'euler') return cExp([0, theta]);
+  return cTauPow([0, theta / LN_TAU]);
+}
+
+function computeCircleB(k1, k, nValue, imagSign, formulaMode = 'tau') {
   if (nValue === 0) return [NaN, NaN];
   const theta = imagSign * Math.pow(TAU / nValue, k);
+  if (formulaMode === 'euler') return cScl(cExp([0, theta]), k1);
   return cScl(cTauPow([0, theta / LN_TAU]), k1);
 }
 
-function computeBaseContext(derived, nValue, nOrdinal) {
-  const fPositive = computeF(derived.k1, derived.k, +1);
-  const fNegative = computeF(derived.k1, derived.k, -1);
+function computeBaseContext(derived, nValue, nOrdinal, formulaMode = 'tau') {
+  const fPositive = computeF(derived.k1, derived.k, +1, formulaMode);
+  const fNegative = computeF(derived.k1, derived.k, -1, formulaMode);
 
   const kWindow = Math.max(1, Math.floor(Math.abs(derived.k) + 1));
   const jScale = (nOrdinal < kWindow && Math.abs(derived.k) > 1e-12)
     ? (nValue / derived.k)
     : NaN;
 
-  const circleBPositive = computeCircle(derived.k1, derived.k, nValue, +1);
+  const circleAPositive = computeCircleA(derived.k, nValue, +1, formulaMode);
+  const circleANegative = computeCircleA(derived.k, nValue, -1, formulaMode);
+  const circleBPositive = computeCircleB(derived.k1, derived.k, nValue, +1, formulaMode);
   const circleCPositive = ok(circleBPositive) ? cNeg(circleBPositive) : [NaN, NaN];
-  const circleBNegative = computeCircle(derived.k1, derived.k, nValue, -1);
+  const circleBNegative = computeCircleB(derived.k1, derived.k, nValue, -1, formulaMode);
   const circleCNegative = ok(circleBNegative) ? cNeg(circleBNegative) : [NaN, NaN];
 
   return {
     fPositive,
     fNegative,
     jScale,
+    circleAPositive,
+    circleANegative,
     circleBPositive,
     circleCPositive,
     circleBNegative,
@@ -169,10 +187,12 @@ function evaluateBaseChild(setKey, childKey, ctx, nValue) {
     fPositive,
     fNegative,
     jScale,
+    circleAPositive,
+    circleANegative,
     circleBPositive,
     circleCPositive,
-    circleBNegative,
     circleCNegative,
+    circleBNegative,
   } = ctx;
 
   if (setKey === 'positive') {
@@ -182,6 +202,8 @@ function evaluateBaseChild(setKey, childKey, ctx, nValue) {
       case 'positiveImaginaryVectorA': return Number.isFinite(jScale) ? cScl(fPositive, jScale) : [NaN, NaN];
       case 'positiveImaginaryVectorReciprocal': return Number.isFinite(jScale) && Math.abs(jScale) > 1e-12 ? cScl(fPositive, 1 / jScale) : [NaN, NaN];
       case 'positiveImaginaryVectorB': return cScl(fPositive, nValue);
+      case 'positiveImaginaryCircleA': return circleAPositive;
+      case 'positiveImaginaryCircleB': return circleBPositive;
       case 'positiveImaginaryCircleC': return circleCPositive;
       case 'positiveImaginaryCircleBReciprocal': return cInv(circleBPositive);
       case 'positiveImaginaryCircleCReciprocal': return cInv(circleCPositive);
@@ -196,6 +218,8 @@ function evaluateBaseChild(setKey, childKey, ctx, nValue) {
     case 'negativeImaginaryVectorA': return Number.isFinite(jScale) ? cScl(fPositive, jScale) : [NaN, NaN];
     case 'negativeImaginaryVectorReciprocal': return Number.isFinite(jScale) && Math.abs(jScale) > 1e-12 ? cScl(fPositive, 1 / jScale) : [NaN, NaN];
     case 'negativeImaginaryVectorB': return cScl(fPositive, nValue);
+    case 'negativeImaginaryCircleA': return circleANegative;
+    case 'negativeImaginaryCircleB': return circleBNegative;
     case 'negativeImaginaryCircleC': return circleCNegative;
     case 'negativeImaginaryCircleBReciprocal': return cInv(circleBPositive);
     case 'negativeImaginaryCircleCReciprocal': return cInv(circleCPositive);
@@ -290,7 +314,6 @@ export function generateAllPoints(params) {
   const derived = buildDerivedState(params);
   const expressionModel = normalizeExpressionModel(derived.expressionModel);
   const combos = activeCombos(expressionModel);
-  const numStrands = Math.max(1, Math.floor(Number.isFinite(derived.numStrands) ? derived.numStrands : 1));
 
   if (!expressionModel.parent.enabled || combos.length === 0 || derived.nList.length === 0) {
     return {
@@ -298,7 +321,11 @@ export function generateAllPoints(params) {
       colors: new Float32Array(0),
       sizes: new Float32Array(0),
       count: 0,
-      meta: metadataFromDerived(derived, computeF(derived.k1, derived.k, +1), performance.now() - t0),
+      meta: metadataFromDerived(
+        derived,
+        computeF(derived.k1, derived.k, +1, derived.formulaMode),
+        performance.now() - t0,
+      ),
       budget: _pointBudget,
     };
   }
@@ -309,37 +336,34 @@ export function generateAllPoints(params) {
   const sizes = new Float32Array(maxPts);
 
   let count = 0;
+  const styleBloomGain = Number.isFinite(derived.styleBloomGain) ? derived.styleBloomGain : 1;
 
-  for (let strand = 0; strand < numStrands; strand++) {
-    const offset = strand * derived.Z;
-    for (const combo of combos) {
+  for (const combo of combos) {
+    if (count >= maxPts) break;
+    const baseRgb = hexToRgb(combo.style.color);
+
+    for (let i = 0; i < derived.nList.length; i++) {
       if (count >= maxPts) break;
-      const baseRgb = hexToRgb(combo.style.color);
+      if (combo.style.pointOpacity <= 0.0001) continue;
 
-      for (let i = 0; i < derived.nList.length; i++) {
-        if (count >= maxPts) break;
-        if (combo.style.pointOpacity <= 0.0001) continue;
+      const nValue = derived.nList[i];
+      const ctx = computeBaseContext(derived, nValue, i, derived.formulaMode);
+      const baseZ = evaluateBaseChild(combo.setKey, combo.childKey, ctx, nValue);
+      const transformed = sanitizeComplex(evaluateTransform(baseZ, combo.transformKey, derived.k2, derived.l_func));
+      if (!transformed) continue;
 
-        const nBase = derived.nList[i];
-        const nValue = nBase + offset;
-        const ctx = computeBaseContext(derived, nValue, i);
-        const baseZ = evaluateBaseChild(combo.setKey, combo.childKey, ctx, nValue);
-        const transformed = sanitizeComplex(evaluateTransform(baseZ, combo.transformKey, derived.k2, derived.l_func));
-        if (!transformed) continue;
+      const tint = blockTintForN(nValue);
+      const rgb = withBloom(mulRgb(baseRgb, tint), combo.style.pointBloom, styleBloomGain);
 
-        const tint = blockTintForN(nValue);
-        const rgb = withBloom(mulRgb(baseRgb, tint), combo.style.pointBloom);
-
-        const idx3 = count * 3;
-        positions[idx3] = transformed[0];
-        positions[idx3 + 1] = transformed[1];
-        positions[idx3 + 2] = 0;
-        colors[idx3] = clamp(rgb[0] * combo.style.pointOpacity, 0, 1);
-        colors[idx3 + 1] = clamp(rgb[1] * combo.style.pointOpacity, 0, 1);
-        colors[idx3 + 2] = clamp(rgb[2] * combo.style.pointOpacity, 0, 1);
-        sizes[count] = Math.max(0.05, combo.style.pointSize * derived.k3);
-        count++;
-      }
+      const idx3 = count * 3;
+      positions[idx3] = transformed[0];
+      positions[idx3 + 1] = transformed[1];
+      positions[idx3 + 2] = 0;
+      colors[idx3] = clamp(rgb[0] * combo.style.pointOpacity, 0, 1);
+      colors[idx3 + 1] = clamp(rgb[1] * combo.style.pointOpacity, 0, 1);
+      colors[idx3 + 2] = clamp(rgb[2] * combo.style.pointOpacity, 0, 1);
+      sizes[count] = Math.max(0.05, combo.style.pointSize * derived.k3);
+      count++;
     }
   }
 
@@ -349,7 +373,11 @@ export function generateAllPoints(params) {
     colors: colors.subarray(0, count * 3),
     sizes: sizes.subarray(0, count),
     count,
-    meta: metadataFromDerived(derived, computeF(derived.k1, derived.k, +1), computeMs),
+    meta: metadataFromDerived(
+      derived,
+      computeF(derived.k1, derived.k, +1, derived.formulaMode),
+      computeMs,
+    ),
     budget: _pointBudget,
   };
 }
@@ -368,69 +396,64 @@ export function generateAtlasPaths(params) {
   const derived = buildDerivedState(params);
   const expressionModel = normalizeExpressionModel(derived.expressionModel);
   const combos = activeCombos(expressionModel);
-  const numStrands = Math.max(1, Math.floor(Number.isFinite(derived.numStrands) ? derived.numStrands : 1));
   const pathBudget = Math.max(1, Math.floor(Number.isFinite(derived.pathBudget) ? derived.pathBudget : 500));
 
   if (!expressionModel.parent.enabled || combos.length === 0 || derived.nList.length === 0) return [];
 
   const paths = [];
+  const styleBloomGain = Number.isFinite(derived.styleBloomGain) ? derived.styleBloomGain : 1;
 
-  for (let strand = 0; strand < numStrands; strand++) {
-    const offset = strand * derived.Z;
-    for (const combo of combos) {
-      if (paths.length >= pathBudget) break;
-      if (combo.style.lineOpacity <= 0.0001 || combo.style.lineWidth <= 0.0001) continue;
+  for (const combo of combos) {
+    if (paths.length >= pathBudget) break;
+    if (combo.style.lineOpacity <= 0.0001 || combo.style.lineWidth <= 0.0001) continue;
 
-      const baseRgb = hexToRgb(combo.style.color);
-      let seg = [];
-      let currentBlock = null;
+    const baseRgb = hexToRgb(combo.style.color);
+    let seg = [];
+    let currentBlock = null;
 
-      const flush = () => {
-        if (seg.length < 2) {
-          seg = [];
-          return;
-        }
-        const tint = BLOCK_TINTS[currentBlock ?? 0];
-        const rgb = withBloom(mulRgb(baseRgb, tint), combo.style.lineBloom);
-        paths.push({
-          positions: buildLinePath(seg),
-          color: rgb,
-          widthMul: Math.max(0.05, combo.style.lineWidth),
-          opacityMul: clamp(combo.style.lineOpacity, 0, 1),
-          pointCount: seg.length,
-          isPrimary: false,
-          tag: {
-            set: combo.setKey,
-            child: combo.childKey,
-            transform: combo.transformKey,
-            strand,
-            block: currentBlock ?? 0,
-          },
-        });
+    const flush = () => {
+      if (seg.length < 2) {
         seg = [];
-      };
-
-      for (let i = 0; i < derived.nList.length; i++) {
-        if (paths.length >= pathBudget) break;
-        const nBase = derived.nList[i];
-        const nValue = nBase + offset;
-        const block = Math.floor(Math.max(0, nValue) / COLOR_BLOCK_SIZE);
-
-        if (currentBlock !== null && block !== currentBlock) flush();
-        currentBlock = block;
-
-        const ctx = computeBaseContext(derived, nValue, i);
-        const baseZ = evaluateBaseChild(combo.setKey, combo.childKey, ctx, nValue);
-        const transformed = sanitizeComplex(evaluateTransform(baseZ, combo.transformKey, derived.k2, derived.l_func));
-        if (!transformed) {
-          flush();
-          continue;
-        }
-        seg.push(transformed);
+        return;
       }
+      const tint = BLOCK_TINTS[currentBlock ?? 0];
+      const rgb = withBloom(mulRgb(baseRgb, tint), combo.style.lineBloom, styleBloomGain);
+      paths.push({
+        positions: buildLinePath(seg),
+        color: rgb,
+        widthMul: Math.max(0.05, combo.style.lineWidth),
+        opacityMul: clamp(combo.style.lineOpacity, 0, 1),
+        pointCount: seg.length,
+        isPrimary: false,
+        tag: {
+          set: combo.setKey,
+          child: combo.childKey,
+          transform: combo.transformKey,
+          block: currentBlock ?? 0,
+        },
+      });
+      seg = [];
+    };
 
-      flush();
+    for (let i = 0; i < derived.nList.length; i++) {
+      if (paths.length >= pathBudget) break;
+      const nValue = derived.nList[i];
+      const block = Math.floor(Math.max(0, nValue) / COLOR_BLOCK_SIZE);
+
+      if (currentBlock !== null && block !== currentBlock) flush();
+      currentBlock = block;
+
+      const ctx = computeBaseContext(derived, nValue, i, derived.formulaMode);
+      const baseZ = evaluateBaseChild(combo.setKey, combo.childKey, ctx, nValue);
+      const transformed = sanitizeComplex(evaluateTransform(baseZ, combo.transformKey, derived.k2, derived.l_func));
+      if (!transformed) {
+        flush();
+        continue;
+      }
+      seg.push(transformed);
     }
+
+    flush();
   }
 
   return paths.slice(0, pathBudget);
@@ -443,31 +466,28 @@ export function generatePrimaryPaths(params) {
   if (!style.enabled || style.lineOpacity <= 0.0001 || style.lineWidth <= 0.0001) return [];
 
   const paths = [];
-  const numStrands = Math.max(1, Math.floor(Number.isFinite(derived.numStrands) ? derived.numStrands : 1));
   const baseRgb = hexToRgb(style.color);
+  const styleBloomGain = Number.isFinite(derived.styleBloomGain) ? derived.styleBloomGain : 1;
 
-  for (let strand = 0; strand < numStrands; strand++) {
-    const offset = strand * derived.Z;
-    const seg = [];
-    for (let i = 0; i < derived.nList.length; i++) {
-      const nValue = derived.nList[i] + offset;
-      const ctx = computeBaseContext(derived, nValue, i);
-      const baseZ = evaluateBaseChild('positive', 'positiveImaginary', ctx, nValue);
-      const transformed = sanitizeComplex(evaluateTransform(baseZ, 'sin', derived.k2, derived.l_func));
-      if (!transformed) continue;
-      seg.push(transformed);
-    }
-    if (seg.length >= 2) {
-      paths.push({
-        positions: buildLinePath(seg),
-        color: withBloom(baseRgb, style.lineBloom),
-        widthMul: Math.max(0.05, style.lineWidth),
-        opacityMul: clamp(style.lineOpacity, 0, 1),
-        pointCount: seg.length,
-        tag: { set: 'positive', child: 'positiveImaginary', transform: 'sin', strand },
-        isPrimary: true,
-      });
-    }
+  const seg = [];
+  for (let i = 0; i < derived.nList.length; i++) {
+    const nValue = derived.nList[i];
+    const ctx = computeBaseContext(derived, nValue, i, derived.formulaMode);
+    const baseZ = evaluateBaseChild('positive', 'positiveImaginary', ctx, nValue);
+    const transformed = sanitizeComplex(evaluateTransform(baseZ, 'sin', derived.k2, derived.l_func));
+    if (!transformed) continue;
+    seg.push(transformed);
+  }
+  if (seg.length >= 2) {
+    paths.push({
+      positions: buildLinePath(seg),
+      color: withBloom(baseRgb, style.lineBloom, styleBloomGain),
+      widthMul: Math.max(0.05, style.lineWidth),
+      opacityMul: clamp(style.lineOpacity, 0, 1),
+      pointCount: seg.length,
+      tag: { set: 'positive', child: 'positiveImaginary', transform: 'sin' },
+      isPrimary: true,
+    });
   }
 
   return paths;
@@ -520,6 +540,110 @@ export function computeEProof(f, k2, nList, P) {
 
 export function computeEProofFromState(params) {
   const derived = buildDerivedState(params);
-  const f = computeF(derived.k1, derived.k, +1);
+  const f = computeF(derived.k1, derived.k, +1, derived.formulaMode);
   return computeEProof(f, derived.k2, derived.nList, derived.P);
+}
+
+function percentile(values, p) {
+  if (!Array.isArray(values) || values.length === 0) return NaN;
+  const sorted = [...values].sort((a, b) => a - b);
+  const t = clamp(p, 0, 1) * (sorted.length - 1);
+  const lo = Math.floor(t);
+  const hi = Math.ceil(t);
+  if (lo === hi) return sorted[lo];
+  const w = t - lo;
+  return sorted[lo] * (1 - w) + sorted[hi] * w;
+}
+
+function summarizeErrors(errors) {
+  if (!Array.isArray(errors) || errors.length === 0) {
+    return { mean: NaN, p95: NaN, max: NaN, samples: 0 };
+  }
+  const samples = errors.length;
+  let sum = 0;
+  let max = -Infinity;
+  for (const e of errors) {
+    sum += e;
+    if (e > max) max = e;
+  }
+  return {
+    mean: sum / samples,
+    p95: percentile(errors, 0.95),
+    max,
+    samples,
+  };
+}
+
+function evaluateChildForMode(derived, setKey, childKey, nValue, nOrdinal, mode) {
+  const ctx = computeBaseContext(derived, nValue, nOrdinal, mode);
+  return sanitizeComplex(evaluateBaseChild(setKey, childKey, ctx, nValue));
+}
+
+export function evaluateBaseChildForMode(params, setKey, childKey, nValue, nOrdinal = 0, mode = 'tau') {
+  const derived = buildDerivedState(params);
+  return evaluateChildForMode(derived, setKey, childKey, nValue, nOrdinal, mode);
+}
+
+export function computeEquivalenceProofRows(params) {
+  const derived = buildDerivedState(params);
+  const rows = [];
+  const allErrors = [];
+  const nList = Array.isArray(derived.nList) ? derived.nList : [];
+
+  for (const setKey of SET_KEYS) {
+    for (const child of CHILDREN_BY_SET[setKey]) {
+      const errors = [];
+      for (let i = 0; i < nList.length; i++) {
+        const nValue = nList[i];
+        const tauVal = evaluateChildForMode(derived, setKey, child.key, nValue, i, 'tau');
+        const eulerVal = evaluateChildForMode(derived, setKey, child.key, nValue, i, 'euler');
+        if (!tauVal || !eulerVal) continue;
+        const ratio = cDiv(eulerVal, tauVal);
+        if (!ok(ratio)) continue;
+        const error = Math.hypot(ratio[0] - 1, ratio[1]);
+        if (!Number.isFinite(error)) continue;
+        errors.push(error);
+      }
+      const summary = summarizeErrors(errors);
+      allErrors.push(...errors);
+      rows.push({
+        setKey,
+        childKey: child.key,
+        childLabel: child.label,
+        samples: summary.samples,
+        meanError: summary.mean,
+        p95Error: summary.p95,
+        maxError: summary.max,
+      });
+    }
+  }
+
+  const aggregate = summarizeErrors(allErrors);
+  return {
+    rows,
+    summary: {
+      meanError: aggregate.mean,
+      p95Error: aggregate.p95,
+      maxError: aggregate.max,
+      samples: aggregate.samples,
+    },
+  };
+}
+
+export function computeProofPayloadFromState(params) {
+  const derived = buildDerivedState(params);
+  const eq = computeEquivalenceProofRows(derived);
+  const eProof = computeEProofFromState(derived);
+  const alpha = Number.isFinite(derived.alpha) ? derived.alpha : TAU;
+  const closureSteps = alpha === 0 ? NaN : (TAU / alpha);
+
+  return {
+    formulaMode: derived.formulaMode,
+    rows: eq.rows,
+    summary: eq.summary,
+    closureSteps,
+    eProof: eProof.value,
+    P: derived.P,
+    P1: eProof.P1,
+  };
 }

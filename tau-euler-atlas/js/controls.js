@@ -1,6 +1,6 @@
 import { TAU } from './complex.js';
 import {
-  computeEProofFromState,
+  computeProofPayloadFromState,
   EXPRESSION_CHILDREN,
   generateAllPoints,
   generateAlphaTrace,
@@ -9,6 +9,7 @@ import {
   setPointBudget,
 } from './generators.js';
 import {
+  buildDerivedState,
   applyDerivedState,
   advanceStepTraversal,
   shouldAdvanceStep,
@@ -35,11 +36,33 @@ import {
   setStarVisibility,
   setStarOpacity,
   setStarMotion,
+  setHeavyEffectsSuspended,
+  getCurrentFps,
   resetCamera,
   captureScreenshot,
   setExternalUpdate,
 } from './scene.js';
-import { animation, swapLinkEndpoints } from './animation.js';
+import { animation } from './animation.js';
+import {
+  PlaybackPrecomputeBuffer,
+  PRECOMPUTE_FPS,
+  resolvePrecomputeBufferFrames,
+  computePrefillMinDepth,
+  computeBufferProgress,
+  clampBufferTargetByMemory,
+  computeAdaptiveBuildBudget,
+  sanitizeBufferPhase,
+  DEFAULT_BUFFER_MAX_BYTES,
+} from './playback-buffer.js';
+import {
+  applyTraversalCommit,
+  applyZRangeCommit,
+  computeTraversalTBounds,
+  computeZRangeBounds,
+  normalizeInputText,
+  parseNumericInput,
+  resolveCommittedValue,
+} from './controls-commit.js';
 import {
   getTheme,
   getRenderMode,
@@ -53,6 +76,7 @@ import {
 import {
   defaultCinematicFx,
   resolveEffectiveCinematicFx,
+  resolveStyleBloomGain,
 } from './cinematic-fx.js';
 
 function clamp(v, min, max) {
@@ -63,21 +87,28 @@ export const state = {
   T: 2,
   T_start: 1.99999,
   T_stop: 2,
-  timeMode: 'animation',
+  timeMode: 'step',
   stepLoopMode: 'clamp',
   b: 36000000,
-  stepRate: 1,
   syncTStepToS: true,
+  precomputeBufferUnit: 'frames',
+  precomputeBufferValue: 24,
+  precomputeBufferFrames: 24,
+  bufferEnabled: false,
+  bufferPhase: 'idle',
+  bufferProgress: 0,
+  bufferTargetFrames: 24,
+  bufferNotice: '',
 
   Z: 710,
   Z_min: 0,
   Z_max: 710,
-  numStrands: 1,
   pathBudget: 500,
 
   l_base: 10,
   l_func: 10,
   kStepsInAlignmentsBool: 1,
+  formulaMode: 'tau',
 
   q_scale: 1,
   q_tauScale: 0,
@@ -91,6 +122,9 @@ export const state = {
   eProof: NaN,
   alpha: TAU,
   showAlpha: true,
+  hudPanelOpen: true,
+  proofPanelOpen: false,
+  proofResults: null,
 
   expressionModel: defaultExpressionModel(),
   cinematicFx: defaultCinematicFx(),
@@ -108,19 +142,18 @@ const TRANSFORM_LABELS = {
 
 let regenerateTimeout = null;
 let controlsContainer = null;
+let proofsContainer = null;
 let _lastFrameMs = performance.now();
 let _stepBounceDir = 1;
+let _bufferGenerationToken = 0;
+const MAX_BUFFER_BYTES = DEFAULT_BUFFER_MAX_BYTES;
 
-const linkSnapshotStore = new Map();
 const sliderUiSyncFns = [];
-const objectPathMap = new WeakMap();
-
-function snapValue(v, min, max, step) {
-  const clamped = clamp(v, min, max);
-  if (!Number.isFinite(step) || step <= 0) return clamped;
-  const snapped = Math.round((clamped - min) / step) * step + min;
-  return clamp(snapped, min, max);
-}
+const sliderBoundsSyncFns = [];
+const playbackBuffer = new PlaybackPrecomputeBuffer();
+let lastMathSignature = '';
+let lastProofSignature = '';
+let pendingRenderPayload = null;
 
 function decimalsForStep(step) {
   if (!Number.isFinite(step) || step >= 1) return 0;
@@ -130,58 +163,20 @@ function decimalsForStep(step) {
   return dot >= 0 ? (s.length - dot - 1) : 0;
 }
 
-function seedObjectPathMap() {
-  objectPathMap.set(state, 'state');
-  objectPathMap.set(state.expressionModel.parent, 'expression.parent');
-  for (const key of TRANSFORM_KEYS) {
-    objectPathMap.set(state.expressionModel.transforms[key], `expression.transforms.${key}`);
-  }
-  for (const setKey of SET_KEYS) {
-    objectPathMap.set(state.expressionModel.sets[setKey], `expression.sets.${setKey}`);
-    for (const child of EXPRESSION_CHILDREN[setKey]) {
-      objectPathMap.set(state.expressionModel.children[child.key], `expression.children.${child.key}`);
-    }
-  }
-  objectPathMap.set(state.cinematicFx.master, 'cinematic.master');
-  objectPathMap.set(state.cinematicFx.points, 'cinematic.points');
-  objectPathMap.set(state.cinematicFx.primaryLines, 'cinematic.primaryLines');
-  objectPathMap.set(state.cinematicFx.atlasLines, 'cinematic.atlasLines');
-  objectPathMap.set(state.cinematicFx.ghostTraces, 'cinematic.ghostTraces');
-  objectPathMap.set(state.cinematicFx.stars, 'cinematic.stars');
-  objectPathMap.set(state.cinematicFx.bloom, 'cinematic.bloom');
-  objectPathMap.set(state.cinematicFx.fog, 'cinematic.fog');
-  objectPathMap.set(state.cinematicFx.tone, 'cinematic.tone');
+function refreshSliderBounds() {
+  for (const sync of sliderBoundsSyncFns) sync();
 }
 
-function getLinkKey(obj, key, index = null, label = '') {
-  const base = objectPathMap.get(obj) || 'unknown';
-  const idx = index !== null ? `[${index}]` : '';
-  return `${base}.${key}${idx}:${label}`;
-}
-
-function rememberLink(linkKey, link) {
-  linkSnapshotStore.set(linkKey, {
-    baseValue: link.baseValue,
-    endValue: link.endValue,
-    source: link.source,
-    direction: link.direction,
-    easing: link.easing,
-  });
-}
-
-function restoreLink(linkKey, link, min, max, step) {
-  const snap = linkSnapshotStore.get(linkKey);
-  if (!snap) return;
-  if (Number.isFinite(snap.baseValue)) link.baseValue = snapValue(snap.baseValue, min, max, step);
-  if (Number.isFinite(snap.endValue)) link.endValue = snapValue(snap.endValue, min, max, step);
-  else link.endValue = null;
-  link.source = snap.source === 'anim' || snap.source === 'step' ? snap.source : 'off';
-  link.direction = snap.direction < 0 ? -1 : 1;
-  link.easing = typeof snap.easing === 'string' ? snap.easing : 'linear';
+function pushCommitStatus(row, status) {
+  row.dataset.commitStatus = status;
+  if (row._commitStatusTimer) clearTimeout(row._commitStatusTimer);
+  row._commitStatusTimer = setTimeout(() => {
+    if (row.dataset.commitStatus === status) row.dataset.commitStatus = '';
+  }, 700);
 }
 
 export function deriveState() {
-  applyDerivedState(state);
+  return applyDerivedState(state);
 }
 
 function getTSliderStep() {
@@ -195,112 +190,413 @@ function setText(id, text) {
   if (el) el.textContent = text;
 }
 
+function emptyPointCloudData() {
+  return {
+    positions: new Float32Array(0),
+    colors: new Float32Array(0),
+    sizes: new Float32Array(0),
+    count: 0,
+    meta: null,
+    budget: 0,
+  };
+}
+
+function computePointBudget() {
+  return isPerformance() ? 50_000 : 200_000;
+}
+
+function computeMathSignature(derived, budget) {
+  const renderMode = getRenderMode();
+  const theme = getTheme();
+  const styleBloomGain = resolveStyleBloomGain({ renderMode, theme });
+  return JSON.stringify({
+    budget,
+    renderMode,
+    theme,
+    styleBloomGain,
+    T_start: derived.T_start,
+    T_stop: derived.T_stop,
+    Z: derived.Z,
+    Z_min: derived.Z_min,
+    Z_max: derived.Z_max,
+    formulaMode: derived.formulaMode,
+    pathBudget: derived.pathBudget,
+    l_base: derived.l_base,
+    l_func: derived.l_func,
+    kStepsInAlignmentsBool: derived.kStepsInAlignmentsBool,
+    q_scale: derived.q_scale,
+    q_tauScale: derived.q_tauScale,
+    q_bool: derived.q_bool,
+    q_correction: derived.q_correction,
+    k2: derived.k2,
+    k3: derived.k3,
+    alpha: derived.alpha,
+    P: derived.P,
+    b: derived.b,
+    stepLoopMode: derived.stepLoopMode,
+    syncTStepToS: derived.syncTStepToS,
+    precomputeBufferFrames: derived.precomputeBufferFrames,
+    expressionModel: derived.expressionModel,
+  });
+}
+
+function buildRenderPayload(derived, budget, signature) {
+  const styleBloomGain = resolveStyleBloomGain({
+    renderMode: getRenderMode(),
+    theme: getTheme(),
+  });
+  const renderParams = { ...derived, styleBloomGain };
+  setPointBudget(budget);
+  const points = generateAllPoints(renderParams);
+  const atlasPaths = generateAtlasPaths(renderParams);
+
+  const alphaNotTau = Math.abs(derived.alpha - TAU) > 0.001;
+  const tauTrace = generateTauTrace(256, derived.k);
+  const alphaTrace = alphaNotTau ? generateAlphaTrace(derived.alpha, 256, derived.k) : null;
+
+  return {
+    signature,
+    derived,
+    points,
+    atlasPaths,
+    tauTrace,
+    alphaTrace,
+    showAlpha: alphaNotTau,
+    bounceDir: _stepBounceDir,
+  };
+}
+
+function getRequestedBufferFrames(derived = state) {
+  return Math.max(1, Math.floor(
+    Number.isFinite(derived.precomputeBufferFrames)
+      ? derived.precomputeBufferFrames
+      : (Number.isFinite(derived.precomputeBufferValue) ? derived.precomputeBufferValue : 24),
+  ));
+}
+
+function applyBufferTargetWithMemoryGuard(derived = state) {
+  const requested = getRequestedBufferFrames(derived);
+  const guarded = clampBufferTargetByMemory(requested, playbackBuffer.lastPayloadBytes, MAX_BUFFER_BYTES);
+  state.bufferTargetFrames = guarded.targetFrames;
+  playbackBuffer.setTargetFrames(guarded.targetFrames);
+  state.bufferNotice = guarded.reduced
+    ? `memory cap ${guarded.targetFrames}/${requested}`
+    : '';
+  return guarded.targetFrames;
+}
+
+function setBufferPhase(phase) {
+  const next = sanitizeBufferPhase(phase);
+  state.bufferPhase = next;
+  if (next === 'idle') state.bufferProgress = 0;
+  if (next === 'background') state.bufferProgress = 1;
+  setHeavyEffectsSuspended(state.bufferEnabled && next === 'prefill');
+}
+
+function beginHardPrefill(derived, signature, reason = 'prefill', resetStats = false) {
+  _bufferGenerationToken += 1;
+  applyBufferTargetWithMemoryGuard(derived);
+  playbackBuffer.reseed({
+    T: derived.T,
+    bounceDir: _stepBounceDir,
+    signature,
+    resetStats,
+  });
+  setBufferPhase('prefill');
+  state.bufferProgress = 0;
+  state.bufferNotice = reason ? `${reason}${state.bufferNotice ? ` | ${state.bufferNotice}` : ''}` : state.bufferNotice;
+  updateBufferStatus();
+  return _bufferGenerationToken;
+}
+
+function updateBufferStatus() {
+  const target = Math.max(1, Math.floor(Number.isFinite(state.bufferTargetFrames) ? state.bufferTargetFrames : 1));
+  const phase = sanitizeBufferPhase(state.bufferPhase);
+  const depth = playbackBuffer.depth;
+  const mode = state.bufferEnabled ? 'ON' : 'OFF';
+  const pct = state.bufferEnabled
+    ? Math.round(clamp(state.bufferProgress, 0, 1) * 100)
+    : 0;
+  const body = state.bufferEnabled
+    ? `${mode} ${phase} ${depth}/${target} ${pct}% h:${playbackBuffer.hits} m:${playbackBuffer.misses}`
+    : `${mode} live`;
+  const text = state.bufferNotice ? `${body} | ${state.bufferNotice}` : body;
+  setText('buffer-status-panel', text);
+  setText('buffer-status-display', text);
+  setText('buffer-mode-display', mode);
+  setText('buffer-mode-display-hud', mode);
+
+  const overlay = document.getElementById('buffer-overlay');
+  if (overlay) {
+    const active = state.bufferEnabled && phase === 'prefill';
+    overlay.classList.toggle('active', active);
+    overlay.setAttribute('aria-hidden', active ? 'false' : 'true');
+    const hint = active ? ' · quality mode active' : '';
+    setText('buffer-overlay-detail', `depth ${depth}/${target} · ${pct}%${hint}`);
+  }
+}
+
+function applyRenderPayload(payload, fx) {
+  Object.assign(state, payload.derived);
+
+  const suspendHeavy = state.bufferEnabled && state.bufferPhase === 'prefill';
+  setBloomEnabled(!suspendHeavy && fx.bloom.enabled);
+  setBloomStrength(suspendHeavy ? 0 : fx.bloom.strength);
+  setBloomRadius(suspendHeavy ? 0 : fx.bloom.radius);
+  setBloomThreshold(fx.bloom.threshold);
+  setToneEnabled(fx.tone.enabled);
+  setToneExposure(fx.tone.exposure);
+  setFogEnabled(!suspendHeavy && fx.fog.enabled);
+  setFogDensity(suspendHeavy ? 0 : fx.fog.density);
+  setStarVisibility(!suspendHeavy && fx.stars.enabled);
+  setStarOpacity(suspendHeavy ? 0 : fx.stars.opacity);
+  setStarMotion(
+    suspendHeavy ? 0 : fx.stars.rotX,
+    suspendHeavy ? 0 : fx.stars.rotY,
+    suspendHeavy ? 0 : fx.stars.drift,
+  );
+
+  const pointsEnabled = fx.points.enabled && fx.points.opacity > 0.001 && state.expressionModel.parent.enabled;
+  if (pointsEnabled) {
+    updatePointCloud(payload.points, fx.points.size * fx.points.k3, fx.points.opacity);
+    if (payload.points.meta) {
+      const m = payload.points.meta;
+      const tauK = Math.pow(TAU, state.k);
+      setText('T-display', state.T.toFixed(6));
+      setText('k-display', state.k.toFixed(6));
+      setText('k1-display', state.k1.toFixed(6));
+      setText('q-display', state.q.toFixed(6));
+      setText('d-display', state.d_CorrectionFunction.toFixed(6));
+      setText('lbase-display', `${state.l_base.toFixed(3)} / ${state.l_func.toFixed(3)}`);
+      setText('s-display', state.s.toExponential(2));
+      setText('tauk-display', tauK.toFixed(6));
+      setText('f-display', `(${m.f[0].toFixed(3)}, ${m.f[1].toFixed(3)}i)`);
+      setText('compute-display', `${m.computeMs.toFixed(0)}ms`);
+      setText('budget-display', `${payload.points.count.toLocaleString()} / ${payload.points.budget.toLocaleString()}`);
+    }
+  } else {
+    updatePointCloud(emptyPointCloudData(), 0, 0);
+    setText('budget-display', '-');
+  }
+
+  updateStrandPaths(null, 0, 0, false);
+
+  const lineEnabled = fx.atlasLines.enabled && fx.atlasLines.opacity > 0.001 && state.expressionModel.parent.enabled;
+  if (lineEnabled) {
+    updateAtlasPaths(payload.atlasPaths, fx.atlasLines.width, fx.atlasLines.opacity);
+    setText('atlas-paths-display', `${payload.atlasPaths.length} / ${state.pathBudget}`);
+    setText('atlas-paths-display-panel', `${payload.atlasPaths.length} / ${state.pathBudget}`);
+
+    if (payload.atlasPaths.length > 0) {
+      const labels = new Set();
+      for (const p of payload.atlasPaths) {
+        if (!p.tag) continue;
+        labels.add(`${p.tag.set}.${p.tag.child}.${p.tag.transform}`);
+      }
+      setText('atlas-expr-display', [...labels].slice(0, 12).join('\n'));
+    } else {
+      setText('atlas-expr-display', '-');
+    }
+  } else {
+    updateAtlasPaths(null, 0, 0);
+    setText('atlas-paths-display', '-');
+    setText('atlas-paths-display-panel', '-');
+    setText('atlas-expr-display', '-');
+  }
+
+  const ghostEnabled = fx.ghostTraces.enabled && state.expressionModel.parent.enabled;
+  if (ghostEnabled) {
+    updateGhostTraces(payload.tauTrace, payload.alphaTrace, fx.ghostTraces.showAlpha && payload.showAlpha);
+  } else {
+    updateGhostTraces(null, null, false);
+  }
+  updateOrbitCircle(state.k);
+  setText('formula-display', state.formulaMode === 'euler' ? 'Euler' : 'Tau');
+}
+
+function formatProofNumber(v, digits = 6) {
+  return Number.isFinite(v) ? Number(v).toExponential(digits) : '-';
+}
+
+function computeProofSignature(derived) {
+  return JSON.stringify({
+    open: !!derived.proofPanelOpen,
+    formulaMode: derived.formulaMode,
+    T: derived.T,
+    Z_min: derived.Z_min,
+    Z_max: derived.Z_max,
+    q_scale: derived.q_scale,
+    q_tauScale: derived.q_tauScale,
+    q_bool: derived.q_bool,
+    q_correction: derived.q_correction,
+    k: derived.k,
+    k1: derived.k1,
+    k2: derived.k2,
+    P: derived.P,
+    alpha: derived.alpha,
+  });
+}
+
+function renderProofResults(results) {
+  if (!results || typeof results !== 'object') return;
+  const rows = Array.isArray(results.rows) ? results.rows : [];
+
+  setText('proof-summary-mean', formatProofNumber(results.summary?.meanError, 4));
+  setText('proof-summary-p95', formatProofNumber(results.summary?.p95Error, 4));
+  setText('proof-summary-max', formatProofNumber(results.summary?.maxError, 4));
+  setText('proof-summary-samples', Number.isFinite(results.summary?.samples) ? `${results.summary.samples}` : '-');
+  setText('proof-closure', Number.isFinite(results.closureSteps) ? `${results.closureSteps.toFixed(6)} steps` : '-');
+  setText('proof-p1', Number.isFinite(results.P1) ? results.P1.toFixed(6) : '-');
+  setText('proof-eproof', formatProofNumber(results.eProof, 6));
+
+  const body = document.getElementById('proof-rows-body');
+  if (!body) return;
+
+  body.innerHTML = '';
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${row.setKey}</td>
+      <td>${row.childKey}</td>
+      <td>${Number.isFinite(row.samples) ? row.samples : 0}</td>
+      <td>${formatProofNumber(row.meanError, 3)}</td>
+      <td>${formatProofNumber(row.p95Error, 3)}</td>
+      <td>${formatProofNumber(row.maxError, 3)}</td>
+    `;
+    body.appendChild(tr);
+  }
+}
+
+function updateProofPayload(force = false) {
+  if (!state.proofPanelOpen) {
+    lastProofSignature = '';
+    return;
+  }
+
+  const derived = deriveState();
+  const signature = computeProofSignature(derived);
+  if (!force && signature === lastProofSignature) return;
+
+  lastProofSignature = signature;
+  const payload = computeProofPayloadFromState(derived);
+  state.proofResults = payload;
+  state.P1 = payload.P1;
+  state.eProof = payload.eProof;
+  renderProofResults(payload);
+}
+
+function reseedPlaybackBuffer(derived, signature, resetStats = false) {
+  applyBufferTargetWithMemoryGuard(derived);
+  playbackBuffer.reseed({
+    T: derived.T,
+    bounceDir: _stepBounceDir,
+    signature,
+    resetStats,
+  });
+}
+
+function fillPlaybackBuffer(derived, signature, budget, maxBuild, generationToken = _bufferGenerationToken) {
+  applyBufferTargetWithMemoryGuard(derived);
+  return playbackBuffer.fill({
+    signature,
+    generation: generationToken,
+    maxBuild,
+    onPayloadBuilt: (_, bytes) => {
+      if (!Number.isFinite(bytes) || bytes <= 0) return;
+      const guarded = clampBufferTargetByMemory(state.bufferTargetFrames, bytes, MAX_BUFFER_BYTES);
+      if (guarded.reduced) {
+        state.bufferTargetFrames = guarded.targetFrames;
+        playbackBuffer.setTargetFrames(guarded.targetFrames);
+        state.bufferNotice = `memory cap ${guarded.targetFrames}`;
+      }
+    },
+    buildNext: ({ T, bounceDir }) => {
+      const advance = advanceStepTraversal({
+        T,
+        T_start: derived.T_start,
+        T_stop: derived.T_stop,
+        dtSeconds: 1 / PRECOMPUTE_FPS,
+        s: derived.s,
+        stepLoopMode: derived.stepLoopMode,
+        bounceDir,
+      });
+      const nextBounceDir = derived.stepLoopMode === 'bounce' ? advance.bounceDir : 1;
+      const nextDerived = buildDerivedState({ ...derived, T: advance.T });
+      const payload = buildRenderPayload(nextDerived, budget, signature);
+      payload.bounceDir = nextBounceDir;
+      return {
+        payload,
+        nextT: nextDerived.T,
+        nextBounceDir,
+      };
+    },
+  });
+}
+
+function syncSignatureAndBufferState(derived, signature, reason = 'math') {
+  if (signature === lastMathSignature) return;
+  lastMathSignature = signature;
+  if (state.bufferEnabled) {
+    beginHardPrefill(derived, signature, `${reason} prefill`, true);
+    return;
+  }
+  setBufferPhase('idle');
+  state.bufferNotice = '';
+  playbackBuffer.invalidate(signature, true);
+  reseedPlaybackBuffer(derived, signature, true);
+}
+
 export function regenerate(isHeavy = false) {
   clearTimeout(regenerateTimeout);
   const delay = isHeavy ? 48 : 16;
 
   regenerateTimeout = setTimeout(() => {
-    deriveState();
-    const stepLinkedChanged = animation.applyStepFromWindow(state.T, state.T_start, state.T_stop);
-    if (stepLinkedChanged) deriveState();
-    const fx = resolveEffectiveCinematicFx(state.cinematicFx, { renderMode: getRenderMode() });
-
-    setBloomEnabled(fx.bloom.enabled);
-    setBloomStrength(fx.bloom.strength);
-    setBloomRadius(fx.bloom.radius);
-    setBloomThreshold(fx.bloom.threshold);
-    setToneEnabled(fx.tone.enabled);
-    setToneExposure(fx.tone.exposure);
-    setFogEnabled(fx.fog.enabled);
-    setFogDensity(fx.fog.density);
-    setStarVisibility(fx.stars.enabled);
-    setStarOpacity(fx.stars.opacity);
-    setStarMotion(fx.stars.rotX, fx.stars.rotY, fx.stars.drift);
-
-    const budget = isPerformance() ? 50_000 : 200_000;
-    setPointBudget(budget);
-
-    const pointsEnabled = fx.points.enabled && fx.points.opacity > 0.001 && state.expressionModel.parent.enabled;
-    if (pointsEnabled) {
-      const data = generateAllPoints(state);
-      updatePointCloud(data, fx.points.size * fx.points.k3, fx.points.opacity);
-      if (data.meta) {
-        const m = data.meta;
-        const tauK = Math.pow(TAU, state.k);
-        setText('T-display', state.T.toFixed(6));
-        setText('k-display', state.k.toFixed(6));
-        setText('k1-display', state.k1.toFixed(6));
-        setText('q-display', state.q.toFixed(6));
-        setText('d-display', state.d_CorrectionFunction.toFixed(6));
-        setText('lbase-display', `${state.l_base.toFixed(3)} / ${state.l_func.toFixed(3)}`);
-        setText('s-display', state.s.toExponential(2));
-        setText('tauk-display', tauK.toFixed(6));
-        setText('f-display', `(${m.f[0].toFixed(3)}, ${m.f[1].toFixed(3)}i)`);
-        setText('compute-display', `${m.computeMs.toFixed(0)}ms`);
-        setText('budget-display', `${data.count.toLocaleString()} / ${data.budget.toLocaleString()}`);
-      }
+    const derived = deriveState();
+    refreshSliderBounds();
+    const fx = resolveEffectiveCinematicFx(state.cinematicFx, {
+      renderMode: getRenderMode(),
+      theme: getTheme(),
+    });
+    const budget = computePointBudget();
+    const signature = computeMathSignature(derived, budget);
+    syncSignatureAndBufferState(derived, signature, 'regenerate');
+    if (!state.bufferEnabled) {
+      setBufferPhase('idle');
+      state.bufferTargetFrames = derived.precomputeBufferFrames;
+      state.bufferNotice = '';
+      playbackBuffer.setTargetFrames(derived.precomputeBufferFrames);
     } else {
-      updatePointCloud({
-        positions: new Float32Array(0),
-        colors: new Float32Array(0),
-        sizes: new Float32Array(0),
-        count: 0,
-      }, 0, 0);
-      setText('budget-display', '—');
+      applyBufferTargetWithMemoryGuard(derived);
     }
 
-    updateStrandPaths(null, 0, 0, false);
-
-    const lineEnabled = fx.atlasLines.enabled && fx.atlasLines.opacity > 0.001 && state.expressionModel.parent.enabled;
-    if (lineEnabled) {
-      const atlasPaths = generateAtlasPaths(state);
-      updateAtlasPaths(atlasPaths, fx.atlasLines.width, fx.atlasLines.opacity);
-      setText('atlas-paths-display', `${atlasPaths.length} / ${state.pathBudget}`);
-      setText('atlas-paths-display-panel', `${atlasPaths.length} / ${state.pathBudget}`);
-
-      if (atlasPaths.length > 0) {
-        const labels = new Set();
-        for (const p of atlasPaths) {
-          if (!p.tag) continue;
-          labels.add(`${p.tag.set}·${p.tag.child}·${p.tag.transform}`);
-        }
-        setText('atlas-expr-display', [...labels].slice(0, 12).join('\n'));
-      } else {
-        setText('atlas-expr-display', '—');
-      }
-    } else {
-      updateAtlasPaths(null, 0, 0);
-      setText('atlas-paths-display', '—');
-      setText('atlas-paths-display-panel', '—');
-      setText('atlas-expr-display', '—');
+    if (state.bufferEnabled && state.bufferPhase === 'prefill') {
+      updateProofPayload();
+      updateBufferStatus();
+      return;
     }
 
-    const alphaNotTau = Math.abs(state.alpha - TAU) > 0.001;
-    const ghostEnabled = fx.ghostTraces.enabled && state.expressionModel.parent.enabled;
-    if (ghostEnabled) {
-      const tauTrace = generateTauTrace(256, state.k);
-      const alphaTrace = alphaNotTau ? generateAlphaTrace(state.alpha, 256, state.k) : null;
-      updateGhostTraces(tauTrace, alphaTrace, fx.ghostTraces.showAlpha && alphaNotTau);
-    } else {
-      updateGhostTraces(null, null, false);
+    let payload = pendingRenderPayload;
+    pendingRenderPayload = null;
+    if (!payload || payload.signature !== signature || Math.abs(payload.derived.T - derived.T) > 1e-12) {
+      payload = buildRenderPayload(derived, budget, signature);
+      payload.bounceDir = _stepBounceDir;
     }
-    updateOrbitCircle(state.k);
+    applyRenderPayload(payload, fx);
+    updateProofPayload();
+    updateBufferStatus();
 
-    const stepsToClose = (TAU / state.alpha).toFixed(4);
-    const closureMsg = alphaNotTau ? `α: ${stepsToClose} steps` : 'α = τ → 1 step = 1 turn';
-    setText('closure-display', closureMsg);
-    setText('closure-display-panel', closureMsg);
-
-    const proof = computeEProofFromState(state);
-    state.P1 = proof.P1;
-    state.eProof = proof.value;
-    const eProofMsg = Number.isFinite(state.eProof) ? state.eProof.toFixed(6) : '—';
-    setText('eproof-display', eProofMsg);
-    setText('eproof-display-panel', eProofMsg);
-    setText('p1-display-panel', Number.isFinite(state.P1) ? state.P1.toFixed(6) : '—');
+    if (state.bufferEnabled && !animation.playing && state.bufferPhase !== 'prefill') {
+      const bgBudget = computeAdaptiveBuildBudget({
+        phase: 'background',
+        fps: getCurrentFps(),
+        depth: playbackBuffer.depth,
+        target: state.bufferTargetFrames,
+      });
+      fillPlaybackBuffer(derived, signature, budget, bgBudget);
+      updateBufferStatus();
+    }
   }, delay);
 }
-
 class UIBuilder {
   constructor(container) {
     this.container = container;
@@ -390,10 +686,13 @@ class UIBuilder {
     const {
       fmt,
       onChange,
+      onCommit,
       heavy = false,
       id = null,
       index = null,
-      linkKey = null,
+      commitMode = 'snap',
+      dynamicBounds = null,
+      normalizeInput = normalizeInputText,
     } = options;
     const row = document.createElement('div');
     row.className = 'slider-row';
@@ -401,9 +700,19 @@ class UIBuilder {
     lbl.className = 'slider-label';
     lbl.textContent = label;
 
-    const resolvedLinkKey = linkKey || getLinkKey(obj, key, index, label);
-    const link = animation.registerLink(obj, key, index, { min, max, step });
-    restoreLink(resolvedLinkKey, link, min, max, step);
+    let activeBounds = { min, max, step };
+    const getCurrentBounds = () => {
+      if (typeof dynamicBounds !== 'function') return { ...activeBounds };
+      const next = dynamicBounds() || {};
+      const nextMin = Number.isFinite(next.min) ? next.min : activeBounds.min;
+      const nextMax = Number.isFinite(next.max) ? next.max : activeBounds.max;
+      const nextStep = Number.isFinite(next.step) ? next.step : activeBounds.step;
+      const orderedMin = Math.min(nextMin, nextMax);
+      const orderedMax = Math.max(nextMin, nextMax);
+      return { min: orderedMin, max: orderedMax, step: nextStep };
+    };
+
+    activeBounds = getCurrentBounds();
 
     const getBoundValue = () => {
       if (index !== null) return Number(obj[key][index]);
@@ -415,20 +724,13 @@ class UIBuilder {
       else obj[key] = v;
     };
 
-    if (link.source === 'off' && Number.isFinite(link.baseValue)) {
-      setBoundValue(link.baseValue);
-    } else if (!Number.isFinite(link.baseValue)) {
-      link.baseValue = snapValue(getBoundValue(), min, max, step);
-    }
+    if (!Number.isFinite(getBoundValue())) setBoundValue(activeBounds.min);
 
     const format = (v) => {
       if (fmt) return fmt(v);
-      if (step >= 1) return `${Math.round(v)}`;
-      return Number(v).toFixed(Math.min(8, Math.max(1, decimalsForStep(step))));
+      if (activeBounds.step >= 1) return `${Math.round(v)}`;
+      return Number(v).toFixed(Math.min(8, Math.max(1, decimalsForStep(activeBounds.step))));
     };
-
-    const linkBtn = document.createElement('button');
-    linkBtn.className = 'link-toggle ctrl-interactive';
 
     const trackWrap = document.createElement('div');
     trackWrap.className = 'slider-track-wrap';
@@ -436,88 +738,58 @@ class UIBuilder {
     const inputBase = document.createElement('input');
     inputBase.type = 'range';
     inputBase.className = 'slider-input base-thumb';
-    inputBase.min = String(min);
-    inputBase.max = String(max);
-    inputBase.step = String(step);
-    inputBase.value = String(link.baseValue);
+    inputBase.min = String(activeBounds.min);
+    inputBase.max = String(activeBounds.max);
+    inputBase.step = String(activeBounds.step);
+    inputBase.value = String(getBoundValue());
     if (id) inputBase.id = id;
-
-    const inputTarget = document.createElement('input');
-    inputTarget.type = 'range';
-    inputTarget.className = 'slider-input target-thumb hidden';
-    inputTarget.min = String(min);
-    inputTarget.max = String(max);
-    inputTarget.step = String(step);
-
     trackWrap.appendChild(inputBase);
-    trackWrap.appendChild(inputTarget);
 
     const valueCluster = document.createElement('div');
     valueCluster.className = 'slider-value-cluster';
     const baseChip = document.createElement('button');
     baseChip.className = 'value-chip ctrl-interactive';
-    const targetChip = document.createElement('button');
-    targetChip.className = 'value-chip target ctrl-interactive hidden';
-    const swapBtn = document.createElement('button');
-    swapBtn.className = 'value-action value-swap ctrl-interactive hidden';
-    swapBtn.textContent = '↔';
-    const dirBtn = document.createElement('button');
-    dirBtn.className = 'value-action value-dir ctrl-interactive';
-
     valueCluster.appendChild(baseChip);
-    valueCluster.appendChild(targetChip);
-    valueCluster.appendChild(swapBtn);
-    valueCluster.appendChild(dirBtn);
 
-    const updateLinkButton = () => {
-      const src = link.source === 'anim' || link.source === 'step' ? link.source : 'off';
-      const labelText = src === 'anim' ? 'anim' : (src === 'step' ? 'step' : 'off');
-      linkBtn.textContent = labelText;
-      linkBtn.classList.toggle('active', src !== 'off');
-      row.dataset.linkSource = src;
-      linkBtn.title = `Link source: ${labelText}. Click to cycle Off -> Anim -> Step`;
+    const syncBounds = () => {
+      const next = getCurrentBounds();
+      activeBounds = next;
+      inputBase.min = String(next.min);
+      inputBase.max = String(next.max);
+      inputBase.step = String(next.step);
     };
-
-    const updateDirectionButton = () => {
-      const dir = link.direction < 0 ? -1 : 1;
-      dirBtn.textContent = dir > 0 ? '→' : '←';
-      dirBtn.title = dir > 0 ? 'Direction: base -> end' : 'Direction: end -> base';
-    };
+    sliderBoundsSyncFns.push(syncBounds);
 
     const syncUI = () => {
-      inputBase.value = String(link.baseValue);
-      baseChip.textContent = format(link.baseValue);
-      const hasEnd = Number.isFinite(link.endValue);
-      inputTarget.classList.toggle('hidden', !hasEnd);
-      targetChip.classList.toggle('hidden', !hasEnd);
-      swapBtn.classList.toggle('hidden', !hasEnd);
-      if (hasEnd) {
-        inputTarget.value = String(link.endValue);
-        targetChip.textContent = format(link.endValue);
-      }
-      updateLinkButton();
-      updateDirectionButton();
+      syncBounds();
+      const current = getBoundValue();
+      inputBase.value = String(current);
+      baseChip.textContent = format(current);
     };
 
     sliderUiSyncFns.push(syncUI);
 
-    const commitBaseValue = (raw, trigger = true) => {
-      const next = snapValue(Number(raw), min, max, step);
-      if (!Number.isFinite(next)) return;
-      link.baseValue = next;
-      setBoundValue(next);
-      if (trigger && onChange) onChange(next);
-      rememberLink(resolvedLinkKey, link);
-      syncUI();
-      regenerate(heavy);
-    };
+    const commitBaseValue = (raw, opts = {}) => {
+      const { triggerChange = true, mode = commitMode, source = 'unknown' } = opts;
+      const resolved = resolveCommittedValue(raw, activeBounds, mode);
+      if (!resolved.ok) return;
 
-    const commitEndValue = (raw) => {
-      const next = snapValue(Number(raw), min, max, step);
-      if (!Number.isFinite(next)) return;
-      link.endValue = next;
-      rememberLink(resolvedLinkKey, link);
+      let next = resolved.value;
+      let status = resolved.status;
+      if (typeof onCommit === 'function') {
+        const commitResult = onCommit(next, { source, status });
+        if (commitResult && typeof commitResult === 'object') {
+          if (Number.isFinite(commitResult.value)) next = commitResult.value;
+          if (typeof commitResult.status === 'string') status = commitResult.status;
+        }
+      }
+
+      setBoundValue(next);
+
+      if (triggerChange && onChange) onChange(next);
+      refreshSliderBounds();
       syncUI();
+      pushCommitStatus(row, status);
       regenerate(heavy);
     };
 
@@ -544,7 +816,7 @@ class UIBuilder {
           chip.textContent = original;
           return;
         }
-        const parsed = Number(edit.value);
+        const parsed = parseNumericInput(edit.value, normalizeInput);
         if (Number.isFinite(parsed)) setter(parsed);
         else syncUI();
       };
@@ -556,75 +828,20 @@ class UIBuilder {
       edit.addEventListener('blur', () => finalize(true));
     };
 
-    inputBase.addEventListener('input', (e) => {
-      const raw = Number(inputBase.value);
-      if (e.shiftKey) {
-        commitEndValue(raw);
-        inputBase.value = String(link.baseValue);
-        return;
-      }
-      commitBaseValue(raw);
-    });
-
-    inputTarget.addEventListener('input', () => {
-      commitEndValue(Number(inputTarget.value));
-    });
-
-    trackWrap.addEventListener('click', (e) => {
-      if (!e.shiftKey) return;
-      const rect = trackWrap.getBoundingClientRect();
-      if (rect.width <= 0) return;
-      const ratio = clamp((e.clientX - rect.left) / rect.width, 0, 1);
-      const raw = min + ((max - min) * ratio);
-      commitEndValue(raw);
-      e.preventDefault();
-    });
-
-    linkBtn.addEventListener('click', () => {
-      animation.cycleLinkSource(link, { min, max, step });
-      rememberLink(resolvedLinkKey, link);
-      syncUI();
-      regenerate(heavy);
-    });
-
-    swapBtn.addEventListener('click', () => {
-      if (!swapLinkEndpoints(link)) return;
-      setBoundValue(link.baseValue);
-      if (onChange) onChange(link.baseValue);
-      rememberLink(resolvedLinkKey, link);
-      syncUI();
-      regenerate(heavy);
-    });
-
-    dirBtn.addEventListener('click', () => {
-      link.direction = link.direction < 0 ? 1 : -1;
-      rememberLink(resolvedLinkKey, link);
-      syncUI();
-      regenerate(heavy);
+    inputBase.addEventListener('input', () => {
+      commitBaseValue(Number(inputBase.value), { mode: 'snap', source: 'drag' });
     });
 
     baseChip.addEventListener('click', () => {
       startInlineEdit(
         baseChip,
-        () => link.baseValue,
-        (v) => commitBaseValue(v),
+        () => getBoundValue(),
+        (v) => commitBaseValue(v, { mode: commitMode, source: 'text' }),
       );
     });
-
-    targetChip.addEventListener('click', () => {
-      if (!Number.isFinite(link.endValue)) return;
-      startInlineEdit(
-        targetChip,
-        () => link.endValue,
-        (v) => commitEndValue(v),
-      );
-    });
-
-    rememberLink(resolvedLinkKey, link);
     syncUI();
 
     row.appendChild(lbl);
-    row.appendChild(linkBtn);
     row.appendChild(trackWrap);
     row.appendChild(valueCluster);
     this._parent().appendChild(row);
@@ -706,14 +923,22 @@ class UIBuilder {
 }
 
 function bindModeButtons(container, prefix, options, currentValue, onSet) {
+  const setActive = () => {
+    for (const opt of options) {
+      const btn = container.querySelector(`#${prefix}-${opt.value}`);
+      if (!btn) continue;
+      btn.classList.toggle('active', currentValue() === opt.value);
+    }
+  };
+
+  setActive();
   for (const opt of options) {
     const btn = container.querySelector(`#${prefix}-${opt.value}`);
     if (!btn) continue;
-    btn.classList.toggle('active', currentValue() === opt.value);
     btn.addEventListener('click', () => {
       onSet(opt.value);
+      setActive();
       regenerate();
-      buildControls();
     });
   }
 }
@@ -768,19 +993,106 @@ function addSetAndChildControls(b) {
   }
 }
 
+function buildProofPanel() {
+  if (!proofsContainer) proofsContainer = document.getElementById('proofs-panel');
+  if (!proofsContainer) return;
+
+  proofsContainer.innerHTML = '';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'accordion-panel';
+  const header = document.createElement('div');
+  const collapsed = state.proofPanelOpen !== true;
+  header.className = `accordion-header${collapsed ? ' collapsed' : ''}`;
+  header.textContent = 'Proofs';
+  const body = document.createElement('div');
+  body.className = `accordion-body${collapsed ? ' collapsed' : ''}`;
+
+  header.addEventListener('click', () => {
+    header.classList.toggle('collapsed');
+    body.classList.toggle('collapsed');
+    state.proofPanelOpen = !header.classList.contains('collapsed');
+    if (state.proofPanelOpen) updateProofPayload(true);
+  });
+
+  wrap.appendChild(header);
+  wrap.appendChild(body);
+  proofsContainer.appendChild(wrap);
+
+  const b = new UIBuilder(body);
+  b.info('Proof diagnostics for Euler/Tau equivalence across all base children.');
+  b.info('P = strand-offset index used by E_proof. alpha = comparison base used by closure trace (alpha=tau => 1 step = 1 turn).');
+  b.html(`
+    <div class="ctrl-info arch-info" style="margin-top:6px">
+      <div><strong>The Axiom</strong></div>
+      <div>f = k1 * exp(i*tau^k) with mirrored negative-imaginary branch</div>
+      <div>Transforms: base, sin, cos, tan, log(sin/cos/tan)</div>
+      <div>n-domain: [Z_min+1 ... Z_max-1] with 710-block color boundaries</div>
+    </div>
+  `);
+  b.slider('proof offset P', state, 'P', 1, 200, 1, { fmt: (v) => v.toFixed(0) });
+  b.slider('closure base alpha', state, 'alpha', 1, 20, 0.001, {
+    fmt: (v) => {
+      if (Math.abs(v - TAU) < 0.01) return `tau ~= ${TAU.toFixed(3)}`;
+      return v.toFixed(3);
+    },
+  });
+  b.toggle('show alpha trace', state.cinematicFx.ghostTraces, 'showAlpha');
+  b.html('<div class="hud-row" style="margin-top:6px"><span class="hud-key">mean |ratio-1|</span><span class="hud-val" id="proof-summary-mean">-</span></div>');
+  b.html('<div class="hud-row"><span class="hud-key">p95 |ratio-1|</span><span class="hud-val" id="proof-summary-p95">-</span></div>');
+  b.html('<div class="hud-row"><span class="hud-key">max |ratio-1|</span><span class="hud-val" id="proof-summary-max">-</span></div>');
+  b.html('<div class="hud-row"><span class="hud-key">samples</span><span class="hud-val" id="proof-summary-samples">-</span></div>');
+  b.html('<div class="hud-row"><span class="hud-key">Closure(alpha)</span><span class="hud-val" id="proof-closure">-</span></div>');
+  b.html('<div class="hud-row"><span class="hud-key">P1</span><span class="hud-val" id="proof-p1">-</span></div>');
+  b.html('<div class="hud-row"><span class="hud-key">E_proof</span><span class="hud-val" id="proof-eproof">-</span></div>');
+  b.html(`
+    <div class="proof-table-wrap">
+      <table class="proof-table">
+        <thead>
+          <tr>
+            <th>set</th>
+            <th>child</th>
+            <th>n</th>
+            <th>mean</th>
+            <th>p95</th>
+            <th>max</th>
+          </tr>
+        </thead>
+        <tbody id="proof-rows-body"></tbody>
+      </table>
+    </div>
+  `);
+
+  if (state.proofPanelOpen) updateProofPayload(true);
+}
+
+function initHudPanel() {
+  const header = document.getElementById('hud-header');
+  const body = document.getElementById('hud-body');
+  if (!header || !body) return;
+
+  const sync = () => {
+    const collapsed = state.hudPanelOpen !== true;
+    header.classList.toggle('collapsed', collapsed);
+    body.classList.toggle('collapsed', collapsed);
+  };
+
+  if (header.dataset.boundCollapse !== '1') {
+    header.dataset.boundCollapse = '1';
+    header.addEventListener('click', () => {
+      state.hudPanelOpen = !state.hudPanelOpen;
+      sync();
+    });
+  }
+  sync();
+}
+
 function buildControls() {
   if (!controlsContainer) controlsContainer = document.getElementById('controls-panel');
   deriveState();
-  seedObjectPathMap();
   sliderUiSyncFns.length = 0;
-  animation.clearLinks();
+  sliderBoundsSyncFns.length = 0;
   controlsContainer.innerHTML = '';
-
-  const collapseBtn = document.createElement('button');
-  collapseBtn.className = 'collapse-btn ctrl-interactive';
-  collapseBtn.innerHTML = '✕';
-  collapseBtn.addEventListener('click', toggleCollapse);
-  controlsContainer.appendChild(collapseBtn);
 
   const b = new UIBuilder(controlsContainer);
 
@@ -789,48 +1101,84 @@ function buildControls() {
     .modeToggle('Render', getRenderMode, setRenderMode, 'cinematic', 'performance', 'Cinematic', 'Performance')
     .modeToggle('View', getViewMode, setViewMode, '3d', '2d', '3D', '2D');
 
+  b.section('Kernel', false)
+    .info('Global formula kernel for chart generation and proof comparison.')
+    .modeToggle(
+      'formula',
+      () => state.formulaMode,
+      (v) => { state.formulaMode = (v === 'euler' ? 'euler' : 'tau'); },
+      'tau',
+      'euler',
+      'Tau',
+      'Euler',
+    );
+
   b.section('Traversal', false)
-    .info('JSON-literal k: k={bool=0:T, bool>0:kAligned}. Click values to edit directly. Shift+click slider track to pin end value.')
-    .slider('T', state, 'T', state.T_start, state.T_stop, getTSliderStep(), { fmt: (v) => v.toFixed(6) })
-    .slider('T_start', state, 'T_start', 0.000001, 10, 0.000001, {
+    .info('JSON-literal k: k={bool=0:T, bool>0:kAligned}. Playback is binary (play/pause) and uses deterministic stepping.')
+    .slider('T', state, 'T', state.T_start, state.T_stop, getTSliderStep(), {
       fmt: (v) => v.toFixed(6),
-      onChange: () => {
-        if (state.T_start > state.T_stop) state.T_stop = state.T_start;
-        state.T = clamp(state.T, state.T_start, state.T_stop);
-      },
+      commitMode: 'exact',
+      dynamicBounds: () => computeTraversalTBounds(state, getTSliderStep()),
+      onCommit: (v) => applyTraversalCommit(state, 'T', v),
     })
-    .slider('T_stop', state, 'T_stop', 0.000001, 10, 0.000001, {
+    .slider('T_start', state, 'T_start', -1000000, 1000000, 0.000001, {
       fmt: (v) => v.toFixed(6),
-      onChange: () => {
-        if (state.T_stop < state.T_start) state.T_start = state.T_stop;
-        state.T = clamp(state.T, state.T_start, state.T_stop);
-      },
+      commitMode: 'exact',
+      onCommit: (v) => applyTraversalCommit(state, 'T_start', v),
     })
-    .html(`<div class="mode-row">
-      <span class="slider-label">time mode</span>
-      <button class="mode-pill ctrl-interactive" id="timemode-animation">animation</button>
-      <button class="mode-pill ctrl-interactive" id="timemode-step">step</button>
-    </div>`)
+    .slider('T_stop', state, 'T_stop', -1000000, 1000000, 0.000001, {
+      fmt: (v) => v.toFixed(6),
+      commitMode: 'exact',
+      onCommit: (v) => applyTraversalCommit(state, 'T_stop', v),
+    })
     .html(`<div class="mode-row">
       <span class="slider-label">step loop</span>
       <button class="mode-pill ctrl-interactive" id="steploop-clamp">clamp</button>
       <button class="mode-pill ctrl-interactive" id="steploop-bounce">bounce</button>
     </div>`)
     .slider('b', state, 'b', 1, 100000000, 1, { fmt: (v) => v.toFixed(0) })
-    .slider('stepRate', state, 'stepRate', -100, 100, 0.01, { fmt: (v) => v.toFixed(2) })
+    .html(`<div class="mode-row">
+      <span class="slider-label">buffer mode</span>
+      <button class="mode-pill ctrl-interactive" id="buffermode-off">off</button>
+      <button class="mode-pill ctrl-interactive" id="buffermode-on">on</button>
+    </div>`)
+    .slider('buffer', state, 'precomputeBufferValue', 1, 600, 1, {
+      fmt: (v) => state.precomputeBufferUnit === 'seconds' ? `${v.toFixed(2)}s` : `${Math.floor(v)}f`,
+      commitMode: 'exact',
+      dynamicBounds: () => (
+        state.precomputeBufferUnit === 'seconds'
+          ? { min: 0.1, max: 10, step: 0.05 }
+          : { min: 1, max: 600, step: 1 }
+      ),
+      onCommit: (v) => {
+        const next = state.precomputeBufferUnit === 'seconds'
+          ? clamp(v, 0.1, 10)
+          : clamp(Math.floor(v), 1, 600);
+        state.precomputeBufferValue = next;
+        state.precomputeBufferFrames = resolvePrecomputeBufferFrames(state.precomputeBufferUnit, next);
+        state.bufferTargetFrames = state.precomputeBufferFrames;
+        const derived = deriveState();
+        const signature = computeMathSignature(derived, computePointBudget());
+        if (state.bufferEnabled) beginHardPrefill(derived, signature, 'buffer target', false);
+        else playbackBuffer.invalidate(signature, true);
+        return {
+          value: next,
+          status: Math.abs(next - v) > 1e-12 ? 'normalized' : 'applied',
+        };
+      },
+    })
+    .html(`<div class="mode-row">
+      <span class="slider-label">buffer unit</span>
+      <button class="mode-pill ctrl-interactive" id="bufferunit-frames">frames</button>
+      <button class="mode-pill ctrl-interactive" id="bufferunit-seconds">seconds</button>
+    </div>`)
     .html(`<div class="mode-row">
       <span class="slider-label">T step source</span>
       <button class="mode-pill ctrl-interactive" id="tstep-sync-on">sync s</button>
       <button class="mode-pill ctrl-interactive" id="tstep-sync-off">fixed</button>
-    </div>`);
-
-  bindModeButtons(
-    controlsContainer,
-    'timemode',
-    [{ value: 'animation' }, { value: 'step' }],
-    () => state.timeMode,
-    (v) => { state.timeMode = v; },
-  );
+    </div>`)
+    .html('<div class="hud-row" style="margin-top:6px"><span class="hud-key">Buffer</span><span class="hud-val" id="buffer-mode-display">OFF</span></div>')
+    .html('<div class="hud-row"><span class="hud-key">Buffer cache</span><span class="hud-val" id="buffer-status-panel">-</span></div>');
   bindModeButtons(
     controlsContainer,
     'steploop',
@@ -843,36 +1191,72 @@ function buildControls() {
   );
   bindModeButtons(
     controlsContainer,
+    'buffermode',
+    [{ value: 'off' }, { value: 'on' }],
+    () => (state.bufferEnabled ? 'on' : 'off'),
+    (v) => {
+      state.bufferEnabled = v === 'on';
+      const derived = deriveState();
+      const signature = computeMathSignature(derived, computePointBudget());
+      if (state.bufferEnabled) {
+        beginHardPrefill(derived, signature, 'toggle on', true);
+      } else {
+        setBufferPhase('idle');
+        state.bufferProgress = 0;
+        state.bufferNotice = '';
+        playbackBuffer.invalidate(signature, true);
+        reseedPlaybackBuffer(derived, signature, true);
+      }
+      updateBufferStatus();
+    },
+  );
+  bindModeButtons(
+    controlsContainer,
     'tstep-sync',
     [{ value: 'on' }, { value: 'off' }],
     () => (state.syncTStepToS ? 'on' : 'off'),
     (v) => { state.syncTStepToS = v === 'on'; },
   );
+  bindModeButtons(
+    controlsContainer,
+    'bufferunit',
+    [{ value: 'frames' }, { value: 'seconds' }],
+    () => state.precomputeBufferUnit,
+    (v) => {
+      state.precomputeBufferUnit = v === 'seconds' ? 'seconds' : 'frames';
+      if (state.precomputeBufferUnit === 'seconds') {
+        state.precomputeBufferValue = clamp(state.precomputeBufferValue, 0.1, 10);
+      } else {
+        state.precomputeBufferValue = clamp(Math.floor(state.precomputeBufferValue), 1, 600);
+      }
+      state.precomputeBufferFrames = resolvePrecomputeBufferFrames(state.precomputeBufferUnit, state.precomputeBufferValue);
+      state.bufferTargetFrames = state.precomputeBufferFrames;
+      const derived = deriveState();
+      const signature = computeMathSignature(derived, computePointBudget());
+      if (state.bufferEnabled) beginHardPrefill(derived, signature, 'buffer unit', false);
+      else playbackBuffer.invalidate(signature, true);
+    },
+  );
 
   b.section('n Domain', false)
-    .info('Canonical n = [Z_min ... Z_max-1], with fixed 710 boundary coloring.')
+    .info('Canonical n = [Z_min+1 ... Z_max-1], with fixed 710 boundary coloring.')
     .slider('Z', state, 'Z', 1, 50000, 1, {
       fmt: (v) => v.toFixed(0),
       heavy: true,
-      onChange: () => {
-        if (state.Z_max > state.Z) state.Z_max = state.Z;
-      },
+      onCommit: (v) => applyZRangeCommit(state, 'Z', v),
     })
-    .slider('Z_min', state, 'Z_min', 0, state.Z - 1, 1, {
+    .slider('Z_min', state, 'Z_min', -state.Z, 0, 1, {
       fmt: (v) => v.toFixed(0),
       heavy: true,
-      onChange: () => {
-        if (state.Z_min >= state.Z_max) state.Z_max = Math.min(state.Z, state.Z_min + 1);
-      },
+      dynamicBounds: () => computeZRangeBounds(state).zMin,
+      onCommit: (v) => applyZRangeCommit(state, 'Z_min', v),
     })
-    .slider('Z_max', state, 'Z_max', 1, state.Z, 1, {
+    .slider('Z_max', state, 'Z_max', 0, state.Z, 1, {
       fmt: (v) => v.toFixed(0),
       heavy: true,
-      onChange: () => {
-        if (state.Z_max <= state.Z_min) state.Z_min = Math.max(0, state.Z_max - 1);
-      },
+      dynamicBounds: () => computeZRangeBounds(state).zMax,
+      onCommit: (v) => applyZRangeCommit(state, 'Z_max', v),
     })
-    .slider('num strands', state, 'numStrands', 1, 32, 1, { fmt: (v) => v.toFixed(0), heavy: true })
     .slider('path budget', state, 'pathBudget', 10, 2000, 10, { fmt: (v) => v.toFixed(0), heavy: true });
 
   b.section('Scaling', false)
@@ -883,7 +1267,7 @@ function buildControls() {
       <button class="mode-pill ctrl-interactive" id="kbool-0">0</button>
       <button class="mode-pill ctrl-interactive" id="kbool-1">1</button>
     </div>`)
-    .slider('q_scale', state, 'q_scale', 0, 50, 0.001, { fmt: (v) => v.toFixed(3) })
+    .slider('q_scale (strands)', state, 'q_scale', 0, 50, 0.001, { fmt: (v) => v.toFixed(3) })
     .slider('q_tauScale', state, 'q_tauScale', -10, 10, 1, { fmt: (v) => v.toFixed(0) })
     .html(`<div class="mode-row">
       <span class="slider-label">q_bool</span>
@@ -932,19 +1316,6 @@ function buildControls() {
   addTransformControls(b);
   addSetAndChildControls(b);
 
-  b.section('Proof', false)
-    .slider('P', state, 'P', 1, 200, 1, { fmt: (v) => v.toFixed(0) })
-    .slider('alpha', state, 'alpha', 1, 20, 0.001, {
-      fmt: (v) => {
-        if (Math.abs(v - TAU) < 0.01) return `τ ≈ ${TAU.toFixed(3)}`;
-        return v.toFixed(3);
-      },
-    })
-    .toggle('show alpha trace', state.cinematicFx.ghostTraces, 'showAlpha')
-    .html('<div class="hud-row" style="margin-top:6px"><span class="hud-key">Closure</span><span class="hud-val" id="closure-display-panel">—</span></div>')
-    .html('<div class="hud-row"><span class="hud-key">P₁</span><span class="hud-val" id="p1-display-panel">—</span></div>')
-    .html('<div class="hud-row"><span class="hud-key">E_proof</span><span class="hud-val" id="eproof-display-panel">—</span></div>');
-
   b.section('Cinematic', isPerformance())
     .info('Keep effects active; style bloom is controlled per hierarchy above.')
     .toggle('Master enabled', state.cinematicFx.master, 'enabled')
@@ -978,20 +1349,15 @@ function buildControls() {
   const shotBtn = controlsContainer.querySelector('#btn-screenshot');
   if (resetBtn) resetBtn.addEventListener('click', () => resetCamera());
   if (shotBtn) shotBtn.addEventListener('click', () => captureScreenshot());
-
-  b.section('The Axiom', true)
-    .html(`
-      <div class="ctrl-info arch-info">
-        <div>f = k₁ · e^{i·τ^k} and mirrored negative branch</div>
-        <div>Transforms: base, sin, cos, tan, log(sin/cos/tan)</div>
-        <div>n = [Z_min ... Z_max-1], with 710-block color boundaries</div>
-      </div>
-    `);
+  buildProofPanel();
+  setText('formula-display', state.formulaMode === 'euler' ? 'Euler' : 'Tau');
 
   animation.onStateChange(() => {
     updateTransportUI();
+    refreshSliderBounds();
     for (const sync of sliderUiSyncFns) sync();
   });
+  refreshSliderBounds();
   for (const sync of sliderUiSyncFns) sync();
 }
 
@@ -1002,17 +1368,38 @@ function buildTransportBar() {
 
   const playBtn = document.createElement('button');
   playBtn.className = 'transport-btn-mini ctrl-interactive';
-  playBtn.textContent = animation.playing ? '⏸' : '▶';
+  playBtn.dataset.role = 'playpause';
+  playBtn.innerHTML = animation.playing ? '&#10074;&#10074;' : '&#9654;';
+  playBtn.title = animation.playing ? 'Pause' : 'Play';
   playBtn.addEventListener('click', () => {
+    const wasPlaying = animation.playing;
     animation.toggle();
+    deriveState();
+    const signature = computeMathSignature(state, computePointBudget());
+    if (!state.bufferEnabled) {
+      reseedPlaybackBuffer(state, signature);
+    } else if (!wasPlaying && animation.playing) {
+      beginHardPrefill(state, signature, 'play start', false);
+    }
+    updateBufferStatus();
     updateTransportUI();
   });
 
   const stopBtn = document.createElement('button');
   stopBtn.className = 'transport-btn-mini ctrl-interactive';
-  stopBtn.textContent = '⏹';
+  stopBtn.dataset.role = 'stop';
+  stopBtn.innerHTML = '&#9632;';
+  stopBtn.title = 'Stop';
   stopBtn.addEventListener('click', () => {
     animation.stop();
+    _stepBounceDir = 1;
+    deriveState();
+    const signature = computeMathSignature(state, computePointBudget());
+    setBufferPhase('idle');
+    state.bufferProgress = 0;
+    state.bufferNotice = '';
+    reseedPlaybackBuffer(state, signature, true);
+    updateBufferStatus();
     regenerate(true);
     updateTransportUI();
   });
@@ -1025,14 +1412,27 @@ function buildTransportBar() {
   scrub.step = 1;
   scrub.value = `${animation.progress * 1000}`;
   scrub.addEventListener('input', () => {
-    animation.seek(parseFloat(scrub.value) / 1000);
+    const p = parseFloat(scrub.value) / 1000;
+    animation.seek(p);
+    deriveState();
+    const nextT = state.T_start + ((state.T_stop - state.T_start) * p);
+    const commit = applyTraversalCommit(state, 'T', nextT);
+    state.T = commit.value;
+    _stepBounceDir = 1;
+    const signature = computeMathSignature(state, computePointBudget());
+    if (state.bufferEnabled) {
+      beginHardPrefill(state, signature, 'scrub seek', true);
+    } else {
+      reseedPlaybackBuffer(state, signature, true);
+    }
+    updateBufferStatus();
     regenerate();
   });
 
   const gearBtn = document.createElement('button');
   gearBtn.className = 'transport-gear ctrl-interactive';
-  gearBtn.textContent = '⚙';
-  gearBtn.title = 'Expand panels (Tab)';
+  gearBtn.innerHTML = '&#9776;';
+  gearBtn.title = 'Toggle panels (Tab)';
   gearBtn.addEventListener('click', toggleCollapse);
 
   bar.appendChild(playBtn);
@@ -1045,11 +1445,40 @@ function updateTransportUI() {
   const tScrub = document.querySelector('.transport-scrub');
   if (tScrub) tScrub.value = `${animation.progress * 1000}`;
 
-  document.querySelectorAll('.transport-btn-mini').forEach((btn) => {
-    if (btn.textContent === '▶' || btn.textContent === '⏸') {
-      btn.textContent = animation.playing ? '⏸' : '▶';
+  const playBtn = document.querySelector('.transport-btn-mini[data-role="playpause"]');
+  if (playBtn) {
+    playBtn.innerHTML = animation.playing ? '&#10074;&#10074;' : '&#9654;';
+    playBtn.title = animation.playing ? 'Pause' : 'Play';
+  }
+}
+
+function consumeBufferedPayload(derived, signature, budget, stepsToConsume) {
+  let latest = null;
+  const steps = Math.max(1, Math.floor(Number.isFinite(stepsToConsume) ? stepsToConsume : 1));
+  for (let i = 0; i < steps; i++) {
+    let frame = playbackBuffer.consume();
+    if (!frame) {
+      const advance = advanceStepTraversal({
+        T: derived.T,
+        T_start: derived.T_start,
+        T_stop: derived.T_stop,
+        dtSeconds: 1 / PRECOMPUTE_FPS,
+        s: derived.s,
+        stepLoopMode: derived.stepLoopMode,
+        bounceDir: _stepBounceDir,
+      });
+      _stepBounceDir = derived.stepLoopMode === 'bounce' ? advance.bounceDir : 1;
+      const fallbackDerived = buildDerivedState({ ...derived, T: advance.T });
+      frame = buildRenderPayload(fallbackDerived, budget, signature);
+      frame.bounceDir = _stepBounceDir;
+      derived = fallbackDerived;
+    } else {
+      _stepBounceDir = frame.bounceDir ?? _stepBounceDir;
+      derived = frame.derived;
     }
-  });
+    latest = frame;
+  }
+  return latest;
 }
 
 function animationFrame() {
@@ -1057,37 +1486,87 @@ function animationFrame() {
   const dtSeconds = Math.max(0, (now - _lastFrameMs) / 1000);
   _lastFrameMs = now;
 
-  let shouldRegenerate = false;
   const changed = animation.update();
-  if (changed) {
-    shouldRegenerate = true;
-    updateTransportUI();
+  if (changed) updateTransportUI();
+
+  const derived = deriveState();
+  const budget = computePointBudget();
+  const signature = computeMathSignature(derived, budget);
+  syncSignatureAndBufferState(derived, signature, 'frame');
+
+  if (!state.bufferEnabled) {
+    setBufferPhase('idle');
+    state.bufferProgress = 0;
+    state.bufferNotice = '';
+    if (shouldAdvanceStep(state, animation.playing)) {
+      const advance = advanceStepTraversal({
+        T: derived.T,
+        T_start: derived.T_start,
+        T_stop: derived.T_stop,
+        dtSeconds,
+        s: derived.s,
+        stepLoopMode: derived.stepLoopMode,
+        bounceDir: _stepBounceDir,
+      });
+      _stepBounceDir = derived.stepLoopMode === 'bounce' ? advance.bounceDir : 1;
+      if (Math.abs(advance.T - state.T) > 1e-12) {
+        const nextDerived = buildDerivedState({ ...derived, T: advance.T });
+        state.T = nextDerived.T;
+        pendingRenderPayload = buildRenderPayload(nextDerived, budget, signature);
+        regenerate();
+      }
+    }
+    updateBufferStatus();
+    return;
+  }
+
+  const target = applyBufferTargetWithMemoryGuard(derived);
+  const prefillMinDepth = computePrefillMinDepth(target);
+  const fps = getCurrentFps();
+
+  if (state.bufferPhase === 'prefill') {
+    const prefillBudget = computeAdaptiveBuildBudget({
+      phase: 'prefill',
+      fps,
+      depth: playbackBuffer.depth,
+      target,
+    });
+    fillPlaybackBuffer(derived, signature, budget, prefillBudget, _bufferGenerationToken);
+    state.bufferProgress = computeBufferProgress(playbackBuffer.depth, prefillMinDepth);
+
+    if (playbackBuffer.depth >= prefillMinDepth) {
+      setBufferPhase('background');
+      state.bufferProgress = 1;
+      if (state.bufferNotice.startsWith('play start') || state.bufferNotice.startsWith('scrub') || state.bufferNotice.startsWith('frame') || state.bufferNotice.startsWith('regenerate') || state.bufferNotice.startsWith('toggle on') || state.bufferNotice.startsWith('buffer')) {
+        state.bufferNotice = '';
+      }
+    }
+    updateBufferStatus();
+    return;
   }
 
   if (shouldAdvanceStep(state, animation.playing)) {
-    deriveState();
-    const advance = advanceStepTraversal({
-      T: state.T,
-      T_start: state.T_start,
-      T_stop: state.T_stop,
-      dtSeconds,
-      s: state.s,
-      stepRate: state.stepRate,
-      stepLoopMode: state.stepLoopMode,
-      bounceDir: _stepBounceDir,
-    });
-    if (state.stepLoopMode !== 'bounce') {
-      _stepBounceDir = 1;
-    } else {
-      _stepBounceDir = advance.bounceDir;
-    }
-    if (Number.isFinite(advance.T) && advance.T !== state.T) {
-      state.T = advance.T;
-      shouldRegenerate = true;
+    const consumeCount = Math.max(1, Math.min(8, Math.round(dtSeconds * PRECOMPUTE_FPS)));
+    const frame = consumeBufferedPayload(derived, signature, budget, consumeCount);
+    if (frame && Math.abs(frame.derived.T - state.T) > 1e-12) {
+      state.T = frame.derived.T;
+      pendingRenderPayload = frame;
+      regenerate();
     }
   }
 
-  if (shouldRegenerate) regenerate();
+  if (playbackBuffer.depth < target) {
+    const backgroundBudget = computeAdaptiveBuildBudget({
+      phase: 'background',
+      fps,
+      depth: playbackBuffer.depth,
+      target,
+    });
+    const refillDerived = buildDerivedState(state);
+    fillPlaybackBuffer(refillDerived, signature, budget, backgroundBudget, _bufferGenerationToken);
+  }
+  state.bufferProgress = 1;
+  updateBufferStatus();
 }
 
 function setupKeyboard() {
@@ -1096,8 +1575,19 @@ function setupKeyboard() {
     switch (e.key) {
       case ' ':
         e.preventDefault();
-        animation.toggle();
-        updateTransportUI();
+        {
+          const wasPlaying = animation.playing;
+          animation.toggle();
+          deriveState();
+          const signature = computeMathSignature(state, computePointBudget());
+          if (!state.bufferEnabled) {
+            reseedPlaybackBuffer(state, signature);
+          } else if (!wasPlaying && animation.playing) {
+            beginHardPrefill(state, signature, 'play start', false);
+          }
+          updateBufferStatus();
+          updateTransportUI();
+        }
         break;
       case 'Tab':
         e.preventDefault();
@@ -1106,6 +1596,13 @@ function setupKeyboard() {
         break;
       case 'Escape':
         animation.stop();
+        _stepBounceDir = 1;
+        deriveState();
+        setBufferPhase('idle');
+        state.bufferProgress = 0;
+        state.bufferNotice = '';
+        reseedPlaybackBuffer(state, computeMathSignature(state, computePointBudget()), true);
+        updateBufferStatus();
         regenerate(true);
         updateTransportUI();
         break;
@@ -1118,9 +1615,16 @@ function setupKeyboard() {
 }
 
 export function initControls() {
+  initHudPanel();
   buildControls();
   buildTransportBar();
   setupKeyboard();
   setExternalUpdate(animationFrame);
   regenerate();
 }
+
+
+
+
+
+
