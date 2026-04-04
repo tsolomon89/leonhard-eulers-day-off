@@ -14,6 +14,10 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { TAU } from './complex.js';
 import {
+  normalizeCameraSnapshot,
+  applyCameraFieldToSnapshot,
+} from './camera-panel.js';
+import {
   isPerformance, isCinematic, is2D, is3D,
   isDark, isLight,
   onThemeChange, onRenderChange, onViewChange
@@ -38,6 +42,7 @@ let idleTimer = 0;
 let isIdle = false;
 let _userInteracted = false;
 let suspendHeavyEffects = false;
+const cameraPanelListeners = new Set();
 
 const FOG_COLOR = 0x050608;
 let bloomEnabled = true;
@@ -48,6 +53,22 @@ let fogEnabled = true;
 let fogDensity = 0.0008;
 let toneEnabled = true;
 let toneExposure = 1.05;
+
+function emitCameraPanelChange(reason = 'scene', source = 'scene') {
+  if (cameraPanelListeners.size === 0) return;
+  const snapshot = getCameraPanelSnapshot();
+  for (const cb of cameraPanelListeners) {
+    try {
+      cb({
+        reason,
+        source,
+        snapshot,
+      });
+    } catch (_) {
+      // Ignore callback exceptions from UI listeners.
+    }
+  }
+}
 
 // ── Cinematic parameters (exposed to controls) ──────────────
 export const cinematic = {
@@ -372,6 +393,11 @@ export function initScene() {
   controls.minDistance = 0.5;
   controls.maxDistance = 350;
   controls.enablePan = true;
+  controls.panSpeed = 1;
+
+  controls.addEventListener('change', () => {
+    emitCameraPanelChange('orbit-change', 'scene');
+  });
   controls.enableRotate = is3D();
 
   // Post-processing — bloom params from style_example_2: 0.55, 0.45, 0.8
@@ -490,6 +516,7 @@ function handleViewChange(mode) {
   }
   renderPass.camera = activeCamera;
   controls.update();
+  emitCameraPanelChange('view-change', 'scene');
 }
 
 // ── Point cloud management ───────────────────────────────────
@@ -819,6 +846,93 @@ export function resetCamera() {
   orthoCam.zoom = 1;
   orthoCam.updateProjectionMatrix();
   controls.reset();
+  emitCameraPanelChange('reset', 'scene');
+}
+
+function applySnapshotToActiveCamera(snapshot) {
+  const next = normalizeCameraSnapshot(snapshot);
+  const cam = activeCamera;
+  if (!cam || !controls) return null;
+
+  cam.position.set(next.position.x, next.position.y, next.position.z);
+  controls.target.set(next.target.x, next.target.y, next.target.z);
+  controls.dampingFactor = next.orbit.dampingFactor;
+  controls.rotateSpeed = next.orbit.rotateSpeed;
+  controls.zoomSpeed = next.orbit.zoomSpeed;
+  controls.panSpeed = next.orbit.panSpeed;
+  controls.minDistance = next.orbit.minDistance;
+  controls.maxDistance = next.orbit.maxDistance;
+
+  cam.near = next.lens.near;
+  cam.far = next.lens.far;
+
+  if (next.viewMode === '3d') {
+    if (Number.isFinite(next.lens.fov)) perspCam.fov = next.lens.fov;
+    perspCam.near = next.lens.near;
+    perspCam.far = next.lens.far;
+    perspCam.updateProjectionMatrix();
+    controls.enableRotate = true;
+  } else {
+    if (Number.isFinite(next.lens.zoom)) orthoCam.zoom = next.lens.zoom;
+    orthoCam.near = next.lens.near;
+    orthoCam.far = next.lens.far;
+    orthoCam.updateProjectionMatrix();
+    controls.enableRotate = false;
+  }
+
+  controls.update();
+  return getCameraPanelSnapshot();
+}
+
+export function getCameraPanelSnapshot() {
+  if (!activeCamera || !controls) return null;
+
+  const viewMode = is2D() ? '2d' : '3d';
+  const raw = {
+    viewMode,
+    cameraType: viewMode === '2d' ? 'orthographic' : 'perspective',
+    rotateEnabled: !!controls.enableRotate,
+    position: {
+      x: activeCamera.position.x,
+      y: activeCamera.position.y,
+      z: activeCamera.position.z,
+    },
+    target: {
+      x: controls.target.x,
+      y: controls.target.y,
+      z: controls.target.z,
+    },
+    orbit: {
+      dampingFactor: controls.dampingFactor,
+      rotateSpeed: controls.rotateSpeed,
+      zoomSpeed: controls.zoomSpeed,
+      panSpeed: controls.panSpeed,
+      minDistance: controls.minDistance,
+      maxDistance: controls.maxDistance,
+    },
+    lens: viewMode === '3d'
+      ? { fov: perspCam.fov, near: perspCam.near, far: perspCam.far }
+      : { zoom: orthoCam.zoom, near: orthoCam.near, far: orthoCam.far },
+  };
+  return normalizeCameraSnapshot(raw);
+}
+
+export function setCameraPanelField(path, value, options = {}) {
+  const current = getCameraPanelSnapshot();
+  if (!current || typeof path !== 'string') return current;
+
+  const next = applyCameraFieldToSnapshot(current, path, value);
+  const applied = applySnapshotToActiveCamera(next);
+  emitCameraPanelChange('field-set', options.source === 'ui' ? 'ui' : 'api');
+  return applied;
+}
+
+export function onCameraPanelChange(cb) {
+  if (typeof cb !== 'function') return () => {};
+  cameraPanelListeners.add(cb);
+  return () => {
+    cameraPanelListeners.delete(cb);
+  };
 }
 
 // ── Screenshot export ────────────────────────────────────────

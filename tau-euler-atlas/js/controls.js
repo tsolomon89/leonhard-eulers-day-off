@@ -19,29 +19,7 @@ import {
   SET_KEYS,
   TRANSFORM_KEYS,
 } from './expression-model.js';
-import {
-  updatePointCloud,
-  updateStrandPaths,
-  updateAtlasPaths,
-  updateGhostTraces,
-  updateOrbitCircle,
-  setBloomEnabled,
-  setBloomStrength,
-  setBloomRadius,
-  setBloomThreshold,
-  setToneEnabled,
-  setToneExposure,
-  setFogEnabled,
-  setFogDensity,
-  setStarVisibility,
-  setStarOpacity,
-  setStarMotion,
-  setHeavyEffectsSuspended,
-  getCurrentFps,
-  resetCamera,
-  captureScreenshot,
-  setExternalUpdate,
-} from './scene.js';
+import * as sceneApi from './scene.js';
 import { animation } from './animation.js';
 import {
   PlaybackPrecomputeBuffer,
@@ -78,6 +56,44 @@ import {
   resolveEffectiveCinematicFx,
   resolveStyleBloomGain,
 } from './cinematic-fx.js';
+import {
+  ensureLinkedParam,
+  isLinkEligiblePath,
+  resolveLinkedValue,
+  sanitizeDirection,
+  seedEndpoint,
+} from './linked-params.js';
+
+const updatePointCloud = sceneApi.updatePointCloud;
+const updateStrandPaths = sceneApi.updateStrandPaths;
+const updateAtlasPaths = sceneApi.updateAtlasPaths;
+const updateGhostTraces = sceneApi.updateGhostTraces;
+const updateOrbitCircle = sceneApi.updateOrbitCircle;
+const setBloomEnabled = sceneApi.setBloomEnabled;
+const setBloomStrength = sceneApi.setBloomStrength;
+const setBloomRadius = sceneApi.setBloomRadius;
+const setBloomThreshold = sceneApi.setBloomThreshold;
+const setToneEnabled = sceneApi.setToneEnabled;
+const setToneExposure = sceneApi.setToneExposure;
+const setFogEnabled = sceneApi.setFogEnabled;
+const setFogDensity = sceneApi.setFogDensity;
+const setStarVisibility = sceneApi.setStarVisibility;
+const setStarOpacity = sceneApi.setStarOpacity;
+const setStarMotion = sceneApi.setStarMotion;
+const setHeavyEffectsSuspended = sceneApi.setHeavyEffectsSuspended;
+const getCurrentFps = sceneApi.getCurrentFps;
+const resetCamera = sceneApi.resetCamera;
+const captureScreenshot = sceneApi.captureScreenshot;
+const setExternalUpdate = sceneApi.setExternalUpdate;
+const getCameraPanelSnapshot = typeof sceneApi.getCameraPanelSnapshot === 'function'
+  ? sceneApi.getCameraPanelSnapshot
+  : () => null;
+const setCameraPanelField = typeof sceneApi.setCameraPanelField === 'function'
+  ? sceneApi.setCameraPanelField
+  : () => null;
+const onCameraPanelChange = typeof sceneApi.onCameraPanelChange === 'function'
+  ? sceneApi.onCameraPanelChange
+  : () => () => {};
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
@@ -122,7 +138,30 @@ export const state = {
   eProof: NaN,
   alpha: TAU,
   showAlpha: true,
-  hudPanelOpen: true,
+  hudPanelOpen: false,
+  cameraPanelOpen: false,
+  cameraPanel: {
+    viewMode: '3d',
+    cameraType: 'perspective',
+    rotateEnabled: true,
+    position: { x: 0, y: 0, z: 5 },
+    target: { x: 0, y: 0, z: 0 },
+    orbit: {
+      dampingFactor: 0.07,
+      rotateSpeed: 0.5,
+      zoomSpeed: 0.8,
+      panSpeed: 1,
+      minDistance: 0.5,
+      maxDistance: 350,
+    },
+    lens: {
+      fov: 70,
+      zoom: 1,
+      near: 0.01,
+      far: 2000,
+    },
+    distance: 5,
+  },
   proofPanelOpen: false,
   proofResults: null,
 
@@ -155,8 +194,38 @@ const ICON_EYE_OFF = `
   </svg>
 `;
 
+const ICON_LINK = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M10 14l4-4"></path>
+    <path d="M7.5 16.5l-2 2a3 3 0 0 1-4.2-4.2l3-3a3 3 0 0 1 4.2 0"></path>
+    <path d="M16.5 7.5l2-2a3 3 0 0 1 4.2 4.2l-3 3a3 3 0 0 1-4.2 0"></path>
+  </svg>
+`;
+
+const ICON_UNLINK = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M10 14l4-4"></path>
+    <path d="M3 3l18 18"></path>
+  </svg>
+`;
+
+const ICON_DIR_FWD = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 12h12"></path>
+    <path d="M13 8l4 4-4 4"></path>
+  </svg>
+`;
+
+const ICON_DIR_REV = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M19 12H7"></path>
+    <path d="M11 16l-4-4 4-4"></path>
+  </svg>
+`;
+
 let regenerateTimeout = null;
 let controlsContainer = null;
+let cameraContainer = null;
 let proofsContainer = null;
 let _lastFrameMs = performance.now();
 let _stepBounceDir = 1;
@@ -165,10 +234,14 @@ const MAX_BUFFER_BYTES = DEFAULT_BUFFER_MAX_BYTES;
 
 const sliderUiSyncFns = [];
 const sliderBoundsSyncFns = [];
+const cameraSliderUiSyncFns = [];
+const cameraSliderBoundsSyncFns = [];
 const playbackBuffer = new PlaybackPrecomputeBuffer();
 let lastMathSignature = '';
 let lastProofSignature = '';
 let pendingRenderPayload = null;
+const linkedParamRegistry = Object.create(null);
+let cameraPanelUnsubscribe = null;
 
 function decimalsForStep(step) {
   if (!Number.isFinite(step) || step >= 1) return 0;
@@ -182,6 +255,14 @@ function refreshSliderBounds() {
   for (const sync of sliderBoundsSyncFns) sync();
 }
 
+function refreshCameraSliderBounds() {
+  for (const sync of cameraSliderBoundsSyncFns) sync();
+}
+
+function syncCameraSliderUi() {
+  for (const sync of cameraSliderUiSyncFns) sync();
+}
+
 function pushCommitStatus(row, status) {
   row.dataset.commitStatus = status;
   if (row._commitStatusTimer) clearTimeout(row._commitStatusTimer);
@@ -190,7 +271,46 @@ function pushCommitStatus(row, status) {
   }, 700);
 }
 
+function registerLinkedBinding(path, getter, setter, boundsGetter = null) {
+  if (!isLinkEligiblePath(path)) return null;
+  const current = Number(getter());
+  const entry = ensureLinkedParam(linkedParamRegistry, path, current);
+  if (!entry) return null;
+  entry.getter = getter;
+  entry.setter = setter;
+  entry.boundsGetter = typeof boundsGetter === 'function' ? boundsGetter : null;
+  return entry;
+}
+
+function applyLinkedRuntimeValues(progress = animation.progress) {
+  const p = clamp(Number.isFinite(progress) ? progress : 0, 0, 1);
+  for (const [path, entry] of Object.entries(linkedParamRegistry)) {
+    if (!entry || typeof entry !== 'object') continue;
+    if (typeof entry.setter !== 'function') continue;
+    if (!isLinkEligiblePath(path)) continue;
+    if (!entry.isLinked || !Number.isFinite(entry.endValue)) continue;
+
+    if (!Number.isFinite(entry.value) && typeof entry.getter === 'function') {
+      const current = Number(entry.getter());
+      if (Number.isFinite(current)) entry.value = current;
+    }
+
+    let resolved = resolveLinkedValue(entry, p);
+    if (!Number.isFinite(resolved)) continue;
+
+    if (typeof entry.boundsGetter === 'function') {
+      const b = entry.boundsGetter() || {};
+      const lo = Number.isFinite(b.min) ? b.min : resolved;
+      const hi = Number.isFinite(b.max) ? b.max : resolved;
+      resolved = clamp(resolved, Math.min(lo, hi), Math.max(lo, hi));
+    }
+
+    entry.setter(resolved);
+  }
+}
+
 export function deriveState() {
+  applyLinkedRuntimeValues(animation.progress);
   return applyDerivedState(state);
 }
 
@@ -203,6 +323,57 @@ function getTSliderStep() {
 function setText(id, text) {
   const el = document.getElementById(id);
   if (el) el.textContent = text;
+}
+
+function getCameraField(path) {
+  const parts = String(path).split('.');
+  let cursor = state.cameraPanel;
+  for (const p of parts) {
+    if (!cursor || typeof cursor !== 'object') return NaN;
+    cursor = cursor[p];
+  }
+  return Number(cursor);
+}
+
+function applyCameraSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return;
+  const cam = state.cameraPanel;
+  cam.viewMode = snapshot.viewMode === '2d' ? '2d' : '3d';
+  cam.cameraType = String(snapshot.cameraType || (cam.viewMode === '2d' ? 'orthographic' : 'perspective'));
+  cam.rotateEnabled = !!snapshot.rotateEnabled;
+
+  cam.position.x = Number(snapshot.position?.x ?? cam.position.x);
+  cam.position.y = Number(snapshot.position?.y ?? cam.position.y);
+  cam.position.z = Number(snapshot.position?.z ?? cam.position.z);
+
+  cam.target.x = Number(snapshot.target?.x ?? cam.target.x);
+  cam.target.y = Number(snapshot.target?.y ?? cam.target.y);
+  cam.target.z = Number(snapshot.target?.z ?? cam.target.z);
+
+  cam.orbit.dampingFactor = Number(snapshot.orbit?.dampingFactor ?? cam.orbit.dampingFactor);
+  cam.orbit.rotateSpeed = Number(snapshot.orbit?.rotateSpeed ?? cam.orbit.rotateSpeed);
+  cam.orbit.zoomSpeed = Number(snapshot.orbit?.zoomSpeed ?? cam.orbit.zoomSpeed);
+  cam.orbit.panSpeed = Number(snapshot.orbit?.panSpeed ?? cam.orbit.panSpeed);
+  cam.orbit.minDistance = Number(snapshot.orbit?.minDistance ?? cam.orbit.minDistance);
+  cam.orbit.maxDistance = Number(snapshot.orbit?.maxDistance ?? cam.orbit.maxDistance);
+
+  if (Number.isFinite(snapshot.lens?.fov)) cam.lens.fov = Number(snapshot.lens.fov);
+  if (Number.isFinite(snapshot.lens?.zoom)) cam.lens.zoom = Number(snapshot.lens.zoom);
+  cam.lens.near = Number(snapshot.lens?.near ?? cam.lens.near);
+  cam.lens.far = Number(snapshot.lens?.far ?? cam.lens.far);
+  cam.distance = Number(snapshot.distance ?? cam.distance);
+}
+
+function updateCameraPanelReadouts() {
+  setText('camera-view-display', state.cameraPanel.viewMode.toUpperCase());
+  setText('camera-type-display', state.cameraPanel.cameraType);
+  setText('camera-rotate-display', state.cameraPanel.rotateEnabled ? 'on' : 'off');
+}
+
+function setCameraFieldFromUi(path, value) {
+  const snapshot = setCameraPanelField(path, value, { source: 'ui' });
+  if (snapshot) applyCameraSnapshot(snapshot);
+  updateCameraPanelReadouts();
 }
 
 function emptyPointCloudData() {
@@ -758,6 +929,10 @@ class UIBuilder {
       commitMode = 'snap',
       dynamicBounds = null,
       normalizeInput = normalizeInputText,
+      linkPath = null,
+      linkGetter = null,
+      linkSetter = null,
+      syncGroup = 'default',
     } = options;
     const row = document.createElement('div');
     row.className = 'slider-row';
@@ -779,17 +954,39 @@ class UIBuilder {
 
     activeBounds = getCurrentBounds();
 
-    const getBoundValue = () => {
+    const getBoundValueRaw = () => {
       if (index !== null) return Number(obj[key][index]);
       return Number(obj[key]);
     };
 
-    const setBoundValue = (v) => {
+    const setBoundValueRaw = (v) => {
       if (index !== null) obj[key][index] = v;
       else obj[key] = v;
     };
 
-    if (!Number.isFinite(getBoundValue())) setBoundValue(activeBounds.min);
+    if (!Number.isFinite(getBoundValueRaw())) setBoundValueRaw(activeBounds.min);
+
+    const linkable = isLinkEligiblePath(linkPath);
+    const linked = linkable
+      ? registerLinkedBinding(
+        linkPath,
+        typeof linkGetter === 'function' ? linkGetter : () => getBoundValueRaw(),
+        typeof linkSetter === 'function' ? linkSetter : (v) => setBoundValueRaw(v),
+        () => getCurrentBounds(),
+      )
+      : null;
+
+    if (linked && !Number.isFinite(linked.value)) linked.value = getBoundValueRaw();
+
+    const getBaseValue = () => {
+      if (linked) return Number.isFinite(linked.value) ? linked.value : getBoundValueRaw();
+      return getBoundValueRaw();
+    };
+
+    const setBaseValue = (v) => {
+      if (linked) linked.value = v;
+      else setBoundValueRaw(v);
+    };
 
     const format = (v) => {
       if (fmt) return fmt(v);
@@ -806,15 +1003,50 @@ class UIBuilder {
     inputBase.min = String(activeBounds.min);
     inputBase.max = String(activeBounds.max);
     inputBase.step = String(activeBounds.step);
-    inputBase.value = String(getBoundValue());
+    inputBase.value = String(getBaseValue());
     if (id) inputBase.id = id;
     trackWrap.appendChild(inputBase);
 
+    const inputTarget = document.createElement('input');
+    inputTarget.type = 'range';
+    inputTarget.className = 'slider-input target-thumb hidden';
+    inputTarget.min = String(activeBounds.min);
+    inputTarget.max = String(activeBounds.max);
+    inputTarget.step = String(activeBounds.step);
+    inputTarget.value = String(getBaseValue());
+    trackWrap.appendChild(inputTarget);
+
     const valueCluster = document.createElement('div');
     valueCluster.className = 'slider-value-cluster';
+
+    const linkControls = document.createElement('div');
+    linkControls.className = 'slider-link-controls';
+
+    const linkBtn = document.createElement('button');
+    linkBtn.type = 'button';
+    linkBtn.className = 'slider-link-btn ctrl-interactive';
+
+    const dirBtn = document.createElement('button');
+    dirBtn.type = 'button';
+    dirBtn.className = 'slider-link-btn ctrl-interactive';
+
+    const valueStack = document.createElement('div');
+    valueStack.className = 'slider-value-stack';
+
     const baseChip = document.createElement('button');
     baseChip.className = 'value-chip ctrl-interactive';
-    valueCluster.appendChild(baseChip);
+    const targetChip = document.createElement('button');
+    targetChip.className = 'value-chip value-chip-end ctrl-interactive hidden';
+
+    valueStack.appendChild(baseChip);
+    valueStack.appendChild(targetChip);
+
+    if (linked) {
+      linkControls.appendChild(linkBtn);
+      linkControls.appendChild(dirBtn);
+      valueCluster.appendChild(linkControls);
+    }
+    valueCluster.appendChild(valueStack);
 
     const syncBounds = () => {
       const next = getCurrentBounds();
@@ -822,17 +1054,69 @@ class UIBuilder {
       inputBase.min = String(next.min);
       inputBase.max = String(next.max);
       inputBase.step = String(next.step);
+      inputTarget.min = String(next.min);
+      inputTarget.max = String(next.max);
+      inputTarget.step = String(next.step);
     };
-    sliderBoundsSyncFns.push(syncBounds);
+    if (syncGroup === 'camera') cameraSliderBoundsSyncFns.push(syncBounds);
+    else sliderBoundsSyncFns.push(syncBounds);
+
+    const applyResolvedToField = () => {
+      const lo = Math.min(activeBounds.min, activeBounds.max);
+      const hi = Math.max(activeBounds.min, activeBounds.max);
+      if (linked) {
+        const resolved = resolveLinkedValue(linked, animation.progress);
+        const next = clamp(Number.isFinite(resolved) ? resolved : getBaseValue(), lo, hi);
+        if (typeof linked.setter === 'function') linked.setter(next);
+        else setBoundValueRaw(next);
+        return;
+      }
+      setBoundValueRaw(clamp(getBaseValue(), lo, hi));
+    };
+
+    const syncLinkUI = () => {
+      if (!linked) return;
+      linkBtn.classList.toggle('active', !!linked.isLinked);
+      linkBtn.setAttribute('aria-label', linked.isLinked ? 'Unlink parameter' : 'Link parameter');
+      linkBtn.title = linked.isLinked ? 'Linked' : 'Unlinked';
+      linkBtn.innerHTML = linked.isLinked ? ICON_LINK : ICON_UNLINK;
+
+      const showDirection = !!linked.isLinked;
+      dirBtn.classList.toggle('hidden', !showDirection);
+      if (showDirection) {
+        linked.direction = sanitizeDirection(linked.direction);
+        const isForward = linked.direction === 1;
+        dirBtn.setAttribute('aria-label', isForward ? 'Direction forward' : 'Direction reverse');
+        dirBtn.title = isForward ? 'Forward' : 'Reverse';
+        dirBtn.innerHTML = isForward ? ICON_DIR_FWD : ICON_DIR_REV;
+      }
+    };
 
     const syncUI = () => {
       syncBounds();
-      const current = getBoundValue();
-      inputBase.value = String(current);
-      baseChip.textContent = format(current);
+      const lo = Math.min(activeBounds.min, activeBounds.max);
+      const hi = Math.max(activeBounds.min, activeBounds.max);
+      const base = clamp(getBaseValue(), lo, hi);
+      inputBase.value = String(base);
+      baseChip.textContent = format(base);
+
+      const hasEndpoint = !!(linked && Number.isFinite(linked.endValue));
+      if (hasEndpoint) {
+        const end = clamp(Number(linked.endValue), lo, hi);
+        inputTarget.value = String(end);
+        inputTarget.classList.remove('hidden');
+        targetChip.classList.remove('hidden');
+        targetChip.textContent = format(end);
+      } else {
+        inputTarget.classList.add('hidden');
+        targetChip.classList.add('hidden');
+      }
+
+      syncLinkUI();
     };
 
-    sliderUiSyncFns.push(syncUI);
+    if (syncGroup === 'camera') cameraSliderUiSyncFns.push(syncUI);
+    else sliderUiSyncFns.push(syncUI);
 
     const commitBaseValue = (raw, opts = {}) => {
       const { triggerChange = true, mode = commitMode, source = 'unknown' } = opts;
@@ -849,13 +1133,43 @@ class UIBuilder {
         }
       }
 
-      setBoundValue(next);
+      setBaseValue(next);
+      if (linked && Number.isFinite(linked.endValue)) {
+        linked.endValue = clamp(linked.endValue, Math.min(activeBounds.min, activeBounds.max), Math.max(activeBounds.min, activeBounds.max));
+      }
+      applyResolvedToField();
 
       if (triggerChange && onChange) onChange(next);
       refreshSliderBounds();
+      refreshCameraSliderBounds();
       syncUI();
       pushCommitStatus(row, status);
       regenerate(heavy);
+    };
+
+    const commitEndpointValue = (raw, opts = {}) => {
+      if (!linked) return;
+      const { mode = 'snap', source = 'endpoint' } = opts;
+      const resolved = resolveCommittedValue(raw, activeBounds, mode);
+      if (!resolved.ok) return;
+      linked.endValue = resolved.value;
+      linked.isLinked = true;
+      linked.direction = sanitizeDirection(linked.direction);
+      applyResolvedToField();
+      refreshSliderBounds();
+      refreshCameraSliderBounds();
+      syncUI();
+      pushCommitStatus(row, source === 'text' ? 'applied' : resolved.status);
+      regenerate(heavy);
+    };
+
+    const setEndpointFromPointer = (clientX) => {
+      if (!linked) return;
+      const rect = trackWrap.getBoundingClientRect();
+      if (!rect || rect.width <= 0) return;
+      const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
+      const raw = activeBounds.min + ((activeBounds.max - activeBounds.min) * ratio);
+      commitEndpointValue(raw, { mode: 'snap', source: 'shift-click' });
     };
 
     const startInlineEdit = (chip, getter, setter) => {
@@ -897,13 +1211,58 @@ class UIBuilder {
       commitBaseValue(Number(inputBase.value), { mode: 'snap', source: 'drag' });
     });
 
+    inputTarget.addEventListener('input', () => {
+      commitEndpointValue(Number(inputTarget.value), { mode: 'snap', source: 'endpoint-drag' });
+    });
+
+    trackWrap.addEventListener('click', (e) => {
+      if (!linked || !e.shiftKey) return;
+      if (e.target === inputBase || e.target === inputTarget) return;
+      setEndpointFromPointer(e.clientX);
+    });
+
     baseChip.addEventListener('click', () => {
       startInlineEdit(
         baseChip,
-        () => getBoundValue(),
+        () => getBaseValue(),
         (v) => commitBaseValue(v, { mode: commitMode, source: 'text' }),
       );
     });
+
+    targetChip.addEventListener('click', () => {
+      if (!linked || !Number.isFinite(linked.endValue)) return;
+      startInlineEdit(
+        targetChip,
+        () => Number(linked.endValue),
+        (v) => commitEndpointValue(v, { mode: commitMode, source: 'text' }),
+      );
+    });
+
+    if (linked) {
+      linkBtn.addEventListener('click', () => {
+        if (!linked.isLinked) {
+          if (!Number.isFinite(linked.endValue)) {
+            linked.endValue = seedEndpoint(getBaseValue(), activeBounds.min, activeBounds.max, activeBounds.step);
+          }
+          linked.direction = sanitizeDirection(linked.direction);
+          linked.isLinked = true;
+        } else {
+          linked.isLinked = false;
+        }
+        applyResolvedToField();
+        syncUI();
+        regenerate(heavy);
+      });
+
+      dirBtn.addEventListener('click', () => {
+        if (!linked.isLinked) return;
+        linked.direction = linked.direction === 1 ? -1 : 1;
+        applyResolvedToField();
+        syncUI();
+        regenerate(heavy);
+      });
+    }
+
     syncUI();
 
     row.appendChild(lbl);
@@ -1009,61 +1368,164 @@ function bindModeButtons(container, prefix, options, currentValue, onSet) {
 }
 
 function addTransformControls(b) {
-  b.section('Transforms', false)
+  b.section('Transforms', true)
     .info('Enable/disable transform families. Default is sin-core only.');
 
   for (const key of TRANSFORM_KEYS) {
     const style = state.expressionModel.transforms[key];
+    const basePath = `expression.transforms.${key}`;
     b.childSection(`${TRANSFORM_LABELS[key]}`, true, {
       visibility: { obj: style, key: 'enabled' },
     })
-      .slider('point size x', style, 'pointSize', 0, 4, 0.05)
-      .slider('point opacity x', style, 'pointOpacity', 0, 1, 0.05)
-      .slider('line width x', style, 'lineWidth', 0, 4, 0.05)
-      .slider('line opacity x', style, 'lineOpacity', 0, 1, 0.05)
-      .slider('point bloom x', style, 'pointBloom', 0, 4, 0.05)
-      .slider('line bloom x', style, 'lineBloom', 0, 4, 0.05);
+      .slider('point size x', style, 'pointSize', 0, 4, 0.05, { linkPath: `${basePath}.pointSize` })
+      .slider('point opacity x', style, 'pointOpacity', 0, 1, 0.05, { linkPath: `${basePath}.pointOpacity` })
+      .slider('line width x', style, 'lineWidth', 0, 4, 0.05, { linkPath: `${basePath}.lineWidth` })
+      .slider('line opacity x', style, 'lineOpacity', 0, 1, 0.05, { linkPath: `${basePath}.lineOpacity` })
+      .slider('point bloom x', style, 'pointBloom', 0, 4, 0.05, { linkPath: `${basePath}.pointBloom` })
+      .slider('line bloom x', style, 'lineBloom', 0, 4, 0.05, { linkPath: `${basePath}.lineBloom` });
     b.endChild();
   }
 }
 
 function addSetAndChildControls(b) {
-  b.section('Function Sets', false)
+  b.section('Function Sets', true)
     .info('Hierarchical controls: parent x set x transform x child.');
 
   for (const setKey of SET_KEYS) {
     const setLabel = setKey === 'positive' ? 'Positive' : 'Negative';
     const setStyle = state.expressionModel.sets[setKey];
+    const setPath = `expression.sets.${setKey}`;
     b.childSection(setLabel, false, {
       visibility: { obj: setStyle, key: 'enabled' },
     })
-      .slider('point size x', setStyle, 'pointSize', 0, 4, 0.05)
-      .slider('point opacity x', setStyle, 'pointOpacity', 0, 1, 0.05)
-      .slider('line width x', setStyle, 'lineWidth', 0, 4, 0.05)
-      .slider('line opacity x', setStyle, 'lineOpacity', 0, 1, 0.05)
-      .slider('point bloom x', setStyle, 'pointBloom', 0, 4, 0.05)
-      .slider('line bloom x', setStyle, 'lineBloom', 0, 4, 0.05);
+      .slider('point size x', setStyle, 'pointSize', 0, 4, 0.05, { linkPath: `${setPath}.pointSize` })
+      .slider('point opacity x', setStyle, 'pointOpacity', 0, 1, 0.05, { linkPath: `${setPath}.pointOpacity` })
+      .slider('line width x', setStyle, 'lineWidth', 0, 4, 0.05, { linkPath: `${setPath}.lineWidth` })
+      .slider('line opacity x', setStyle, 'lineOpacity', 0, 1, 0.05, { linkPath: `${setPath}.lineOpacity` })
+      .slider('point bloom x', setStyle, 'pointBloom', 0, 4, 0.05, { linkPath: `${setPath}.pointBloom` })
+      .slider('line bloom x', setStyle, 'lineBloom', 0, 4, 0.05, { linkPath: `${setPath}.lineBloom` });
 
     const parentBody = b.activeChildBody;
     if (parentBody) {
       const nested = new UIBuilder(parentBody);
       for (const child of EXPRESSION_CHILDREN[setKey]) {
         const childStyle = state.expressionModel.children[child.key];
+        const childPath = `expression.children.${child.key}`;
         nested.childSection(child.label, true, {
           visibility: { obj: childStyle, key: 'enabled' },
         })
           .color('color', childStyle, 'color')
-          .slider('point size x', childStyle, 'pointSize', 0, 4, 0.05)
-          .slider('point opacity x', childStyle, 'pointOpacity', 0, 1, 0.05)
-          .slider('line width x', childStyle, 'lineWidth', 0, 4, 0.05)
-          .slider('line opacity x', childStyle, 'lineOpacity', 0, 1, 0.05)
-          .slider('point bloom x', childStyle, 'pointBloom', 0, 4, 0.05)
-          .slider('line bloom x', childStyle, 'lineBloom', 0, 4, 0.05);
+          .slider('point size x', childStyle, 'pointSize', 0, 4, 0.05, { linkPath: `${childPath}.pointSize` })
+          .slider('point opacity x', childStyle, 'pointOpacity', 0, 1, 0.05, { linkPath: `${childPath}.pointOpacity` })
+          .slider('line width x', childStyle, 'lineWidth', 0, 4, 0.05, { linkPath: `${childPath}.lineWidth` })
+          .slider('line opacity x', childStyle, 'lineOpacity', 0, 1, 0.05, { linkPath: `${childPath}.lineOpacity` })
+          .slider('point bloom x', childStyle, 'pointBloom', 0, 4, 0.05, { linkPath: `${childPath}.pointBloom` })
+          .slider('line bloom x', childStyle, 'lineBloom', 0, 4, 0.05, { linkPath: `${childPath}.lineBloom` });
         nested.endChild();
       }
     }
     b.endChild();
   }
+}
+
+function buildCameraPanel() {
+  if (!cameraContainer) cameraContainer = document.getElementById('camera-panel');
+  if (!cameraContainer) return;
+
+  cameraSliderUiSyncFns.length = 0;
+  cameraSliderBoundsSyncFns.length = 0;
+  for (const path of Object.keys(linkedParamRegistry)) {
+    if (path.startsWith('camera.')) delete linkedParamRegistry[path];
+  }
+
+  cameraContainer.innerHTML = '';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'accordion-panel';
+  const header = document.createElement('div');
+  const collapsed = state.cameraPanelOpen !== true;
+  header.className = `accordion-header${collapsed ? ' collapsed' : ''}`;
+  const title = document.createElement('span');
+  title.className = 'accordion-header-label';
+  title.textContent = 'Camera';
+  header.appendChild(title);
+  const body = document.createElement('div');
+  body.className = `accordion-body${collapsed ? ' collapsed' : ''}`;
+
+  header.addEventListener('click', () => {
+    header.classList.toggle('collapsed');
+    body.classList.toggle('collapsed');
+    state.cameraPanelOpen = !header.classList.contains('collapsed');
+  });
+
+  wrap.appendChild(header);
+  wrap.appendChild(body);
+  cameraContainer.appendChild(wrap);
+
+  const b = new UIBuilder(body);
+  b.info('Active view camera + orbit controls. Mouse/orbit edits and panel edits stay synchronized.');
+  b.html('<div class="hud-row" style="margin-top:6px"><span class="hud-key">view</span><span class="hud-val" id="camera-view-display">-</span></div>');
+  b.html('<div class="hud-row"><span class="hud-key">camera</span><span class="hud-val" id="camera-type-display">-</span></div>');
+  b.html('<div class="hud-row"><span class="hud-key">rotate</span><span class="hud-val" id="camera-rotate-display">-</span></div>');
+
+  const sliderOptions = (path, extra = {}) => ({
+    syncGroup: 'camera',
+    linkPath: `camera.${path}`,
+    linkGetter: () => getCameraField(path),
+    linkSetter: (v) => setCameraFieldFromUi(path, v),
+    ...extra,
+  });
+
+  b.slider('position.x', state.cameraPanel.position, 'x', -500, 500, 0.001, sliderOptions('position.x', { fmt: (v) => v.toFixed(3) }));
+  b.slider('position.y', state.cameraPanel.position, 'y', -500, 500, 0.001, sliderOptions('position.y', { fmt: (v) => v.toFixed(3) }));
+  b.slider('position.z', state.cameraPanel.position, 'z', -500, 500, 0.001, sliderOptions('position.z', { fmt: (v) => v.toFixed(3) }));
+
+  b.slider('target.x', state.cameraPanel.target, 'x', -500, 500, 0.001, sliderOptions('target.x', { fmt: (v) => v.toFixed(3) }));
+  b.slider('target.y', state.cameraPanel.target, 'y', -500, 500, 0.001, sliderOptions('target.y', { fmt: (v) => v.toFixed(3) }));
+  b.slider('target.z', state.cameraPanel.target, 'z', -500, 500, 0.001, sliderOptions('target.z', { fmt: (v) => v.toFixed(3) }));
+
+  b.slider('orbit damping', state.cameraPanel.orbit, 'dampingFactor', 0, 1, 0.001, sliderOptions('orbit.dampingFactor', { fmt: (v) => v.toFixed(3) }));
+  b.slider('rotate speed', state.cameraPanel.orbit, 'rotateSpeed', 0, 10, 0.01, sliderOptions('orbit.rotateSpeed', { fmt: (v) => v.toFixed(2) }));
+  b.slider('zoom speed', state.cameraPanel.orbit, 'zoomSpeed', 0, 10, 0.01, sliderOptions('orbit.zoomSpeed', { fmt: (v) => v.toFixed(2) }));
+  b.slider('pan speed', state.cameraPanel.orbit, 'panSpeed', 0, 10, 0.01, sliderOptions('orbit.panSpeed', { fmt: (v) => v.toFixed(2) }));
+  b.slider('min distance', state.cameraPanel.orbit, 'minDistance', 0.01, 500, 0.01, sliderOptions('orbit.minDistance', { fmt: (v) => v.toFixed(2) }));
+  b.slider('max distance', state.cameraPanel.orbit, 'maxDistance', 0.01, 1000, 0.01, sliderOptions('orbit.maxDistance', { fmt: (v) => v.toFixed(2) }));
+
+  if (state.cameraPanel.viewMode === '3d') {
+    b.slider('fov', state.cameraPanel.lens, 'fov', 10, 120, 0.1, sliderOptions('lens.fov', { fmt: (v) => v.toFixed(1) }));
+    b.slider('near', state.cameraPanel.lens, 'near', 0.0001, 100, 0.0001, sliderOptions('lens.near', { fmt: (v) => v.toFixed(4) }));
+    b.slider('far', state.cameraPanel.lens, 'far', 0.001, 5000, 0.01, sliderOptions('lens.far', { fmt: (v) => v.toFixed(3) }));
+    b.slider('distance', state.cameraPanel, 'distance', 0.01, 1000, 0.01, sliderOptions('distance', {
+      fmt: (v) => v.toFixed(3),
+      dynamicBounds: () => ({
+        min: Math.max(0.01, state.cameraPanel.orbit.minDistance),
+        max: Math.max(state.cameraPanel.orbit.maxDistance, state.cameraPanel.orbit.minDistance + 0.01),
+        step: 0.01,
+      }),
+    }));
+  } else {
+    b.slider('zoom', state.cameraPanel.lens, 'zoom', 0.01, 200, 0.01, sliderOptions('lens.zoom', { fmt: (v) => v.toFixed(3) }));
+    b.slider('near', state.cameraPanel.lens, 'near', 0.0001, 100, 0.0001, sliderOptions('lens.near', { fmt: (v) => v.toFixed(4) }));
+    b.slider('far', state.cameraPanel.lens, 'far', 0.001, 5000, 0.01, sliderOptions('lens.far', { fmt: (v) => v.toFixed(3) }));
+  }
+
+  updateCameraPanelReadouts();
+}
+
+function initCameraPanelBridge() {
+  if (cameraPanelUnsubscribe) return;
+  cameraPanelUnsubscribe = onCameraPanelChange((payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    const prevView = state.cameraPanel.viewMode;
+    applyCameraSnapshot(payload.snapshot);
+    updateCameraPanelReadouts();
+    if (state.cameraPanel.viewMode !== prevView) {
+      buildCameraPanel();
+      return;
+    }
+    refreshCameraSliderBounds();
+    syncCameraSliderUi();
+  });
 }
 
 function buildProofPanel() {
@@ -1077,7 +1539,10 @@ function buildProofPanel() {
   const header = document.createElement('div');
   const collapsed = state.proofPanelOpen !== true;
   header.className = `accordion-header${collapsed ? ' collapsed' : ''}`;
-  header.textContent = 'Proofs';
+  const title = document.createElement('span');
+  title.className = 'accordion-header-label';
+  title.textContent = 'Proofs';
+  header.appendChild(title);
   const body = document.createElement('div');
   body.className = `accordion-body${collapsed ? ' collapsed' : ''}`;
 
@@ -1162,9 +1627,13 @@ function initHudPanel() {
 
 function buildControls() {
   if (!controlsContainer) controlsContainer = document.getElementById('controls-panel');
+  const cameraSnapshot = getCameraPanelSnapshot();
+  if (cameraSnapshot) applyCameraSnapshot(cameraSnapshot);
   deriveState();
   sliderUiSyncFns.length = 0;
   sliderBoundsSyncFns.length = 0;
+  cameraSliderUiSyncFns.length = 0;
+  cameraSliderBoundsSyncFns.length = 0;
   controlsContainer.innerHTML = '';
 
   const b = new UIBuilder(controlsContainer);
@@ -1174,7 +1643,7 @@ function buildControls() {
     .modeToggle('Render', getRenderMode, setRenderMode, 'cinematic', 'performance', 'Cinematic', 'Performance')
     .modeToggle('View', getViewMode, setViewMode, '3d', '2d', '3D', '2D');
 
-  b.section('Kernel', false)
+  b.section('Kernel', true)
     .info('Global formula kernel for chart generation and proof comparison.')
     .modeToggle(
       'formula',
@@ -1186,13 +1655,14 @@ function buildControls() {
       'Euler',
     );
 
-  b.section('Traversal', false)
+  b.section('Traversal', true)
     .info('JSON-literal k: k={bool=0:T, bool>0:kAligned}. Playback is binary (play/pause) and uses deterministic stepping.')
     .slider('T', state, 'T', state.T_start, state.T_stop, getTSliderStep(), {
       fmt: (v) => v.toFixed(6),
       commitMode: 'exact',
       dynamicBounds: () => computeTraversalTBounds(state, getTSliderStep()),
       onCommit: (v) => applyTraversalCommit(state, 'T', v),
+      linkPath: 'T',
     })
     .slider('T_start', state, 'T_start', -1000000, 1000000, 0.000001, {
       fmt: (v) => v.toFixed(6),
@@ -1209,7 +1679,7 @@ function buildControls() {
       <button class="mode-pill ctrl-interactive" id="steploop-clamp">clamp</button>
       <button class="mode-pill ctrl-interactive" id="steploop-bounce">bounce</button>
     </div>`)
-    .slider('b', state, 'b', 1, 100000000, 1, { fmt: (v) => v.toFixed(0) })
+    .slider('b', state, 'b', 1, 100000000, 1, { fmt: (v) => v.toFixed(0), linkPath: 'b' })
     .html(`<div class="mode-row">
       <span class="slider-label">buffer mode</span>
       <button class="mode-pill ctrl-interactive" id="buffermode-off">off</button>
@@ -1311,7 +1781,7 @@ function buildControls() {
     },
   );
 
-  b.section('n Domain', false)
+  b.section('n Domain', true)
     .info('Canonical n = [Z_min+1 ... Z_max-1], with fixed 710 boundary coloring.')
     .slider('Z', state, 'Z', 1, 50000, 1, {
       fmt: (v) => v.toFixed(0),
@@ -1332,16 +1802,16 @@ function buildControls() {
     })
     .slider('path budget', state, 'pathBudget', 10, 2000, 10, { fmt: (v) => v.toFixed(0), heavy: true });
 
-  b.section('Scaling', false)
-    .slider('l_base', state, 'l_base', 0.01, 20, 0.01, { fmt: (v) => v.toFixed(3) })
-    .slider('l_func', state, 'l_func', 0.01, 20, 0.01, { fmt: (v) => v.toFixed(3) })
+  b.section('Scaling', true)
+    .slider('l_base', state, 'l_base', 0.01, 20, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'l_base' })
+    .slider('l_func', state, 'l_func', 0.01, 20, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'l_func' })
     .html(`<div class="mode-row">
       <span class="slider-label">k alignment bool</span>
       <button class="mode-pill ctrl-interactive" id="kbool-0">0</button>
       <button class="mode-pill ctrl-interactive" id="kbool-1">1</button>
     </div>`)
-    .slider('q_scale (strands)', state, 'q_scale', 0, 50, 0.001, { fmt: (v) => v.toFixed(3) })
-    .slider('q_tauScale', state, 'q_tauScale', -10, 10, 1, { fmt: (v) => v.toFixed(0) })
+    .slider('q_scale (strands)', state, 'q_scale', 0, 50, 0.001, { fmt: (v) => v.toFixed(3), linkPath: 'q_scale' })
+    .slider('q_tauScale', state, 'q_tauScale', -10, 10, 1, { fmt: (v) => v.toFixed(0), linkPath: 'q_tauScale' })
     .html(`<div class="mode-row">
       <span class="slider-label">q_bool</span>
       <button class="mode-pill ctrl-interactive" id="qbool-0">0</button>
@@ -1352,8 +1822,8 @@ function buildControls() {
       <button class="mode-pill ctrl-interactive" id="qcorr-0">0</button>
       <button class="mode-pill ctrl-interactive" id="qcorr-1">1</button>
     </div>`)
-    .slider('k2', state, 'k2', 0, 10, 0.01, { fmt: (v) => v.toFixed(3) })
-    .slider('k3', state, 'k3', 0.01, 10, 0.01, { fmt: (v) => v.toFixed(3) });
+    .slider('k2', state, 'k2', 0, 10, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'k2' })
+    .slider('k3', state, 'k3', 0.01, 10, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'k3' });
 
   bindModeButtons(
     controlsContainer,
@@ -1377,23 +1847,23 @@ function buildControls() {
     (v) => { state.q_correction = Number(v); },
   );
 
-  b.section('Expression Parent', false, {
+  b.section('Expression Parent', true, {
     visibility: { obj: state.expressionModel.parent, key: 'enabled' },
   })
-    .slider('point size', state.expressionModel.parent, 'pointSize', 0, 6, 0.05)
-    .slider('point opacity', state.expressionModel.parent, 'pointOpacity', 0, 1, 0.01)
-    .slider('line width', state.expressionModel.parent, 'lineWidth', 0, 6, 0.05)
-    .slider('line opacity', state.expressionModel.parent, 'lineOpacity', 0, 1, 0.01)
-    .slider('point bloom', state.expressionModel.parent, 'pointBloom', 0, 4, 0.05)
-    .slider('line bloom', state.expressionModel.parent, 'lineBloom', 0, 4, 0.05);
+    .slider('point size', state.expressionModel.parent, 'pointSize', 0, 6, 0.05, { linkPath: 'expression.parent.pointSize' })
+    .slider('point opacity', state.expressionModel.parent, 'pointOpacity', 0, 1, 0.01, { linkPath: 'expression.parent.pointOpacity' })
+    .slider('line width', state.expressionModel.parent, 'lineWidth', 0, 6, 0.05, { linkPath: 'expression.parent.lineWidth' })
+    .slider('line opacity', state.expressionModel.parent, 'lineOpacity', 0, 1, 0.01, { linkPath: 'expression.parent.lineOpacity' })
+    .slider('point bloom', state.expressionModel.parent, 'pointBloom', 0, 4, 0.05, { linkPath: 'expression.parent.pointBloom' })
+    .slider('line bloom', state.expressionModel.parent, 'lineBloom', 0, 4, 0.05, { linkPath: 'expression.parent.lineBloom' });
 
   addSetAndChildControls(b);
   addTransformControls(b);
 
-  b.section('Cinematic', isPerformance())
+  b.section('Cinematic', true)
     .info('Keep effects active; style bloom is controlled per hierarchy above.')
     .toggle('Master enabled', state.cinematicFx.master, 'enabled')
-    .slider('Master intensity', state.cinematicFx.master, 'intensity', 0, 2, 0.01, { fmt: (v) => v.toFixed(2) })
+    .slider('Master intensity', state.cinematicFx.master, 'intensity', 0, 2, 0.01, { fmt: (v) => v.toFixed(2), linkPath: 'cinematic.master.intensity' })
     .toggle('Points', state.cinematicFx.points, 'enabled')
     .toggle('Lines', state.cinematicFx.atlasLines, 'enabled')
     .toggle('Ghost traces', state.cinematicFx.ghostTraces, 'enabled')
@@ -1402,27 +1872,28 @@ function buildControls() {
     .toggle('Fog', state.cinematicFx.fog, 'enabled')
     .toggle('Tone', state.cinematicFx.tone, 'enabled')
     .childSection('Advanced FX', true)
-    .slider('star opacity', state.cinematicFx.stars, 'opacity', 0, 1, 0.01)
-    .slider('star rot Y', state.cinematicFx.stars, 'rotY', 0, 0.002, 0.0001, { fmt: (v) => v.toFixed(4) })
-    .slider('star rot X', state.cinematicFx.stars, 'rotX', 0, 0.001, 0.00005, { fmt: (v) => v.toFixed(5) })
-    .slider('star drift', state.cinematicFx.stars, 'drift', 0, 1, 0.01)
-    .slider('bloom strength', state.cinematicFx.bloom, 'strength', 0, 2, 0.05)
-    .slider('bloom radius', state.cinematicFx.bloom, 'radius', 0, 1, 0.05)
-    .slider('bloom threshold', state.cinematicFx.bloom, 'threshold', 0, 1, 0.01)
-    .slider('fog density', state.cinematicFx.fog, 'density', 0, 0.01, 0.0001, { fmt: (v) => v.toFixed(4) })
-    .slider('tone exposure', state.cinematicFx.tone, 'exposure', 0.5, 3, 0.01);
+    .slider('star opacity', state.cinematicFx.stars, 'opacity', 0, 1, 0.01, { linkPath: 'cinematic.stars.opacity' })
+    .slider('star rot Y', state.cinematicFx.stars, 'rotY', 0, 0.002, 0.0001, { fmt: (v) => v.toFixed(4), linkPath: 'cinematic.stars.rotY' })
+    .slider('star rot X', state.cinematicFx.stars, 'rotX', 0, 0.001, 0.00005, { fmt: (v) => v.toFixed(5), linkPath: 'cinematic.stars.rotX' })
+    .slider('star drift', state.cinematicFx.stars, 'drift', 0, 1, 0.01, { linkPath: 'cinematic.stars.drift' })
+    .slider('bloom strength', state.cinematicFx.bloom, 'strength', 0, 2, 0.05, { linkPath: 'cinematic.bloom.strength' })
+    .slider('bloom radius', state.cinematicFx.bloom, 'radius', 0, 1, 0.05, { linkPath: 'cinematic.bloom.radius' })
+    .slider('bloom threshold', state.cinematicFx.bloom, 'threshold', 0, 1, 0.01, { linkPath: 'cinematic.bloom.threshold' })
+    .slider('fog density', state.cinematicFx.fog, 'density', 0, 0.01, 0.0001, { fmt: (v) => v.toFixed(4), linkPath: 'cinematic.fog.density' })
+    .slider('tone exposure', state.cinematicFx.tone, 'exposure', 0.5, 3, 0.01, { linkPath: 'cinematic.tone.exposure' });
   b.endChild();
 
-  b.section('Atlas', false)
+  b.section('Atlas', true)
     .html('<div class="hud-row" style="margin-top:4px"><span class="hud-key">Active paths</span><span class="hud-val" id="atlas-paths-display-panel">â€”</span></div>')
     .html('<div class="hud-row"><span class="hud-key">Expressions</span><pre class="hud-val" id="atlas-expr-display" style="font-size:9px;margin:2px 0 0;white-space:pre-line;line-height:1.4;font-family:var(--mono)">â€”</pre></div>');
 
-  b.section('View')
+  b.section('View', true)
     .html('<div class="preset-row"><button class="preset-btn ctrl-interactive" id="btn-reset-camera">â†» Reset Camera</button><button class="preset-btn ctrl-interactive" id="btn-screenshot">ðŸ“· Screenshot</button></div>');
   const resetBtn = controlsContainer.querySelector('#btn-reset-camera');
   const shotBtn = controlsContainer.querySelector('#btn-screenshot');
   if (resetBtn) resetBtn.addEventListener('click', () => resetCamera());
   if (shotBtn) shotBtn.addEventListener('click', () => captureScreenshot());
+  buildCameraPanel();
   buildProofPanel();
   setText('formula-display', state.formulaMode === 'euler' ? 'Euler' : 'Tau');
 
@@ -1430,9 +1901,13 @@ function buildControls() {
     updateTransportUI();
     refreshSliderBounds();
     for (const sync of sliderUiSyncFns) sync();
+    refreshCameraSliderBounds();
+    syncCameraSliderUi();
   });
   refreshSliderBounds();
   for (const sync of sliderUiSyncFns) sync();
+  refreshCameraSliderBounds();
+  syncCameraSliderUi();
 }
 
 function buildTransportBar() {
@@ -1689,6 +2164,7 @@ function setupKeyboard() {
 }
 
 export function initControls() {
+  initCameraPanelBridge();
   initHudPanel();
   buildControls();
   buildTransportBar();
