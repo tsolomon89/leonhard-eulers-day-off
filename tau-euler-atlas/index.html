@@ -11,7 +11,7 @@
 
   <link rel="stylesheet" href="styles.css">
 </head>
-<body data-theme="dark" data-collapsed="false">
+<body data-theme="dark" data-collapsed="false" data-render="cinematic">
 
   <!-- App root: single inversion target for light mode -->
   <div id="app-root">
@@ -89,6 +89,14 @@
         <div class="hud-row">
           <span class="hud-key">Atlas paths</span>
           <span class="hud-val" id="atlas-paths-display">—</span>
+        </div>
+        <div class="accordion-panel" style="margin-top:4px">
+          <div class="accordion-header collapsed" id="expr-accordion-header" style="padding:2px 6px;cursor:pointer">
+            <span class="accordion-header-label" style="font-size:10px">▶ Expressions</span>
+          </div>
+          <div class="accordion-body collapsed" id="expr-accordion-body">
+            <pre class="hud-val" id="atlas-expr-display" style="font-size:9px;margin:2px 0 0;white-space:pre-line;line-height:1.4;font-family:var(--mono)">—</pre>
+          </div>
         </div>
       </div>
       </div>

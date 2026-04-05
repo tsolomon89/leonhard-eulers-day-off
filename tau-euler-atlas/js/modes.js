@@ -44,6 +44,7 @@ export function setTheme(theme) {
 
 export function setRenderMode(mode) {
   modes.render = mode;
+  document.body.setAttribute('data-render', mode);
   if (_onRenderChange) _onRenderChange(mode);
 }
 

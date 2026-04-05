@@ -1,4 +1,4 @@
-﻿import { TAU } from './complex.js';
+import { TAU } from './complex.js';
 import {
   computeProofPayloadFromState,
   generateAllPoints,
@@ -58,6 +58,8 @@ import {
   setRenderMode,
   setViewMode,
   toggleCollapse,
+  setCollapsed,
+  isCollapsed,
   isPerformance,
 } from './modes.js';
 import {
@@ -77,6 +79,9 @@ const updateGhostTraces = sceneApi.updateGhostTraces;
 const updateOrbitCircle = sceneApi.updateOrbitCircle;
 const setReferenceCirclesVisible = typeof sceneApi.setReferenceCirclesVisible === 'function'
   ? sceneApi.setReferenceCirclesVisible
+  : () => {};
+const setGridVisible = typeof sceneApi.setGridVisible === 'function'
+  ? sceneApi.setGridVisible
   : () => {};
 const setBloomEnabled = sceneApi.setBloomEnabled;
 const setBloomStrength = sceneApi.setBloomStrength;
@@ -136,6 +141,7 @@ export const state = {
   formulaMode: 'tau',
 
   q_scale: 1,
+  q_scale_b: 1000,
   q_tauScale: 0,
   q_bool: 0,
   q_correction: 0,
@@ -148,6 +154,7 @@ export const state = {
   alpha: TAU,
   showAlpha: true,
   hudPanelOpen: false,
+  autoHidePanels: false,
   cameraPanelOpen: false,
   cameraPanel: {
     viewMode: '3d',
@@ -179,6 +186,7 @@ export const state = {
   visualHelpers: {
     referenceRings: true,
     orbitRing: true,
+    grid: true,
   },
 };
 
@@ -366,7 +374,7 @@ function emptyPointCloudData() {
 
 function normalizeVisualHelpers() {
   if (!state.visualHelpers || typeof state.visualHelpers !== 'object') {
-    state.visualHelpers = { referenceRings: true, orbitRing: true };
+    state.visualHelpers = { referenceRings: true, orbitRing: true, grid: true };
     return;
   }
   if (typeof state.visualHelpers.referenceRings !== 'boolean') {
@@ -374,6 +382,9 @@ function normalizeVisualHelpers() {
   }
   if (typeof state.visualHelpers.orbitRing !== 'boolean') {
     state.visualHelpers.orbitRing = true;
+  }
+  if (typeof state.visualHelpers.grid !== 'boolean') {
+    state.visualHelpers.grid = true;
   }
 }
 
@@ -390,8 +401,10 @@ function getEffectiveFx() {
 
 function applyVisualHelpers() {
   normalizeVisualHelpers();
-  setReferenceCirclesVisible(state.visualHelpers.referenceRings);
-  updateOrbitCircle(state.visualHelpers.orbitRing ? state.k : NaN);
+  const masterOn = state.cinematicFx.master.enabled;
+  setReferenceCirclesVisible(masterOn && state.visualHelpers.referenceRings);
+  updateOrbitCircle(masterOn && state.visualHelpers.orbitRing ? state.k : NaN);
+  setGridVisible(state.visualHelpers.grid);
 }
 
 function computeMathSignature(derived, budget) {
@@ -590,7 +603,6 @@ function applyRenderPayload(payload, fx) {
   if (lineEnabled) {
     updateAtlasPaths(payload.atlasPaths, fx.atlasLines.width, fx.atlasLines.opacity);
     setText('atlas-paths-display', `${payload.atlasPaths.length} / ${state.pathBudget}`);
-    setText('atlas-paths-display-panel', `${payload.atlasPaths.length} / ${state.pathBudget}`);
 
     if (payload.atlasPaths.length > 0) {
       const labels = new Set();
@@ -605,7 +617,6 @@ function applyRenderPayload(payload, fx) {
   } else {
     updateAtlasPaths(null, 0, 0);
     setText('atlas-paths-display', '-');
-    setText('atlas-paths-display-panel', '-');
     setText('atlas-expr-display', '-');
   }
 
@@ -872,6 +883,9 @@ class UIBuilder {
     head.addEventListener('click', () => {
       head.classList.toggle('collapsed');
       body.classList.toggle('collapsed');
+      if (typeof options.onToggle === 'function') {
+        options.onToggle(!head.classList.contains('collapsed'));
+      }
     });
     wrap.appendChild(head);
     wrap.appendChild(body);
@@ -884,6 +898,7 @@ class UIBuilder {
   childSection(title, collapsed = true, options = {}) {
     const wrap = document.createElement('div');
     wrap.className = 'accordion-child-panel';
+    if (options.cssClass) wrap.classList.add(options.cssClass);
     const head = document.createElement('div');
     head.className = `accordion-child-header${collapsed ? ' collapsed' : ''}`;
     head.appendChild(this._createHeaderMain(title, options.visibility, true));
@@ -1046,6 +1061,16 @@ class UIBuilder {
     inputTarget.value = String(getBaseValue());
     trackWrap.appendChild(inputTarget);
 
+    // Third thumb: live/current value (ring, always on top — gets click priority when stacked)
+    const inputLive = document.createElement('input');
+    inputLive.type = 'range';
+    inputLive.className = 'slider-input live-thumb hidden';
+    inputLive.min = String(activeBounds.min);
+    inputLive.max = String(activeBounds.max);
+    inputLive.step = String(activeBounds.step);
+    inputLive.value = String(getBaseValue());
+    trackWrap.appendChild(inputLive);
+
     const valueCluster = document.createElement('div');
     valueCluster.className = 'slider-value-cluster';
 
@@ -1065,10 +1090,18 @@ class UIBuilder {
 
     const baseChip = document.createElement('button');
     baseChip.className = 'value-chip ctrl-interactive';
+
+    // Numeric input for precise current-value entry (shown only when linked)
+    const liveNumberInput = document.createElement('input');
+    liveNumberInput.type = 'number';
+    liveNumberInput.className = 'slider-live-number-input hidden';
+    liveNumberInput.setAttribute('aria-label', 'Current value');
+
     const targetChip = document.createElement('button');
     targetChip.className = 'value-chip value-chip-end ctrl-interactive hidden';
 
     valueStack.appendChild(baseChip);
+    valueStack.appendChild(liveNumberInput);
     valueStack.appendChild(targetChip);
 
     if (linkable) {
@@ -1087,6 +1120,12 @@ class UIBuilder {
       inputTarget.min = String(next.min);
       inputTarget.max = String(next.max);
       inputTarget.step = String(next.step);
+      inputLive.min = String(next.min);
+      inputLive.max = String(next.max);
+      inputLive.step = String(next.step);
+      liveNumberInput.min = String(next.min);
+      liveNumberInput.max = String(next.max);
+      liveNumberInput.step = String(next.step);
     };
     if (syncGroup === 'camera') cameraSliderBoundsSyncFns.push(syncBounds);
     else sliderBoundsSyncFns.push(syncBounds);
@@ -1129,7 +1168,7 @@ class UIBuilder {
       }
       const base = clamp(getBaseValue(), lo, hi);
       inputBase.value = String(base);
-      baseChip.textContent = format(base);
+      if (!baseChip.classList.contains('editing')) baseChip.textContent = format(base);
 
       const hasEndpoint = !!(rec && rec.isLinked && Number.isFinite(rec.endValue));
       if (hasEndpoint) {
@@ -1137,10 +1176,42 @@ class UIBuilder {
         inputTarget.value = String(end);
         inputTarget.classList.remove('hidden');
         targetChip.classList.remove('hidden');
-        targetChip.textContent = format(end);
+        if (!targetChip.classList.contains('editing')) targetChip.textContent = format(end);
+
+        // -- Live / current value thumb ----------------------------------------
+        const liveVal = Number.isFinite(rec.lastResolved) ? rec.lastResolved : getLiveValue();
+        const live = clamp(liveVal, lo, hi);
+        inputLive.value = String(live);
+        inputLive.classList.remove('hidden');
+        if (!liveNumberInput.classList.contains('editing')) {
+          liveNumberInput.value = format(live);
+        }
+        liveNumberInput.classList.remove('hidden');
+
+        // -- Colour boundary thumbs per direction (green=start, red=stop) ------
+        const isForward = !rec || rec.direction !== -1;
+        // base is the "from" point when forward, the "to" point when reverse
+        inputBase.classList.remove('base-thumb', 'start-thumb', 'stop-thumb');
+        inputTarget.classList.remove('target-thumb', 'start-thumb', 'stop-thumb');
+        inputBase.classList.add(isForward ? 'start-thumb' : 'stop-thumb');
+        inputTarget.classList.add(isForward ? 'stop-thumb' : 'start-thumb');
+        baseChip.classList.toggle('value-chip-start', isForward);
+        baseChip.classList.toggle('value-chip-stop', !isForward);
+        targetChip.classList.toggle('value-chip-stop', isForward);
+        targetChip.classList.toggle('value-chip-start', !isForward);
       } else {
         inputTarget.classList.add('hidden');
         targetChip.classList.add('hidden');
+        inputLive.classList.add('hidden');
+        liveNumberInput.classList.add('hidden');
+
+        // Restore neutral thumb style when unlinked
+        inputBase.classList.remove('start-thumb', 'stop-thumb');
+        inputBase.classList.add('base-thumb');
+        inputTarget.classList.remove('start-thumb', 'stop-thumb');
+        inputTarget.classList.add('target-thumb');
+        baseChip.classList.remove('value-chip-start', 'value-chip-stop');
+        targetChip.classList.remove('value-chip-start', 'value-chip-stop');
       }
 
       syncLinkUI();
@@ -1248,6 +1319,18 @@ class UIBuilder {
 
     inputTarget.addEventListener('input', () => {
       commitEndpointValue(Number(inputTarget.value), { mode: 'snap', source: 'endpoint-drag' });
+    });
+
+    // liveNumberInput: committing sets the base value when unlinked;
+    // when linked, treat it as setting the base (re-anchors the animation start)
+    liveNumberInput.addEventListener('change', () => {
+      const parsed = parseNumericInput(liveNumberInput.value, normalizeInput);
+      if (!Number.isFinite(parsed)) { syncUI(); return; }
+      commitBaseValue(parsed, { mode: commitMode, source: 'live-input' });
+    });
+    liveNumberInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') liveNumberInput.blur();
+      if (e.key === 'Escape') syncUI();
     });
 
     trackWrap.addEventListener('click', (e) => {
@@ -1374,6 +1457,37 @@ class UIBuilder {
     group.appendChild(btnA);
     group.appendChild(btnB);
     row.appendChild(lbl);
+    row.appendChild(group);
+    this._parent().appendChild(row);
+    return this;
+  }
+
+  toggleRow(label, toggles, options = {}) {
+    const row = document.createElement('div');
+    row.className = 'mode-btn-row';
+    if (options.cssClass) row.classList.add(options.cssClass);
+
+    const lbl = document.createElement('span');
+    lbl.className = 'mode-btn-row-label';
+    lbl.textContent = label;
+    row.appendChild(lbl);
+
+    const group = document.createElement('div');
+    group.className = 'mode-btn-row-buttons';
+
+    for (const t of toggles) {
+      const btn = document.createElement('button');
+      btn.className = `mode-btn ctrl-interactive${t.obj[t.key] ? ' active-green' : ''}`;
+      btn.textContent = t.label;
+      btn.addEventListener('click', () => {
+        t.obj[t.key] = !t.obj[t.key];
+        btn.classList.toggle('active-green', t.obj[t.key]);
+        if (t.onChange) t.onChange(t.obj[t.key]);
+        regenerate(t.heavy || false);
+      });
+      group.appendChild(btn);
+    }
+
     row.appendChild(group);
     this._parent().appendChild(row);
     return this;
@@ -1699,29 +1813,12 @@ function buildCameraPanel() {
 
   cameraContainer.innerHTML = '';
 
-  const wrap = document.createElement('div');
-  wrap.className = 'accordion-panel';
-  const header = document.createElement('div');
-  const collapsed = state.cameraPanelOpen !== true;
-  header.className = `accordion-header${collapsed ? ' collapsed' : ''}`;
-  const title = document.createElement('span');
-  title.className = 'accordion-header-label';
-  title.textContent = 'Camera';
-  header.appendChild(title);
-  const body = document.createElement('div');
-  body.className = `accordion-body${collapsed ? ' collapsed' : ''}`;
-
-  header.addEventListener('click', () => {
-    header.classList.toggle('collapsed');
-    body.classList.toggle('collapsed');
-    state.cameraPanelOpen = !header.classList.contains('collapsed');
+  const b = new UIBuilder(cameraContainer);
+  b.section('Camera', state.cameraPanelOpen !== true, {
+    onToggle: (open) => { state.cameraPanelOpen = open; },
   });
-
-  wrap.appendChild(header);
-  wrap.appendChild(body);
-  cameraContainer.appendChild(wrap);
-
-  const b = new UIBuilder(body);
+  b.html('<div class="preset-row"><button class="preset-btn ctrl-interactive" id="btn-reset-camera">&#x21bb; Reset Camera</button><button class="preset-btn ctrl-interactive" id="btn-screenshot">&#x1f4f7; Screenshot</button></div>');
+  b.toggle('auto-hide on play', state, 'autoHidePanels');
   b.info('Active view camera + orbit controls. Mouse/orbit edits and panel edits stay synchronized.');
   b.html('<div class="hud-row" style="margin-top:6px"><span class="hud-key">view</span><span class="hud-val" id="camera-view-display">-</span></div>');
   b.html('<div class="hud-row"><span class="hud-key">camera</span><span class="hud-val" id="camera-type-display">-</span></div>');
@@ -1883,6 +1980,20 @@ function initHudPanel() {
     });
   }
   sync();
+
+  // Expressions sub-accordion (collapsed by default)
+  const exprHeader = document.getElementById('expr-accordion-header');
+  const exprBody = document.getElementById('expr-accordion-body');
+  if (exprHeader && exprBody && exprHeader.dataset.boundCollapse !== '1') {
+    exprHeader.dataset.boundCollapse = '1';
+    exprHeader.addEventListener('click', () => {
+      const wasCollapsed = exprBody.classList.contains('collapsed');
+      exprHeader.classList.toggle('collapsed', !wasCollapsed);
+      exprBody.classList.toggle('collapsed', !wasCollapsed);
+      exprHeader.querySelector('.accordion-header-label').textContent =
+        wasCollapsed ? '\u25bc Expressions' : '\u25b6 Expressions';
+    });
+  }
 }
 
 function buildControls() {
@@ -1904,9 +2015,38 @@ function buildControls() {
   const b = new UIBuilder(controlsContainer);
 
   b.section('Mode')
+    .toggle('Master enabled', state.cinematicFx.master, 'enabled', () => applyVisualHelpers())
+    .slider('Master intensity', state.cinematicFx.master, 'intensity', 0, 2, 0.01, { fmt: (v) => v.toFixed(2), linkPath: 'cinematic.master.intensity' })
+    .toggleRow('Graphs', [
+      { label: 'Points', obj: state.cinematicFx.points, key: 'enabled' },
+      { label: 'Lines', obj: state.cinematicFx.atlasLines, key: 'enabled' },
+    ])
+    .toggleRow('Guides', [
+      { label: 'Grid', obj: state.visualHelpers, key: 'grid', onChange: () => applyVisualHelpers() },
+      { label: 'Ghost', obj: state.cinematicFx.ghostTraces, key: 'enabled' },
+      { label: 'Reference', obj: state.visualHelpers, key: 'referenceRings', onChange: () => applyVisualHelpers() },
+      { label: 'Orbit', obj: state.visualHelpers, key: 'orbitRing', onChange: () => applyVisualHelpers() },
+    ])
     .modeToggle('Theme', getTheme, setTheme, 'dark', 'light', 'Dark', 'Light')
+    .modeToggle('View', getViewMode, setViewMode, '3d', '2d', '3D', '2D')
     .modeToggle('Render', getRenderMode, setRenderMode, 'cinematic', 'performance', 'Cinematic', 'Performance')
-    .modeToggle('View', getViewMode, setViewMode, '3d', '2d', '3D', '2D');
+    .toggleRow('Effects', [
+      { label: 'Stars', obj: state.cinematicFx.stars, key: 'enabled' },
+      { label: 'Bloom', obj: state.cinematicFx.bloom, key: 'enabled' },
+      { label: 'Fog', obj: state.cinematicFx.fog, key: 'enabled' },
+      { label: 'Tone', obj: state.cinematicFx.tone, key: 'enabled' },
+    ], { cssClass: 'cinematic-only' })
+    .childSection('Advanced FX', true, { cssClass: 'cinematic-only' })
+    .slider('star opacity', state.cinematicFx.stars, 'opacity', 0, 1, 0.01, { linkPath: 'cinematic.stars.opacity' })
+    .slider('star rot Y', state.cinematicFx.stars, 'rotY', 0, 0.002, 0.0001, { fmt: (v) => v.toFixed(4), linkPath: 'cinematic.stars.rotY' })
+    .slider('star rot X', state.cinematicFx.stars, 'rotX', 0, 0.001, 0.00005, { fmt: (v) => v.toFixed(5), linkPath: 'cinematic.stars.rotX' })
+    .slider('star drift', state.cinematicFx.stars, 'drift', 0, 1, 0.01, { linkPath: 'cinematic.stars.drift' })
+    .slider('bloom strength', state.cinematicFx.bloom, 'strength', 0, 2, 0.05, { linkPath: 'cinematic.bloom.strength' })
+    .slider('bloom radius', state.cinematicFx.bloom, 'radius', 0, 1, 0.05, { linkPath: 'cinematic.bloom.radius' })
+    .slider('bloom threshold', state.cinematicFx.bloom, 'threshold', 0, 1, 0.01, { linkPath: 'cinematic.bloom.threshold' })
+    .slider('fog density', state.cinematicFx.fog, 'density', 0, 0.01, 0.0001, { fmt: (v) => v.toFixed(4), linkPath: 'cinematic.fog.density' })
+    .slider('tone exposure', state.cinematicFx.tone, 'exposure', 0.5, 3, 0.01, { linkPath: 'cinematic.tone.exposure' });
+  b.endChild();
 
   b.section('Kernel', true)
     .info('Global formula kernel for chart generation and proof comparison.')
@@ -2075,7 +2215,12 @@ function buildControls() {
       <button class="mode-pill ctrl-interactive" id="kbool-0">0</button>
       <button class="mode-pill ctrl-interactive" id="kbool-1">1</button>
     </div>`)
-    .slider('q_scale (strands)', state, 'q_scale', 0, 50, 0.001, { fmt: (v) => v.toFixed(3), linkPath: 'q_scale' })
+    .slider('q_scale (strands)', state, 'q_scale', 0, 50, 0.001, {
+      fmt: (v) => v.toFixed(6),
+      linkPath: 'q_scale',
+      dynamicBounds: () => ({ min: 0, max: 50, step: state.q_scale_s || 0.001 }),
+    })
+    .slider('q_scale_b', state, 'q_scale_b', 1, 100000000, 1, { fmt: (v) => v.toFixed(0) })
     .slider('q_tauScale', state, 'q_tauScale', -10, 10, 1, { fmt: (v) => v.toFixed(0), linkPath: 'q_tauScale' })
     .html(`<div class="mode-row">
       <span class="slider-label">q_bool</span>
@@ -2114,43 +2259,13 @@ function buildControls() {
 
   buildUnifiedFunctionControlSection(b);
 
-  b.section('Cinematic', true)
-    .info('Keep effects active; style bloom is controlled per hierarchy above.')
-    .toggle('Master enabled', state.cinematicFx.master, 'enabled')
-    .slider('Master intensity', state.cinematicFx.master, 'intensity', 0, 2, 0.01, { fmt: (v) => v.toFixed(2), linkPath: 'cinematic.master.intensity' })
-    .toggle('Points', state.cinematicFx.points, 'enabled')
-    .toggle('Lines', state.cinematicFx.atlasLines, 'enabled')
-    .toggle('Ghost traces', state.cinematicFx.ghostTraces, 'enabled')
-    .toggle('Stars', state.cinematicFx.stars, 'enabled')
-    .toggle('Bloom', state.cinematicFx.bloom, 'enabled')
-    .toggle('Fog', state.cinematicFx.fog, 'enabled')
-    .toggle('Tone', state.cinematicFx.tone, 'enabled')
-    .childSection('Advanced FX', true)
-    .slider('star opacity', state.cinematicFx.stars, 'opacity', 0, 1, 0.01, { linkPath: 'cinematic.stars.opacity' })
-    .slider('star rot Y', state.cinematicFx.stars, 'rotY', 0, 0.002, 0.0001, { fmt: (v) => v.toFixed(4), linkPath: 'cinematic.stars.rotY' })
-    .slider('star rot X', state.cinematicFx.stars, 'rotX', 0, 0.001, 0.00005, { fmt: (v) => v.toFixed(5), linkPath: 'cinematic.stars.rotX' })
-    .slider('star drift', state.cinematicFx.stars, 'drift', 0, 1, 0.01, { linkPath: 'cinematic.stars.drift' })
-    .slider('bloom strength', state.cinematicFx.bloom, 'strength', 0, 2, 0.05, { linkPath: 'cinematic.bloom.strength' })
-    .slider('bloom radius', state.cinematicFx.bloom, 'radius', 0, 1, 0.05, { linkPath: 'cinematic.bloom.radius' })
-    .slider('bloom threshold', state.cinematicFx.bloom, 'threshold', 0, 1, 0.01, { linkPath: 'cinematic.bloom.threshold' })
-    .slider('fog density', state.cinematicFx.fog, 'density', 0, 0.01, 0.0001, { fmt: (v) => v.toFixed(4), linkPath: 'cinematic.fog.density' })
-    .slider('tone exposure', state.cinematicFx.tone, 'exposure', 0.5, 3, 0.01, { linkPath: 'cinematic.tone.exposure' });
-  b.endChild();
 
-  b.section('Atlas', true)
-    .html('<div class="hud-row" style="margin-top:4px"><span class="hud-key">Active paths</span><span class="hud-val" id="atlas-paths-display-panel">â€”</span></div>')
-    .html('<div class="hud-row"><span class="hud-key">Expressions</span><pre class="hud-val" id="atlas-expr-display" style="font-size:9px;margin:2px 0 0;white-space:pre-line;line-height:1.4;font-family:var(--mono)">â€”</pre></div>');
 
-  b.section('View', true)
-    .info('Global scene overlays (not tied to any function node).')
-    .toggle('reference rings', state.visualHelpers, 'referenceRings', () => applyVisualHelpers())
-    .toggle('orbit ring', state.visualHelpers, 'orbitRing', () => applyVisualHelpers())
-    .html('<div class="preset-row"><button class="preset-btn ctrl-interactive" id="btn-reset-camera">â†» Reset Camera</button><button class="preset-btn ctrl-interactive" id="btn-screenshot">ðŸ“· Screenshot</button></div>');
-  const resetBtn = controlsContainer.querySelector('#btn-reset-camera');
-  const shotBtn = controlsContainer.querySelector('#btn-screenshot');
+  buildCameraPanel();
+  const resetBtn = document.getElementById('btn-reset-camera');
+  const shotBtn = document.getElementById('btn-screenshot');
   if (resetBtn) resetBtn.addEventListener('click', () => resetCamera());
   if (shotBtn) shotBtn.addEventListener('click', () => captureScreenshot());
-  buildCameraPanel();
   buildProofPanel();
   linkEngine.prune((path) => {
     if (path.startsWith('camera.')) return activeCameraLinkedPaths.has(path);
@@ -2183,6 +2298,10 @@ function buildTransportBar() {
   playBtn.title = animation.playing ? 'Pause' : 'Play';
   playBtn.addEventListener('click', () => {
     const wasPlaying = animation.playing;
+    if (!wasPlaying && state.autoHidePanels && !isCollapsed()) {
+      setCollapsed(true);
+      buildTransportBar();
+    }
     animation.toggle();
     deriveState();
     const signature = computeMathSignature(state, computePointBudget());
@@ -2202,6 +2321,10 @@ function buildTransportBar() {
   stopBtn.title = 'Stop';
   stopBtn.addEventListener('click', () => {
     animation.stop();
+    if (state.autoHidePanels && isCollapsed()) {
+      setCollapsed(false);
+      buildTransportBar();
+    }
     _stepBounceDir = 1;
     deriveState();
     const signature = computeMathSignature(state, computePointBudget());
@@ -2300,6 +2423,11 @@ function animationFrame() {
   if (changed) updateTransportUI();
 
   const derived = deriveState();
+  // Sync slider UI (especially the live-thumb) when animation progress moves
+  if (changed) {
+    for (const sync of sliderUiSyncFns) sync();
+    syncCameraSliderUi();
+  }
   normalizeVisualHelpers();
   const fx = getEffectiveFx();
   const budget = computePointBudget();
@@ -2389,6 +2517,10 @@ function setupKeyboard() {
         e.preventDefault();
         {
           const wasPlaying = animation.playing;
+          if (!wasPlaying && state.autoHidePanels && !isCollapsed()) {
+            setCollapsed(true);
+            buildTransportBar();
+          }
           animation.toggle();
           deriveState();
           const signature = computeMathSignature(state, computePointBudget());
@@ -2408,6 +2540,10 @@ function setupKeyboard() {
         break;
       case 'Escape':
         animation.stop();
+        if (state.autoHidePanels && isCollapsed()) {
+          setCollapsed(false);
+          buildTransportBar();
+        }
         _stepBounceDir = 1;
         deriveState();
         setBufferPhase('idle');

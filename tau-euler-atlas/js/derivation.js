@@ -214,6 +214,10 @@ export function buildDerivedState(input) {
   if (Math.abs(b) < EPS) b = 1;
   const s = 1 / b;
 
+  let q_scale_b = Number.isFinite(base.q_scale_b) ? base.q_scale_b : 1000;
+  if (q_scale_b < 1) q_scale_b = 1;
+  const q_scale_s = 1 / q_scale_b;
+
   const legacyStepRate = Number.isFinite(base.stepRate) ? base.stepRate : 1;
   delete base.stepRate;
   const legacyTimeMode = base.timeMode === 'off'
@@ -262,6 +266,8 @@ export function buildDerivedState(input) {
     kAligned,
     k,
     q_scale,
+    q_scale_b,
+    q_scale_s,
     q_tauScale,
     q_bool,
     q_correction,

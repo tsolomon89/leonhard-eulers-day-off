@@ -352,6 +352,11 @@ export function setReferenceCirclesVisible(v) {
   refCircles.visible = !!v;
 }
 
+export function setGridVisible(v) {
+  if (!gridGroup) return;
+  gridGroup.visible = !!v;
+}
+
 // ── Scene initialization ─────────────────────────────────────
 
 export function initScene() {

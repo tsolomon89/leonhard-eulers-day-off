@@ -1,4 +1,4 @@
-﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    styles.css â€” Glassmorphism + Dual Theme + Portable Anim (v6)
    Ï„-Euler Atlas Â· Three.js Edition
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
@@ -51,8 +51,12 @@
   --accent-green: #a5f3c0;
   --accent-green-glow: rgba(165, 243, 192, 0.7);
   --accent-green-dim: rgba(165, 243, 192, 0.07);
+  --accent-green-solid: #4ade80;
   --accent-red: rgba(248, 113, 113, 0.65);
+  --accent-red-solid: #f87171;
   --accent-red-dim: rgba(248, 113, 113, 0.05);
+  --thumb-start-glow: 0 0 10px rgba(74, 222, 128, 0.75);
+  --thumb-stop-glow:  0 0 10px rgba(248, 113, 113, 0.75);
 
   /* Shared */
   --blur: 28px;
@@ -262,6 +266,44 @@ body {
 
 .hidden { display: none !important; }
 
+/* ── Start thumb (green – "from" boundary) ─────────────────────────────── */
+.start-thumb { z-index: 3; }
+.start-thumb::-webkit-slider-thumb {
+  background: var(--accent-green-solid);
+  box-shadow: var(--thumb-start-glow);
+}
+.start-thumb::-moz-range-thumb {
+  background: var(--accent-green-solid);
+  box-shadow: var(--thumb-start-glow);
+}
+
+/* ── Stop thumb (red – "to" boundary) ──────────────────────────────────── */
+.stop-thumb { z-index: 3; }
+.stop-thumb::-webkit-slider-thumb {
+  background: var(--accent-red-solid);
+  box-shadow: var(--thumb-stop-glow);
+}
+.stop-thumb::-moz-range-thumb {
+  background: var(--accent-red-solid);
+  box-shadow: var(--thumb-stop-glow);
+}
+
+/* ── Live thumb (blue – current position, read-only) ───────────────────── */
+/* Visual indicator only — sits on top so the dot is always visible */
+.live-thumb { z-index: 4; pointer-events: none; }
+.live-thumb::-webkit-slider-thumb {
+  background: var(--thumb-target-bg);
+  box-shadow: var(--thumb-target-glow);
+  pointer-events: none;
+  cursor: default;
+}
+.live-thumb::-moz-range-thumb {
+  background: var(--thumb-target-bg);
+  box-shadow: var(--thumb-target-glow);
+  pointer-events: none;
+  cursor: default;
+}
+
 .slider-value-cluster {
   display: flex;
   align-items: center;
@@ -320,10 +362,54 @@ body {
 }
 .value-chip:hover { color: var(--text-primary); border-color: var(--text-secondary); }
 .value-chip-end { min-width: 46px; }
+
+/* Boundary chip colour states (matched to direction) */
+.value-chip.value-chip-start {
+  color: var(--accent-green-solid);
+  border-color: rgba(74, 222, 128, 0.45);
+  background: rgba(74, 222, 128, 0.06);
+}
+.value-chip.value-chip-stop {
+  color: var(--accent-red-solid);
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.06);
+}
+
 .value-chip.editing {
   padding: 0;
   background: var(--body-bg);
   border-color: var(--accent-green);
+}
+
+/* ── Inline live-value number input ─────────────────────────────────────── */
+.slider-live-number-input {
+  min-width: 46px;
+  max-width: 60px;
+  height: 18px;
+  border: 1px solid rgba(137, 196, 244, 0.40);
+  border-radius: 8px;
+  background: rgba(137, 196, 244, 0.07);
+  color: var(--thumb-target-bg);
+  font-size: 9px;
+  font-family: var(--mono);
+  padding: 0 5px;
+  text-align: right;
+  outline: none;
+  transition: var(--trans);
+  /* Hide browser spin buttons */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.slider-live-number-input::-webkit-inner-spin-button,
+.slider-live-number-input::-webkit-outer-spin-button { display: none; }
+.slider-live-number-input:focus {
+  border-color: var(--thumb-target-bg);
+  background: rgba(137, 196, 244, 0.12);
+  color: var(--text-primary);
+}
+.slider-live-number-input:hover:not(:focus) {
+  border-color: rgba(137, 196, 244, 0.60);
+  background: rgba(137, 196, 244, 0.10);
 }
 
 .value-edit-input {
@@ -712,4 +798,54 @@ body[data-collapsed="true"] #controls-panel { opacity: 0; pointer-events: none; 
 }
 .sz-row .slider-track-wrap {
   height: 14px;
+}
+
+/* ── Mode button rows (compact row: label + N toggle buttons) ─── */
+
+.mode-btn-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 0; flex-wrap: nowrap;
+}
+
+.mode-btn-row-label {
+  color: var(--text-secondary); font-size: 10px;
+  width: 50px; flex-shrink: 0; font-weight: 500;
+  font-family: var(--mono);
+}
+
+.mode-btn-row-buttons {
+  display: flex; gap: 4px; flex: 1; min-width: 0;
+}
+
+.mode-btn {
+  flex: 1; min-width: 0;
+  padding: 4px 6px; border-radius: 20px;
+  font-size: 9.5px; font-family: var(--mono); letter-spacing: 0.02em;
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.mode-btn.active {
+  background: rgba(137, 196, 244, 0.18);
+  border-color: rgba(137, 196, 244, 0.5);
+  color: #89c4f4;
+  box-shadow: 0 0 8px rgba(137, 196, 244, 0.2);
+}
+
+/* Green active variant for effect toggles (on/off rather than exclusive) */
+.mode-btn.active-green {
+  background: var(--accent-green-dim);
+  border-color: rgba(165, 243, 192, 0.5);
+  color: var(--accent-green);
+  box-shadow: 0 0 6px rgba(165, 243, 192, 0.2);
+}
+
+/* Master row hybrid: button + inline slider */
+.mode-btn-row--master .slider-row {
+  margin-bottom: 0; flex: 1;
+}
+
+/* ── Cinematic-only visibility ──────────────────────────────────── */
+
+body[data-render="performance"] .cinematic-only {
+  display: none !important;
 }
