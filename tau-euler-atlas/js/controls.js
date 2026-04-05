@@ -57,12 +57,9 @@ import {
   resolveStyleBloomGain,
 } from './cinematic-fx.js';
 import {
-  ensureLinkedParam,
   isLinkEligiblePath,
-  resolveLinkedValue,
-  sanitizeDirection,
-  seedEndpoint,
 } from './linked-params.js';
+import { createLinkEngine } from './link-engine.js';
 
 const updatePointCloud = sceneApi.updatePointCloud;
 const updateStrandPaths = sceneApi.updateStrandPaths;
@@ -240,8 +237,14 @@ const playbackBuffer = new PlaybackPrecomputeBuffer();
 let lastMathSignature = '';
 let lastProofSignature = '';
 let pendingRenderPayload = null;
-const linkedParamRegistry = Object.create(null);
 let cameraPanelUnsubscribe = null;
+const activeLinkedPaths = new Set();
+const activeCameraLinkedPaths = new Set();
+const DEBUG_CAMERA_LINKS = false;
+const linkEngine = createLinkEngine({
+  debug: DEBUG_CAMERA_LINKS,
+  debugFilter: (path) => String(path).startsWith('camera.'),
+});
 
 function decimalsForStep(step) {
   if (!Number.isFinite(step) || step >= 1) return 0;
@@ -271,46 +274,8 @@ function pushCommitStatus(row, status) {
   }, 700);
 }
 
-function registerLinkedBinding(path, getter, setter, boundsGetter = null) {
-  if (!isLinkEligiblePath(path)) return null;
-  const current = Number(getter());
-  const entry = ensureLinkedParam(linkedParamRegistry, path, current);
-  if (!entry) return null;
-  entry.getter = getter;
-  entry.setter = setter;
-  entry.boundsGetter = typeof boundsGetter === 'function' ? boundsGetter : null;
-  return entry;
-}
-
-function applyLinkedRuntimeValues(progress = animation.progress) {
-  const p = clamp(Number.isFinite(progress) ? progress : 0, 0, 1);
-  for (const [path, entry] of Object.entries(linkedParamRegistry)) {
-    if (!entry || typeof entry !== 'object') continue;
-    if (typeof entry.setter !== 'function') continue;
-    if (!isLinkEligiblePath(path)) continue;
-    if (!entry.isLinked || !Number.isFinite(entry.endValue)) continue;
-
-    if (!Number.isFinite(entry.value) && typeof entry.getter === 'function') {
-      const current = Number(entry.getter());
-      if (Number.isFinite(current)) entry.value = current;
-    }
-
-    let resolved = resolveLinkedValue(entry, p);
-    if (!Number.isFinite(resolved)) continue;
-
-    if (typeof entry.boundsGetter === 'function') {
-      const b = entry.boundsGetter() || {};
-      const lo = Number.isFinite(b.min) ? b.min : resolved;
-      const hi = Number.isFinite(b.max) ? b.max : resolved;
-      resolved = clamp(resolved, Math.min(lo, hi), Math.max(lo, hi));
-    }
-
-    entry.setter(resolved);
-  }
-}
-
 export function deriveState() {
-  applyLinkedRuntimeValues(animation.progress);
+  linkEngine.resolveAndApply(animation.progress);
   return applyDerivedState(state);
 }
 
@@ -966,25 +931,38 @@ class UIBuilder {
 
     if (!Number.isFinite(getBoundValueRaw())) setBoundValueRaw(activeBounds.min);
 
-    const linkable = isLinkEligiblePath(linkPath);
+    const path = typeof linkPath === 'string' ? linkPath : null;
+    const linkable = !!path && isLinkEligiblePath(path);
+    const getLiveValue = () => {
+      const raw = typeof linkGetter === 'function' ? Number(linkGetter()) : getBoundValueRaw();
+      return Number.isFinite(raw) ? raw : getBoundValueRaw();
+    };
+    const setLiveValue = (v) => {
+      if (typeof linkSetter === 'function') linkSetter(v);
+      else setBoundValueRaw(v);
+    };
     const linked = linkable
-      ? registerLinkedBinding(
-        linkPath,
-        typeof linkGetter === 'function' ? linkGetter : () => getBoundValueRaw(),
-        typeof linkSetter === 'function' ? linkSetter : (v) => setBoundValueRaw(v),
-        () => getCurrentBounds(),
-      )
+      ? linkEngine.register(path, {
+        getLive: getLiveValue,
+        setLive: setLiveValue,
+        getBounds: () => getCurrentBounds(),
+      })
       : null;
+    if (linkable) {
+      if (syncGroup === 'camera') activeCameraLinkedPaths.add(path);
+      else activeLinkedPaths.add(path);
+    }
 
-    if (linked && !Number.isFinite(linked.value)) linked.value = getBoundValueRaw();
+    const getLinkedRecord = () => (linkable ? linkEngine.get(path) : null);
 
     const getBaseValue = () => {
-      if (linked) return Number.isFinite(linked.value) ? linked.value : getBoundValueRaw();
-      return getBoundValueRaw();
+      if (!linkable) return getBoundValueRaw();
+      const rec = getLinkedRecord();
+      return Number.isFinite(rec?.baseValue) ? Number(rec.baseValue) : getLiveValue();
     };
 
     const setBaseValue = (v) => {
-      if (linked) linked.value = v;
+      if (linked) linkEngine.setBase(path, v);
       else setBoundValueRaw(v);
     };
 
@@ -1041,7 +1019,7 @@ class UIBuilder {
     valueStack.appendChild(baseChip);
     valueStack.appendChild(targetChip);
 
-    if (linked) {
+    if (linkable) {
       linkControls.appendChild(linkBtn);
       linkControls.appendChild(dirBtn);
       valueCluster.appendChild(linkControls);
@@ -1064,28 +1042,25 @@ class UIBuilder {
     const applyResolvedToField = () => {
       const lo = Math.min(activeBounds.min, activeBounds.max);
       const hi = Math.max(activeBounds.min, activeBounds.max);
-      if (linked) {
-        const resolved = resolveLinkedValue(linked, animation.progress);
-        const next = clamp(Number.isFinite(resolved) ? resolved : getBaseValue(), lo, hi);
-        if (typeof linked.setter === 'function') linked.setter(next);
-        else setBoundValueRaw(next);
+      if (linkable) {
+        linkEngine.applyPath(path, animation.progress);
         return;
       }
       setBoundValueRaw(clamp(getBaseValue(), lo, hi));
     };
 
     const syncLinkUI = () => {
-      if (!linked) return;
-      linkBtn.classList.toggle('active', !!linked.isLinked);
-      linkBtn.setAttribute('aria-label', linked.isLinked ? 'Unlink parameter' : 'Link parameter');
-      linkBtn.title = linked.isLinked ? 'Linked' : 'Unlinked';
-      linkBtn.innerHTML = linked.isLinked ? ICON_LINK : ICON_UNLINK;
+      const rec = getLinkedRecord();
+      if (!rec) return;
+      linkBtn.classList.toggle('active', !!rec.isLinked);
+      linkBtn.setAttribute('aria-label', rec.isLinked ? 'Unlink parameter' : 'Link parameter');
+      linkBtn.title = rec.isLinked ? 'Linked' : 'Unlinked';
+      linkBtn.innerHTML = rec.isLinked ? ICON_LINK : ICON_UNLINK;
 
-      const showDirection = !!linked.isLinked;
+      const showDirection = !!rec.isLinked;
       dirBtn.classList.toggle('hidden', !showDirection);
       if (showDirection) {
-        linked.direction = sanitizeDirection(linked.direction);
-        const isForward = linked.direction === 1;
+        const isForward = rec.direction === 1;
         dirBtn.setAttribute('aria-label', isForward ? 'Direction forward' : 'Direction reverse');
         dirBtn.title = isForward ? 'Forward' : 'Reverse';
         dirBtn.innerHTML = isForward ? ICON_DIR_FWD : ICON_DIR_REV;
@@ -1096,13 +1071,17 @@ class UIBuilder {
       syncBounds();
       const lo = Math.min(activeBounds.min, activeBounds.max);
       const hi = Math.max(activeBounds.min, activeBounds.max);
+      const rec = getLinkedRecord();
+      if (rec && !rec.isLinked) {
+        linkEngine.updateBaseFromLive(path);
+      }
       const base = clamp(getBaseValue(), lo, hi);
       inputBase.value = String(base);
       baseChip.textContent = format(base);
 
-      const hasEndpoint = !!(linked && Number.isFinite(linked.endValue));
+      const hasEndpoint = !!(rec && rec.isLinked && Number.isFinite(rec.endValue));
       if (hasEndpoint) {
-        const end = clamp(Number(linked.endValue), lo, hi);
+        const end = clamp(Number(rec.endValue), lo, hi);
         inputTarget.value = String(end);
         inputTarget.classList.remove('hidden');
         targetChip.classList.remove('hidden');
@@ -1134,8 +1113,14 @@ class UIBuilder {
       }
 
       setBaseValue(next);
-      if (linked && Number.isFinite(linked.endValue)) {
-        linked.endValue = clamp(linked.endValue, Math.min(activeBounds.min, activeBounds.max), Math.max(activeBounds.min, activeBounds.max));
+      const rec = getLinkedRecord();
+      if (rec && Number.isFinite(rec.endValue)) {
+        const clampedEnd = clamp(
+          Number(rec.endValue),
+          Math.min(activeBounds.min, activeBounds.max),
+          Math.max(activeBounds.min, activeBounds.max),
+        );
+        linkEngine.setEnd(path, clampedEnd, { autoLink: rec.isLinked });
       }
       applyResolvedToField();
 
@@ -1148,13 +1133,11 @@ class UIBuilder {
     };
 
     const commitEndpointValue = (raw, opts = {}) => {
-      if (!linked) return;
+      if (!linkable) return;
       const { mode = 'snap', source = 'endpoint' } = opts;
       const resolved = resolveCommittedValue(raw, activeBounds, mode);
       if (!resolved.ok) return;
-      linked.endValue = resolved.value;
-      linked.isLinked = true;
-      linked.direction = sanitizeDirection(linked.direction);
+      linkEngine.setEnd(path, resolved.value, { autoLink: true });
       applyResolvedToField();
       refreshSliderBounds();
       refreshCameraSliderBounds();
@@ -1164,7 +1147,7 @@ class UIBuilder {
     };
 
     const setEndpointFromPointer = (clientX) => {
-      if (!linked) return;
+      if (!linkable) return;
       const rect = trackWrap.getBoundingClientRect();
       if (!rect || rect.width <= 0) return;
       const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
@@ -1216,7 +1199,7 @@ class UIBuilder {
     });
 
     trackWrap.addEventListener('click', (e) => {
-      if (!linked || !e.shiftKey) return;
+      if (!linkable || !e.shiftKey) return;
       if (e.target === inputBase || e.target === inputTarget) return;
       setEndpointFromPointer(e.clientX);
     });
@@ -1230,33 +1213,32 @@ class UIBuilder {
     });
 
     targetChip.addEventListener('click', () => {
-      if (!linked || !Number.isFinite(linked.endValue)) return;
+      const rec = getLinkedRecord();
+      if (!rec || !Number.isFinite(rec.endValue)) return;
       startInlineEdit(
         targetChip,
-        () => Number(linked.endValue),
+        () => Number(getLinkedRecord()?.endValue),
         (v) => commitEndpointValue(v, { mode: commitMode, source: 'text' }),
       );
     });
 
-    if (linked) {
+    if (linkable) {
       linkBtn.addEventListener('click', () => {
-        if (!linked.isLinked) {
-          if (!Number.isFinite(linked.endValue)) {
-            linked.endValue = seedEndpoint(getBaseValue(), activeBounds.min, activeBounds.max, activeBounds.step);
-          }
-          linked.direction = sanitizeDirection(linked.direction);
-          linked.isLinked = true;
-        } else {
-          linked.isLinked = false;
-        }
+        const rec = getLinkedRecord();
+        if (!rec) return;
+        if (rec.isLinked) linkEngine.linkOff(path);
+        else linkEngine.linkOn(path);
         applyResolvedToField();
+        refreshSliderBounds();
+        refreshCameraSliderBounds();
         syncUI();
         regenerate(heavy);
       });
 
       dirBtn.addEventListener('click', () => {
-        if (!linked.isLinked) return;
-        linked.direction = linked.direction === 1 ? -1 : 1;
+        const rec = getLinkedRecord();
+        if (!rec || !rec.isLinked) return;
+        linkEngine.toggleDirection(path);
         applyResolvedToField();
         syncUI();
         regenerate(heavy);
@@ -1434,9 +1416,7 @@ function buildCameraPanel() {
 
   cameraSliderUiSyncFns.length = 0;
   cameraSliderBoundsSyncFns.length = 0;
-  for (const path of Object.keys(linkedParamRegistry)) {
-    if (path.startsWith('camera.')) delete linkedParamRegistry[path];
-  }
+  activeCameraLinkedPaths.clear();
 
   cameraContainer.innerHTML = '';
 
@@ -1510,6 +1490,7 @@ function buildCameraPanel() {
   }
 
   updateCameraPanelReadouts();
+  linkEngine.prune((path) => !path.startsWith('camera.') || activeCameraLinkedPaths.has(path));
 }
 
 function initCameraPanelBridge() {
@@ -1634,6 +1615,8 @@ function buildControls() {
   sliderBoundsSyncFns.length = 0;
   cameraSliderUiSyncFns.length = 0;
   cameraSliderBoundsSyncFns.length = 0;
+  activeLinkedPaths.clear();
+  activeCameraLinkedPaths.clear();
   controlsContainer.innerHTML = '';
 
   const b = new UIBuilder(controlsContainer);
@@ -1895,6 +1878,10 @@ function buildControls() {
   if (shotBtn) shotBtn.addEventListener('click', () => captureScreenshot());
   buildCameraPanel();
   buildProofPanel();
+  linkEngine.prune((path) => {
+    if (path.startsWith('camera.')) return activeCameraLinkedPaths.has(path);
+    return activeLinkedPaths.has(path);
+  });
   setText('formula-display', state.formulaMode === 'euler' ? 'Euler' : 'Tau');
 
   animation.onStateChange(() => {
