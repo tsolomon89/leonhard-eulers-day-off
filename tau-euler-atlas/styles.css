@@ -624,18 +624,23 @@ body {
 /* â”€â”€ HUD and Transport â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 #hud { width: 100%; margin: 0; }
-#hud.accordion-panel { margin-bottom: 0; }
+
+/* Let #left-column flex gap control spacing — strip margin from child panels */
+#left-column > * { margin-bottom: 0; }
+#left-column .accordion-panel { margin-bottom: 0; }
 
 #proofs-panel {
   width: 100%;
   flex: 0 0 auto;
   min-height: 0;
+  padding: 0;
 }
 
 #camera-panel {
   width: 100%;
   flex: 0 0 auto;
   min-height: 0;
+  padding: 0;
 }
 .hud-title {
   font-size: 11px;
