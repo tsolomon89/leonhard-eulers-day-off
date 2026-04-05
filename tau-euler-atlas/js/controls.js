@@ -1,7 +1,6 @@
 ﻿import { TAU } from './complex.js';
 import {
   computeProofPayloadFromState,
-  EXPRESSION_CHILDREN,
   generateAllPoints,
   generateAlphaTrace,
   generateAtlasPaths,
@@ -16,9 +15,19 @@ import {
 } from './derivation.js';
 import {
   defaultExpressionModel,
-  SET_KEYS,
-  TRANSFORM_KEYS,
+  resolveFunctionTriState,
+  normalizeExpressionModel,
+  resolveExponentTriState,
+  setFunctionNodeEnabledWithAncestors,
+  setExponentSubtreeEnabled,
+  setVariantNodeEnabledWithAncestors,
 } from './expression-model.js';
+import {
+  EXPONENT_FAMILIES,
+  VARIANT_DEFINITIONS,
+  getFunctionNodesByExponent,
+  registryCoverageSummary,
+} from './function-registry.js';
 import * as sceneApi from './scene.js';
 import { animation } from './animation.js';
 import {
@@ -66,6 +75,9 @@ const updateStrandPaths = sceneApi.updateStrandPaths;
 const updateAtlasPaths = sceneApi.updateAtlasPaths;
 const updateGhostTraces = sceneApi.updateGhostTraces;
 const updateOrbitCircle = sceneApi.updateOrbitCircle;
+const setReferenceCirclesVisible = typeof sceneApi.setReferenceCirclesVisible === 'function'
+  ? sceneApi.setReferenceCirclesVisible
+  : () => {};
 const setBloomEnabled = sceneApi.setBloomEnabled;
 const setBloomStrength = sceneApi.setBloomStrength;
 const setBloomRadius = sceneApi.setBloomRadius;
@@ -164,16 +176,16 @@ export const state = {
 
   expressionModel: defaultExpressionModel(),
   cinematicFx: defaultCinematicFx(),
+  visualHelpers: {
+    referenceRings: true,
+    orbitRing: true,
+  },
 };
 
-const TRANSFORM_LABELS = {
-  base: 'base',
-  sin: 'sin',
-  cos: 'cos',
-  tan: 'tan',
-  log_sin: 'log(sin)',
-  log_cos: 'log(cos)',
-  log_tan: 'log(tan)',
+const functionControlUiState = {
+  selectedExponent: EXPONENT_FAMILIES[0].key,
+  selectedFunction: null,
+  selectedVariant: null,
 };
 
 const ICON_EYE = `
@@ -352,13 +364,40 @@ function emptyPointCloudData() {
   };
 }
 
+function normalizeVisualHelpers() {
+  if (!state.visualHelpers || typeof state.visualHelpers !== 'object') {
+    state.visualHelpers = { referenceRings: true, orbitRing: true };
+    return;
+  }
+  if (typeof state.visualHelpers.referenceRings !== 'boolean') {
+    state.visualHelpers.referenceRings = true;
+  }
+  if (typeof state.visualHelpers.orbitRing !== 'boolean') {
+    state.visualHelpers.orbitRing = true;
+  }
+}
+
 function computePointBudget() {
   return isPerformance() ? 50_000 : 200_000;
+}
+
+function getEffectiveFx() {
+  return resolveEffectiveCinematicFx(state.cinematicFx, {
+    renderMode: getRenderMode(),
+    theme: getTheme(),
+  });
+}
+
+function applyVisualHelpers() {
+  normalizeVisualHelpers();
+  setReferenceCirclesVisible(state.visualHelpers.referenceRings);
+  updateOrbitCircle(state.visualHelpers.orbitRing ? state.k : NaN);
 }
 
 function computeMathSignature(derived, budget) {
   const renderMode = getRenderMode();
   const theme = getTheme();
+  const fx = getEffectiveFx();
   const styleBloomGain = resolveStyleBloomGain({ renderMode, theme });
   return JSON.stringify({
     budget,
@@ -388,22 +427,36 @@ function computeMathSignature(derived, budget) {
     syncTStepToS: derived.syncTStepToS,
     precomputeBufferFrames: derived.precomputeBufferFrames,
     expressionModel: derived.expressionModel,
+    pointsVisible: !!(fx.points.enabled && fx.points.opacity > 0.001),
+    linesVisible: !!(fx.atlasLines.enabled && fx.atlasLines.opacity > 0.001),
+    ghostsVisible: !!fx.ghostTraces.enabled,
+    referenceRingsVisible: !!state.visualHelpers?.referenceRings,
+    orbitRingVisible: !!state.visualHelpers?.orbitRing,
   });
 }
 
-function buildRenderPayload(derived, budget, signature) {
+function buildRenderPayload(derived, budget, signature, fx) {
   const styleBloomGain = resolveStyleBloomGain({
     renderMode: getRenderMode(),
     theme: getTheme(),
   });
   const renderParams = { ...derived, styleBloomGain };
+  const expressionEnabled = !!renderParams.expressionModel?.parent?.enabled;
+  const pointsVisible = !!(fx.points.enabled && fx.points.opacity > 0.001);
+  const linesVisible = !!(fx.atlasLines.enabled && fx.atlasLines.opacity > 0.001);
+  const ghostsVisible = !!fx.ghostTraces.enabled;
+  const shouldComputePoints = expressionEnabled && pointsVisible;
+  const shouldComputeLines = expressionEnabled && linesVisible;
+  const shouldComputeGhosts = expressionEnabled && ghostsVisible;
   setPointBudget(budget);
-  const points = generateAllPoints(renderParams);
-  const atlasPaths = generateAtlasPaths(renderParams);
+  const points = shouldComputePoints ? generateAllPoints(renderParams) : emptyPointCloudData();
+  const atlasPaths = shouldComputeLines ? generateAtlasPaths(renderParams) : [];
 
   const alphaNotTau = Math.abs(derived.alpha - TAU) > 0.001;
-  const tauTrace = generateTauTrace(256, derived.k);
-  const alphaTrace = alphaNotTau ? generateAlphaTrace(derived.alpha, 256, derived.k) : null;
+  const tauTrace = shouldComputeGhosts ? generateTauTrace(256, derived.k) : null;
+  const alphaTrace = shouldComputeGhosts && alphaNotTau
+    ? generateAlphaTrace(derived.alpha, 256, derived.k)
+    : null;
 
   return {
     signature,
@@ -412,7 +465,7 @@ function buildRenderPayload(derived, budget, signature) {
     atlasPaths,
     tauTrace,
     alphaTrace,
-    showAlpha: alphaNotTau,
+    showAlpha: shouldComputeGhosts && alphaNotTau,
     bounceDir: _stepBounceDir,
   };
 }
@@ -489,6 +542,7 @@ function updateBufferStatus() {
 
 function applyRenderPayload(payload, fx) {
   Object.assign(state, payload.derived);
+  normalizeVisualHelpers();
 
   const suspendHeavy = state.bufferEnabled && state.bufferPhase === 'prefill';
   setBloomEnabled(!suspendHeavy && fx.bloom.enabled);
@@ -561,7 +615,7 @@ function applyRenderPayload(payload, fx) {
   } else {
     updateGhostTraces(null, null, false);
   }
-  updateOrbitCircle(state.k);
+  applyVisualHelpers();
   setText('formula-display', state.formulaMode === 'euler' ? 'Euler' : 'Tau');
 }
 
@@ -646,7 +700,7 @@ function reseedPlaybackBuffer(derived, signature, resetStats = false) {
   });
 }
 
-function fillPlaybackBuffer(derived, signature, budget, maxBuild, generationToken = _bufferGenerationToken) {
+function fillPlaybackBuffer(derived, signature, budget, maxBuild, fx, generationToken = _bufferGenerationToken) {
   applyBufferTargetWithMemoryGuard(derived);
   return playbackBuffer.fill({
     signature,
@@ -673,7 +727,7 @@ function fillPlaybackBuffer(derived, signature, budget, maxBuild, generationToke
       });
       const nextBounceDir = derived.stepLoopMode === 'bounce' ? advance.bounceDir : 1;
       const nextDerived = buildDerivedState({ ...derived, T: advance.T });
-      const payload = buildRenderPayload(nextDerived, budget, signature);
+      const payload = buildRenderPayload(nextDerived, budget, signature, fx);
       payload.bounceDir = nextBounceDir;
       return {
         payload,
@@ -704,10 +758,8 @@ export function regenerate(isHeavy = false) {
   regenerateTimeout = setTimeout(() => {
     const derived = deriveState();
     refreshSliderBounds();
-    const fx = resolveEffectiveCinematicFx(state.cinematicFx, {
-      renderMode: getRenderMode(),
-      theme: getTheme(),
-    });
+    normalizeVisualHelpers();
+    const fx = getEffectiveFx();
     const budget = computePointBudget();
     const signature = computeMathSignature(derived, budget);
     syncSignatureAndBufferState(derived, signature, 'regenerate');
@@ -729,7 +781,7 @@ export function regenerate(isHeavy = false) {
     let payload = pendingRenderPayload;
     pendingRenderPayload = null;
     if (!payload || payload.signature !== signature || Math.abs(payload.derived.T - derived.T) > 1e-12) {
-      payload = buildRenderPayload(derived, budget, signature);
+      payload = buildRenderPayload(derived, budget, signature, fx);
       payload.bounceDir = _stepBounceDir;
     }
     applyRenderPayload(payload, fx);
@@ -743,7 +795,7 @@ export function regenerate(isHeavy = false) {
         depth: playbackBuffer.depth,
         target: state.bufferTargetFrames,
       });
-      fillPlaybackBuffer(derived, signature, budget, bgBudget);
+      fillPlaybackBuffer(derived, signature, budget, bgBudget, fx);
       updateBufferStatus();
     }
   }, delay);
@@ -1349,65 +1401,292 @@ function bindModeButtons(container, prefix, options, currentValue, onSet) {
   }
 }
 
-function addTransformControls(b) {
-  b.section('Transforms', true)
-    .info('Enable/disable transform families. Default is sin-core only.');
+function ensureFunctionControlSelection() {
+  const exponentKeys = EXPONENT_FAMILIES.map((family) => family.key);
+  if (!exponentKeys.includes(functionControlUiState.selectedExponent)) {
+    functionControlUiState.selectedExponent = exponentKeys[0];
+  }
 
-  for (const key of TRANSFORM_KEYS) {
-    const style = state.expressionModel.transforms[key];
-    const basePath = `expression.transforms.${key}`;
-    b.childSection(`${TRANSFORM_LABELS[key]}`, true, {
-      visibility: { obj: style, key: 'enabled' },
-    })
-      .slider('point size x', style, 'pointSize', 0, 4, 0.05, { linkPath: `${basePath}.pointSize` })
-      .slider('point opacity x', style, 'pointOpacity', 0, 1, 0.05, { linkPath: `${basePath}.pointOpacity` })
-      .slider('line width x', style, 'lineWidth', 0, 4, 0.05, { linkPath: `${basePath}.lineWidth` })
-      .slider('line opacity x', style, 'lineOpacity', 0, 1, 0.05, { linkPath: `${basePath}.lineOpacity` })
-      .slider('point bloom x', style, 'pointBloom', 0, 4, 0.05, { linkPath: `${basePath}.pointBloom` })
-      .slider('line bloom x', style, 'lineBloom', 0, 4, 0.05, { linkPath: `${basePath}.lineBloom` });
-    b.endChild();
+  const nodes = getFunctionNodesByExponent(functionControlUiState.selectedExponent);
+  if (!nodes.some((node) => node.key === functionControlUiState.selectedFunction)) {
+    functionControlUiState.selectedFunction = null;
+  }
+
+  if (!VARIANT_DEFINITIONS.some((variant) => variant.key === functionControlUiState.selectedVariant)) {
+    functionControlUiState.selectedVariant = null;
+  }
+
+  if (!functionControlUiState.selectedFunction) {
+    functionControlUiState.selectedVariant = null;
   }
 }
 
-function addSetAndChildControls(b) {
-  b.section('Function Sets', true)
-    .info('Hierarchical controls: parent x set x transform x child.');
+function resolveNodeVisibilityState(localEnabled, ancestorEnabled) {
+  if (!localEnabled) return 'disabled';
+  if (!ancestorEnabled) return 'inherited';
+  return 'enabled';
+}
 
-  for (const setKey of SET_KEYS) {
-    const setLabel = setKey === 'positive' ? 'Positive' : 'Negative';
-    const setStyle = state.expressionModel.sets[setKey];
-    const setPath = `expression.sets.${setKey}`;
-    b.childSection(setLabel, false, {
-      visibility: { obj: setStyle, key: 'enabled' },
-    })
-      .slider('point size x', setStyle, 'pointSize', 0, 4, 0.05, { linkPath: `${setPath}.pointSize` })
-      .slider('point opacity x', setStyle, 'pointOpacity', 0, 1, 0.05, { linkPath: `${setPath}.pointOpacity` })
-      .slider('line width x', setStyle, 'lineWidth', 0, 4, 0.05, { linkPath: `${setPath}.lineWidth` })
-      .slider('line opacity x', setStyle, 'lineOpacity', 0, 1, 0.05, { linkPath: `${setPath}.lineOpacity` })
-      .slider('point bloom x', setStyle, 'pointBloom', 0, 4, 0.05, { linkPath: `${setPath}.pointBloom` })
-      .slider('line bloom x', setStyle, 'lineBloom', 0, 4, 0.05, { linkPath: `${setPath}.lineBloom` });
+function resolveExponentVisibilityState(exponentKey) {
+  return resolveExponentTriState(state.expressionModel, exponentKey);
+}
 
-    const parentBody = b.activeChildBody;
-    if (parentBody) {
-      const nested = new UIBuilder(parentBody);
-      for (const child of EXPRESSION_CHILDREN[setKey]) {
-        const childStyle = state.expressionModel.children[child.key];
-        const childPath = `expression.children.${child.key}`;
-        nested.childSection(child.label, true, {
-          visibility: { obj: childStyle, key: 'enabled' },
-        })
-          .color('color', childStyle, 'color')
-          .slider('point size x', childStyle, 'pointSize', 0, 4, 0.05, { linkPath: `${childPath}.pointSize` })
-          .slider('point opacity x', childStyle, 'pointOpacity', 0, 1, 0.05, { linkPath: `${childPath}.pointOpacity` })
-          .slider('line width x', childStyle, 'lineWidth', 0, 4, 0.05, { linkPath: `${childPath}.lineWidth` })
-          .slider('line opacity x', childStyle, 'lineOpacity', 0, 1, 0.05, { linkPath: `${childPath}.lineOpacity` })
-          .slider('point bloom x', childStyle, 'pointBloom', 0, 4, 0.05, { linkPath: `${childPath}.pointBloom` })
-          .slider('line bloom x', childStyle, 'lineBloom', 0, 4, 0.05, { linkPath: `${childPath}.lineBloom` });
-        nested.endChild();
+function resolveFunctionVisibilityState(functionKey, ancestorEnabled) {
+  const localState = resolveFunctionTriState(state.expressionModel, functionKey);
+  if (!ancestorEnabled && localState === 'enabled') return 'inherited';
+  return localState;
+}
+
+function visibilityStateLabel(stateKey) {
+  if (stateKey === 'disabled') return 'directly disabled';
+  if (stateKey === 'inherited') return 'hidden by parent';
+  if (stateKey === 'mixed') return 'mixed visibility';
+  return 'directly enabled';
+}
+
+function visibilityIconForState(stateKey) {
+  return (stateKey === 'enabled' || stateKey === 'mixed') ? ICON_EYE : ICON_EYE_OFF;
+}
+
+function buildUnifiedFunctionControlSection(b) {
+  ensureFunctionControlSelection();
+
+  b.section('Function Control', false)
+    .info('One hierarchy: + exponent / - exponent -> function -> variant.')
+    .html('<div id="function-control-root"></div>');
+
+  const root = controlsContainer.querySelector('#function-control-root');
+  if (!root) return;
+  root.innerHTML = '';
+
+  const createNode = ({
+    label,
+    isActive,
+    visibilityState,
+    onSelect,
+    onToggle,
+    isBlocked = false,
+    blockedReason = '',
+  }) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `function-node-btn ctrl-interactive function-node-btn--${visibilityState}${isActive ? ' active' : ''}${isBlocked ? ' function-node-btn--blocked' : ''}`;
+    button.title = isBlocked && blockedReason ? `${label} (${blockedReason})` : label;
+
+    const text = document.createElement('span');
+    text.className = 'function-node-label';
+    text.textContent = label;
+
+    const vis = document.createElement('span');
+    vis.className = `function-node-visibility ${visibilityState}`;
+    vis.setAttribute('data-role', 'visibility');
+    vis.setAttribute('aria-label', `Toggle visibility (${visibilityStateLabel(visibilityState)})`);
+    vis.title = visibilityStateLabel(visibilityState);
+    vis.innerHTML = visibilityIconForState(visibilityState);
+
+    button.appendChild(text);
+    button.appendChild(vis);
+    button.addEventListener('click', (e) => {
+      if (isBlocked) return;
+      const target = e.target instanceof Element ? e.target : null;
+      const iconClicked = !!target?.closest('[data-role="visibility"]');
+      if (iconClicked) {
+        onToggle();
+        return;
       }
+      onSelect();
+    });
+    return button;
+  };
+
+  const parentEnabled = !!state.expressionModel.parent.enabled;
+  const selectedExponent = functionControlUiState.selectedExponent;
+  const selectedFunction = functionControlUiState.selectedFunction;
+  const selectedVariant = functionControlUiState.selectedVariant;
+  const selectedExponentLabel = EXPONENT_FAMILIES.find((family) => family.key === selectedExponent)?.label || selectedExponent;
+  const selectedFunctionNode = selectedFunction
+    ? getFunctionNodesByExponent(selectedExponent).find((node) => node.key === selectedFunction) || null
+    : null;
+  const selectedFunctionLabel = selectedFunctionNode?.label || 'no function selected';
+  const selectedVariantLabel = VARIANT_DEFINITIONS.find((variant) => variant.key === selectedVariant)?.label || 'no variant selected';
+
+  const appendGroupLabel = (title, context = '') => {
+    const row = document.createElement('div');
+    row.className = 'function-group-label';
+    const main = document.createElement('span');
+    main.className = 'function-group-label-main';
+    main.textContent = title;
+    row.appendChild(main);
+    if (context) {
+      const detail = document.createElement('span');
+      detail.className = 'function-group-label-context';
+      detail.textContent = context;
+      row.appendChild(detail);
     }
-    b.endChild();
+    root.appendChild(row);
+  };
+
+  appendGroupLabel('1) exponent family', 'select level');
+  const exponentRow = document.createElement('div');
+  exponentRow.className = 'exponent-grid';
+  for (const family of EXPONENT_FAMILIES) {
+    const visState = resolveExponentVisibilityState(family.key);
+    const node = createNode({
+      label: family.label,
+      isActive: selectedExponent === family.key,
+      visibilityState: visState,
+      onSelect: () => {
+        functionControlUiState.selectedExponent = family.key;
+        functionControlUiState.selectedFunction = null;
+        functionControlUiState.selectedVariant = null;
+        buildControls();
+      },
+      onToggle: () => {
+        const current = resolveExponentVisibilityState(family.key);
+        const nextEnabled = current === 'enabled' ? false : true;
+        setExponentSubtreeEnabled(state.expressionModel, family.key, nextEnabled);
+        regenerate();
+        buildControls();
+      },
+    });
+    exponentRow.appendChild(node);
   }
+  root.appendChild(exponentRow);
+
+  appendGroupLabel('2) function family', `children of ${selectedExponentLabel}`);
+  const functionGrid = document.createElement('div');
+  functionGrid.className = 'function-grid';
+  const functionNodes = getFunctionNodesByExponent(selectedExponent);
+  const selectedSetEnabled = !!state.expressionModel.sets[selectedExponent]?.enabled;
+  const functionAncestorEnabled = parentEnabled && selectedSetEnabled;
+  for (const fnNode of functionNodes) {
+    const visState = resolveFunctionVisibilityState(fnNode.key, functionAncestorEnabled);
+    const node = createNode({
+      label: fnNode.label,
+      isActive: selectedFunction === fnNode.key,
+      visibilityState: visState,
+      onSelect: () => {
+        functionControlUiState.selectedFunction = fnNode.key;
+        functionControlUiState.selectedVariant = null;
+        buildControls();
+      },
+      onToggle: () => {
+        const current = resolveFunctionTriState(state.expressionModel, fnNode.key);
+        const nextEnabled = current === 'enabled' ? false : true;
+        setFunctionNodeEnabledWithAncestors(
+          state.expressionModel,
+          selectedExponent,
+          fnNode.key,
+          nextEnabled,
+        );
+        regenerate();
+        buildControls();
+      },
+    });
+    functionGrid.appendChild(node);
+  }
+  root.appendChild(functionGrid);
+
+  appendGroupLabel('3) variant', `children of ${selectedFunctionLabel}`);
+  const variantGrid = document.createElement('div');
+  variantGrid.className = 'variant-grid';
+  const hasSelectedFunction = !!selectedFunction && !!state.expressionModel.childVariants[selectedFunction];
+  const variantAncestorEnabled = functionAncestorEnabled && !!state.expressionModel.children[selectedFunction]?.enabled;
+  for (const variant of VARIANT_DEFINITIONS) {
+    const variantStyle = hasSelectedFunction
+      ? state.expressionModel.childVariants[selectedFunction][variant.key]
+      : null;
+    const visState = hasSelectedFunction
+      ? resolveNodeVisibilityState(!!variantStyle?.enabled, variantAncestorEnabled)
+      : 'disabled';
+    const node = createNode({
+      label: variant.label,
+      isActive: hasSelectedFunction && selectedVariant === variant.key,
+      visibilityState: visState,
+      isBlocked: !hasSelectedFunction,
+      blockedReason: 'select a function first',
+      onSelect: () => {
+        if (!hasSelectedFunction) return;
+        functionControlUiState.selectedVariant = variant.key;
+        buildControls();
+      },
+      onToggle: () => {
+        if (!hasSelectedFunction || !variantStyle) return;
+        setVariantNodeEnabledWithAncestors(
+          state.expressionModel,
+          selectedExponent,
+          selectedFunction,
+          variant.key,
+          !variantStyle.enabled,
+        );
+        regenerate();
+        buildControls();
+      },
+    });
+    variantGrid.appendChild(node);
+  }
+  root.appendChild(variantGrid);
+
+  const pathRow = document.createElement('div');
+  pathRow.className = 'function-path-row';
+  pathRow.textContent = `path: ${selectedExponentLabel} -> ${selectedFunctionLabel} -> ${selectedVariantLabel}`;
+  root.appendChild(pathRow);
+
+  const stylePanel = document.createElement('div');
+  stylePanel.className = 'function-style-panel';
+  root.appendChild(stylePanel);
+  const sb = new UIBuilder(stylePanel);
+
+  const resolveScopeTarget = () => {
+    if (selectedFunction && selectedVariant) {
+      const variant = VARIANT_DEFINITIONS.find((node) => node.key === selectedVariant);
+      const style = state.expressionModel.childVariants[selectedFunction][selectedVariant];
+      return {
+        label: `${variant?.label || selectedVariant}`,
+        style,
+        path: `expression.childVariants.${selectedFunction}.${selectedVariant}`,
+        visibilityState: resolveNodeVisibilityState(!!style.enabled, variantAncestorEnabled),
+        allowColor: false,
+        maxScale: 4,
+      };
+    }
+
+    if (selectedFunction) {
+      const fnNode = functionNodes.find((node) => node.key === selectedFunction);
+      const style = state.expressionModel.children[selectedFunction];
+      return {
+        label: fnNode?.label || selectedFunction,
+        style,
+        path: `expression.children.${selectedFunction}`,
+        visibilityState: resolveFunctionVisibilityState(selectedFunction, functionAncestorEnabled),
+        allowColor: true,
+        maxScale: 4,
+      };
+    }
+
+    const style = state.expressionModel.sets[selectedExponent];
+    return {
+      label: `${EXPONENT_FAMILIES.find((family) => family.key === selectedExponent)?.label || selectedExponent}`,
+      style,
+      path: `expression.sets.${selectedExponent}`,
+      visibilityState: resolveExponentVisibilityState(selectedExponent),
+      allowColor: false,
+      maxScale: 4,
+    };
+  };
+
+  const scopeTarget = resolveScopeTarget();
+  sb.info(`<strong>${scopeTarget.label}</strong>`);
+  sb.html(`<div class=\"ctrl-info\">visibility: ${visibilityStateLabel(scopeTarget.visibilityState)}</div>`);
+  sb.toggle('visible', scopeTarget.style, 'enabled', () => buildControls())
+    .slider('point size', scopeTarget.style, 'pointSize', 0, scopeTarget.maxScale, 0.05, { linkPath: `${scopeTarget.path}.pointSize` })
+    .slider('point opacity', scopeTarget.style, 'pointOpacity', 0, 1, 0.01, { linkPath: `${scopeTarget.path}.pointOpacity` })
+    .slider('line size', scopeTarget.style, 'lineWidth', 0, scopeTarget.maxScale, 0.05, { linkPath: `${scopeTarget.path}.lineWidth` })
+    .slider('line opacity', scopeTarget.style, 'lineOpacity', 0, 1, 0.01, { linkPath: `${scopeTarget.path}.lineOpacity` })
+    .slider('point bloom', scopeTarget.style, 'pointBloom', 0, 4, 0.05, { linkPath: `${scopeTarget.path}.pointBloom` })
+    .slider('line bloom', scopeTarget.style, 'lineBloom', 0, 4, 0.05, { linkPath: `${scopeTarget.path}.lineBloom` });
+
+  if (scopeTarget.allowColor) sb.color('color', scopeTarget.style, 'color');
 }
 
 function buildCameraPanel() {
@@ -1544,8 +1823,8 @@ function buildProofPanel() {
   b.html(`
     <div class="ctrl-info arch-info" style="margin-top:6px">
       <div><strong>The Axiom</strong></div>
-      <div>f = k1 * exp(i*tau^k) with mirrored negative-imaginary branch</div>
-      <div>Transforms: base, sin, cos, tan, log(sin/cos/tan)</div>
+      <div>f = k1 * exp(i*tau^k) with mirrored - exponent branch</div>
+      <div>Variants: (f), sin(f), cos(f), tan(f), log(f), log(sin/cos/tan)</div>
       <div>n-domain: [Z_min+1 ... Z_max-1] with 710-block color boundaries</div>
     </div>
   `);
@@ -1610,6 +1889,9 @@ function buildControls() {
   if (!controlsContainer) controlsContainer = document.getElementById('controls-panel');
   const cameraSnapshot = getCameraPanelSnapshot();
   if (cameraSnapshot) applyCameraSnapshot(cameraSnapshot);
+  state.expressionModel = normalizeExpressionModel(state.expressionModel);
+  normalizeVisualHelpers();
+  ensureFunctionControlSelection();
   deriveState();
   sliderUiSyncFns.length = 0;
   sliderBoundsSyncFns.length = 0;
@@ -1830,18 +2112,7 @@ function buildControls() {
     (v) => { state.q_correction = Number(v); },
   );
 
-  b.section('Expression Parent', true, {
-    visibility: { obj: state.expressionModel.parent, key: 'enabled' },
-  })
-    .slider('point size', state.expressionModel.parent, 'pointSize', 0, 6, 0.05, { linkPath: 'expression.parent.pointSize' })
-    .slider('point opacity', state.expressionModel.parent, 'pointOpacity', 0, 1, 0.01, { linkPath: 'expression.parent.pointOpacity' })
-    .slider('line width', state.expressionModel.parent, 'lineWidth', 0, 6, 0.05, { linkPath: 'expression.parent.lineWidth' })
-    .slider('line opacity', state.expressionModel.parent, 'lineOpacity', 0, 1, 0.01, { linkPath: 'expression.parent.lineOpacity' })
-    .slider('point bloom', state.expressionModel.parent, 'pointBloom', 0, 4, 0.05, { linkPath: 'expression.parent.pointBloom' })
-    .slider('line bloom', state.expressionModel.parent, 'lineBloom', 0, 4, 0.05, { linkPath: 'expression.parent.lineBloom' });
-
-  addSetAndChildControls(b);
-  addTransformControls(b);
+  buildUnifiedFunctionControlSection(b);
 
   b.section('Cinematic', true)
     .info('Keep effects active; style bloom is controlled per hierarchy above.')
@@ -1871,6 +2142,9 @@ function buildControls() {
     .html('<div class="hud-row"><span class="hud-key">Expressions</span><pre class="hud-val" id="atlas-expr-display" style="font-size:9px;margin:2px 0 0;white-space:pre-line;line-height:1.4;font-family:var(--mono)">â€”</pre></div>');
 
   b.section('View', true)
+    .info('Global scene overlays (not tied to any function node).')
+    .toggle('reference rings', state.visualHelpers, 'referenceRings', () => applyVisualHelpers())
+    .toggle('orbit ring', state.visualHelpers, 'orbitRing', () => applyVisualHelpers())
     .html('<div class="preset-row"><button class="preset-btn ctrl-interactive" id="btn-reset-camera">â†» Reset Camera</button><button class="preset-btn ctrl-interactive" id="btn-screenshot">ðŸ“· Screenshot</button></div>');
   const resetBtn = controlsContainer.querySelector('#btn-reset-camera');
   const shotBtn = controlsContainer.querySelector('#btn-screenshot');
@@ -1988,7 +2262,7 @@ function updateTransportUI() {
   }
 }
 
-function consumeBufferedPayload(derived, signature, budget, stepsToConsume) {
+function consumeBufferedPayload(derived, signature, budget, fx, stepsToConsume) {
   let latest = null;
   const steps = Math.max(1, Math.floor(Number.isFinite(stepsToConsume) ? stepsToConsume : 1));
   for (let i = 0; i < steps; i++) {
@@ -2005,7 +2279,7 @@ function consumeBufferedPayload(derived, signature, budget, stepsToConsume) {
       });
       _stepBounceDir = derived.stepLoopMode === 'bounce' ? advance.bounceDir : 1;
       const fallbackDerived = buildDerivedState({ ...derived, T: advance.T });
-      frame = buildRenderPayload(fallbackDerived, budget, signature);
+      frame = buildRenderPayload(fallbackDerived, budget, signature, fx);
       frame.bounceDir = _stepBounceDir;
       derived = fallbackDerived;
     } else {
@@ -2026,6 +2300,8 @@ function animationFrame() {
   if (changed) updateTransportUI();
 
   const derived = deriveState();
+  normalizeVisualHelpers();
+  const fx = getEffectiveFx();
   const budget = computePointBudget();
   const signature = computeMathSignature(derived, budget);
   syncSignatureAndBufferState(derived, signature, 'frame');
@@ -2048,7 +2324,7 @@ function animationFrame() {
       if (Math.abs(advance.T - state.T) > 1e-12) {
         const nextDerived = buildDerivedState({ ...derived, T: advance.T });
         state.T = nextDerived.T;
-        pendingRenderPayload = buildRenderPayload(nextDerived, budget, signature);
+        pendingRenderPayload = buildRenderPayload(nextDerived, budget, signature, fx);
         regenerate();
       }
     }
@@ -2067,7 +2343,7 @@ function animationFrame() {
       depth: playbackBuffer.depth,
       target,
     });
-    fillPlaybackBuffer(derived, signature, budget, prefillBudget, _bufferGenerationToken);
+    fillPlaybackBuffer(derived, signature, budget, prefillBudget, fx, _bufferGenerationToken);
     state.bufferProgress = computeBufferProgress(playbackBuffer.depth, prefillMinDepth);
 
     if (playbackBuffer.depth >= prefillMinDepth) {
@@ -2083,7 +2359,7 @@ function animationFrame() {
 
   if (shouldAdvanceStep(state, animation.playing)) {
     const consumeCount = Math.max(1, Math.min(8, Math.round(dtSeconds * PRECOMPUTE_FPS)));
-    const frame = consumeBufferedPayload(derived, signature, budget, consumeCount);
+    const frame = consumeBufferedPayload(derived, signature, budget, fx, consumeCount);
     if (frame && Math.abs(frame.derived.T - state.T) > 1e-12) {
       state.T = frame.derived.T;
       pendingRenderPayload = frame;
@@ -2099,7 +2375,7 @@ function animationFrame() {
       target,
     });
     const refillDerived = buildDerivedState(state);
-    fillPlaybackBuffer(refillDerived, signature, budget, backgroundBudget, _bufferGenerationToken);
+    fillPlaybackBuffer(refillDerived, signature, budget, backgroundBudget, fx, _bufferGenerationToken);
   }
   state.bufferProgress = 1;
   updateBufferStatus();
@@ -2154,6 +2430,7 @@ export function initControls() {
   initCameraPanelBridge();
   initHudPanel();
   buildControls();
+  console.log('[function-control] registry coverage', registryCoverageSummary());
   buildTransportBar();
   setupKeyboard();
   setExternalUpdate(animationFrame);

@@ -347,6 +347,11 @@ function buildRefCircles() {
   scene.add(refCircles);
 }
 
+export function setReferenceCirclesVisible(v) {
+  if (!refCircles) return;
+  refCircles.visible = !!v;
+}
+
 // ── Scene initialization ─────────────────────────────────────
 
 export function initScene() {

@@ -20,24 +20,28 @@ import {
   POSITIVE_CHILDREN,
   NEGATIVE_CHILDREN,
   SET_KEYS,
-  TRANSFORM_KEYS,
   defaultExpressionModel,
   normalizeExpressionModel,
 } from './expression-model.js';
+import {
+  FUNCTION_PLOTTABLES,
+  getFunctionNodesByExponent,
+} from './function-registry.js';
 
 export const TRIG = [
   { label: 'base', key: 'base' },
   { label: 'sin', key: 'sin' },
   { label: 'cos', key: 'cos' },
   { label: 'tan', key: 'tan' },
+  { label: 'log(f)', key: 'log' },
   { label: 'log(sin)', key: 'log_sin' },
   { label: 'log(cos)', key: 'log_cos' },
   { label: 'log(tan)', key: 'log_tan' },
 ];
 
 export const EXPRESSION_CHILDREN = {
-  positive: POSITIVE_CHILDREN,
-  negative: NEGATIVE_CHILDREN,
+  positive: getFunctionNodesByExponent('positive').map((node) => ({ key: node.key, label: node.label })),
+  negative: getFunctionNodesByExponent('negative').map((node) => ({ key: node.key, label: node.label })),
 };
 
 export const H_LABELS = []; // Legacy no-op export retained for compatibility.
@@ -110,6 +114,8 @@ export function evaluateTransform(baseZ, transformKey, k2, lFunc) {
       return cScl(cCos(baseZ), k2);
     case 'tan':
       return cScl(cTan(baseZ), k2);
+    case 'log':
+      return cLogBase(baseZ, lFunc);
     case 'log_sin':
       return cLogBase(cScl(cSin(baseZ), k2), lFunc);
     case 'log_cos':
@@ -202,7 +208,9 @@ function evaluateBaseChild(setKey, childKey, ctx, nValue) {
       case 'positiveImaginaryVectorA': return Number.isFinite(jScale) ? cScl(fPositive, jScale) : [NaN, NaN];
       case 'positiveImaginaryVectorReciprocal': return Number.isFinite(jScale) && Math.abs(jScale) > 1e-12 ? cScl(fPositive, 1 / jScale) : [NaN, NaN];
       case 'positiveImaginaryVectorB': return cScl(fPositive, nValue);
+      case 'positiveImaginaryVectorBReciprocal': return Math.abs(nValue) > 1e-12 ? cScl(fPositive, 1 / nValue) : [NaN, NaN];
       case 'positiveImaginaryCircleA': return circleAPositive;
+      case 'positiveImaginaryCircleAReciprocal': return cInv(circleAPositive);
       case 'positiveImaginaryCircleB': return circleBPositive;
       case 'positiveImaginaryCircleC': return circleCPositive;
       case 'positiveImaginaryCircleBReciprocal': return cInv(circleBPositive);
@@ -211,18 +219,20 @@ function evaluateBaseChild(setKey, childKey, ctx, nValue) {
     }
   }
 
-  // JSON-literal negative branch definitions (including positive cross-references).
+  // Negative branch definitions mirror positive branch structure with signed kernel.
   switch (childKey) {
     case 'negativeImaginary': return fNegative;
-    case 'negativeImaginaryReciprocal': return cInv(fPositive);
-    case 'negativeImaginaryVectorA': return Number.isFinite(jScale) ? cScl(fPositive, jScale) : [NaN, NaN];
-    case 'negativeImaginaryVectorReciprocal': return Number.isFinite(jScale) && Math.abs(jScale) > 1e-12 ? cScl(fPositive, 1 / jScale) : [NaN, NaN];
-    case 'negativeImaginaryVectorB': return cScl(fPositive, nValue);
+    case 'negativeImaginaryReciprocal': return cInv(fNegative);
+    case 'negativeImaginaryVectorA': return Number.isFinite(jScale) ? cScl(fNegative, jScale) : [NaN, NaN];
+    case 'negativeImaginaryVectorReciprocal': return Number.isFinite(jScale) && Math.abs(jScale) > 1e-12 ? cScl(fNegative, 1 / jScale) : [NaN, NaN];
+    case 'negativeImaginaryVectorB': return cScl(fNegative, nValue);
+    case 'negativeImaginaryVectorBReciprocal': return Math.abs(nValue) > 1e-12 ? cScl(fNegative, 1 / nValue) : [NaN, NaN];
     case 'negativeImaginaryCircleA': return circleANegative;
+    case 'negativeImaginaryCircleAReciprocal': return cInv(circleANegative);
     case 'negativeImaginaryCircleB': return circleBNegative;
     case 'negativeImaginaryCircleC': return circleCNegative;
-    case 'negativeImaginaryCircleBReciprocal': return cInv(circleBPositive);
-    case 'negativeImaginaryCircleCReciprocal': return cInv(circleCPositive);
+    case 'negativeImaginaryCircleBReciprocal': return cInv(circleBNegative);
+    case 'negativeImaginaryCircleCReciprocal': return cInv(circleCNegative);
     default: return [NaN, NaN];
   }
 }
@@ -231,58 +241,64 @@ function getSetStyle(model, setKey) {
   return model.sets?.[setKey] || defaultExpressionModel().sets[setKey];
 }
 
-function getTransformStyle(model, transformKey) {
-  return model.transforms?.[transformKey] || defaultExpressionModel().transforms[transformKey];
+function getVariantStyle(model, childKey, variantKey) {
+  return model.childVariants?.[childKey]?.[variantKey]
+    || defaultExpressionModel().childVariants[childKey][variantKey];
 }
 
 function getChildStyle(model, childKey) {
   return model.children?.[childKey] || defaultExpressionModel().children[childKey];
 }
 
-function resolveEffectiveStyle(model, setKey, transformKey, childKey) {
+function resolveEffectiveStyle(model, setKey, variantKey, childKey) {
   const parent = model.parent;
   const setStyle = getSetStyle(model, setKey);
-  const transformStyle = getTransformStyle(model, transformKey);
+  const variantStyle = getVariantStyle(model, childKey, variantKey);
   const childStyle = getChildStyle(model, childKey);
 
   const enabled = !!(
     parent.enabled &&
     setStyle.enabled &&
-    transformStyle.enabled &&
+    variantStyle.enabled &&
     childStyle.enabled
   );
 
   return {
     enabled,
-    pointSize: parent.pointSize * setStyle.pointSize * transformStyle.pointSize * childStyle.pointSize,
-    pointOpacity: parent.pointOpacity * setStyle.pointOpacity * transformStyle.pointOpacity * childStyle.pointOpacity,
-    lineWidth: parent.lineWidth * setStyle.lineWidth * transformStyle.lineWidth * childStyle.lineWidth,
-    lineOpacity: parent.lineOpacity * setStyle.lineOpacity * transformStyle.lineOpacity * childStyle.lineOpacity,
-    pointBloom: parent.pointBloom * setStyle.pointBloom * transformStyle.pointBloom * childStyle.pointBloom,
-    lineBloom: parent.lineBloom * setStyle.lineBloom * transformStyle.lineBloom * childStyle.lineBloom,
+    pointSize: parent.pointSize * setStyle.pointSize * variantStyle.pointSize * childStyle.pointSize,
+    pointOpacity: parent.pointOpacity * setStyle.pointOpacity * variantStyle.pointOpacity * childStyle.pointOpacity,
+    lineWidth: parent.lineWidth * setStyle.lineWidth * variantStyle.lineWidth * childStyle.lineWidth,
+    lineOpacity: parent.lineOpacity * setStyle.lineOpacity * variantStyle.lineOpacity * childStyle.lineOpacity,
+    pointBloom: parent.pointBloom * setStyle.pointBloom * variantStyle.pointBloom * childStyle.pointBloom,
+    lineBloom: parent.lineBloom * setStyle.lineBloom * variantStyle.lineBloom * childStyle.lineBloom,
     color: childStyle.color,
   };
 }
 
 function activeCombos(model) {
   const combos = [];
-  for (const setKey of SET_KEYS) {
-    const children = CHILDREN_BY_SET[setKey];
-    for (const child of children) {
-      for (const transformKey of TRANSFORM_KEYS) {
-        const style = resolveEffectiveStyle(model, setKey, transformKey, child.key);
-        if (!style.enabled) continue;
-        if (style.pointOpacity <= 0.0001 && style.lineOpacity <= 0.0001) continue;
-        combos.push({
-          setKey,
-          childKey: child.key,
-          childLabel: child.label,
-          transformKey,
-          style,
-        });
-      }
-    }
+  for (const plottable of FUNCTION_PLOTTABLES) {
+    const style = resolveEffectiveStyle(
+      model,
+      plottable.exponentKey,
+      plottable.variantKey,
+      plottable.functionKey,
+    );
+    if (!style.enabled) continue;
+    if (style.pointOpacity <= 0.0001 && style.lineOpacity <= 0.0001) continue;
+    combos.push({
+      setKey: plottable.exponentKey,
+      childKey: plottable.functionKey,
+      childLabel: plottable.functionLabel,
+      variantKey: plottable.variantKey,
+      transformKey: plottable.variantKey, // Legacy alias retained.
+      coverageStatus: plottable.coverageStatus,
+      inDesmos: plottable.inDesmos,
+      implemented: plottable.implemented,
+      style,
+    });
   }
+
   return combos;
 }
 
@@ -292,7 +308,11 @@ export function getActiveExpressionCombos(params) {
   return activeCombos(expressionModel).map((combo) => ({
     setKey: combo.setKey,
     childKey: combo.childKey,
-    transformKey: combo.transformKey,
+    variantKey: combo.variantKey,
+    transformKey: combo.variantKey, // Legacy alias retained.
+    coverageStatus: combo.coverageStatus,
+    inDesmos: combo.inDesmos,
+    implemented: combo.implemented,
     style: { ...combo.style },
   }));
 }
@@ -349,7 +369,7 @@ export function generateAllPoints(params) {
       const nValue = derived.nList[i];
       const ctx = computeBaseContext(derived, nValue, i, derived.formulaMode);
       const baseZ = evaluateBaseChild(combo.setKey, combo.childKey, ctx, nValue);
-      const transformed = sanitizeComplex(evaluateTransform(baseZ, combo.transformKey, derived.k2, derived.l_func));
+      const transformed = sanitizeComplex(evaluateTransform(baseZ, combo.variantKey, derived.k2, derived.l_func));
       if (!transformed) continue;
 
       const tint = blockTintForN(nValue);
@@ -428,7 +448,8 @@ export function generateAtlasPaths(params) {
         tag: {
           set: combo.setKey,
           child: combo.childKey,
-          transform: combo.transformKey,
+          variant: combo.variantKey,
+          transform: combo.variantKey, // Legacy alias retained.
           block: currentBlock ?? 0,
         },
       });
@@ -445,7 +466,7 @@ export function generateAtlasPaths(params) {
 
       const ctx = computeBaseContext(derived, nValue, i, derived.formulaMode);
       const baseZ = evaluateBaseChild(combo.setKey, combo.childKey, ctx, nValue);
-      const transformed = sanitizeComplex(evaluateTransform(baseZ, combo.transformKey, derived.k2, derived.l_func));
+      const transformed = sanitizeComplex(evaluateTransform(baseZ, combo.variantKey, derived.k2, derived.l_func));
       if (!transformed) {
         flush();
         continue;
@@ -485,7 +506,7 @@ export function generatePrimaryPaths(params) {
       widthMul: Math.max(0.05, style.lineWidth),
       opacityMul: clamp(style.lineOpacity, 0, 1),
       pointCount: seg.length,
-      tag: { set: 'positive', child: 'positiveImaginary', transform: 'sin' },
+      tag: { set: 'positive', child: 'positiveImaginary', variant: 'sin', transform: 'sin' },
       isPrimary: true,
     });
   }
