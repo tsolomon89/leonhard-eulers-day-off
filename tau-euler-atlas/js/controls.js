@@ -43,7 +43,6 @@ import {
   applyTraversalCommit,
   applyZRangeCommit,
   computeTraversalTBounds,
-  computeZRangeBounds,
   normalizeInputText,
   parseNumericInput,
   resolveCommittedValue,
@@ -125,7 +124,6 @@ export const state = {
   bufferTargetFrames: 24,
   bufferNotice: '',
 
-  Z: 710,
   Z_min: 0,
   Z_max: 710,
   pathBudget: 500,
@@ -203,6 +201,14 @@ const ICON_EYE_OFF = `
     <path d="M1.5 12s3.8-7 10.5-7c2 0 3.8.6 5.4 1.5"></path>
     <path d="M22.5 12s-3.8 7-10.5 7c-2 0-3.8-.6-5.4-1.5"></path>
     <path d="M3 3l18 18"></path>
+  </svg>
+`;
+
+const ICON_EYE_MIXED = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M1.5 12s3.8-7 10.5-7 10.5 7 10.5 7-3.8 7-10.5 7S1.5 12 1.5 12Z" opacity="0.4"></path>
+    <circle cx="12" cy="12" r="3.2" opacity="0.4"></circle>
+    <path d="M2 2l20 20"></path>
   </svg>
 `;
 
@@ -1540,7 +1546,9 @@ function visibilityStateLabel(stateKey) {
 }
 
 function visibilityIconForState(stateKey) {
-  return (stateKey === 'enabled' || stateKey === 'mixed') ? ICON_EYE : ICON_EYE_OFF;
+  if (stateKey === 'mixed') return ICON_EYE_MIXED;
+  if (stateKey === 'enabled') return ICON_EYE;
+  return ICON_EYE_OFF;
 }
 
 function buildUnifiedFunctionControlSection(b) {
@@ -1638,7 +1646,7 @@ function buildUnifiedFunctionControlSection(b) {
       },
       onToggle: () => {
         const current = resolveExponentVisibilityState(family.key);
-        const nextEnabled = current === 'enabled' ? false : true;
+        const nextEnabled = current === 'enabled' ? false : true; // mixed→on, disabled→on, enabled→off
         setExponentSubtreeEnabled(state.expressionModel, family.key, nextEnabled);
         regenerate();
         buildControls();
@@ -1667,7 +1675,7 @@ function buildUnifiedFunctionControlSection(b) {
       },
       onToggle: () => {
         const current = resolveFunctionTriState(state.expressionModel, fnNode.key);
-        const nextEnabled = current === 'enabled' ? false : true;
+        const nextEnabled = current === 'enabled' ? false : true; // mixed→on, disabled→on, enabled→off
         setFunctionNodeEnabledWithAncestors(
           state.expressionModel,
           selectedExponent,
@@ -2188,15 +2196,15 @@ function buildControls() {
   const b = new UIBuilder(controlsContainer);
 
   b.section('Mode')
-    .toggle('Master enabled', state.cinematicFx.master, 'enabled', () => applyVisualHelpers())
+    .toggle('Master enabled', state.cinematicFx.master, 'enabled', () => { applyVisualHelpers(); regenerate(); })
     .slider('Master intensity', state.cinematicFx.master, 'intensity', 0, 2, 0.01, { fmt: (v) => v.toFixed(2), linkPath: 'cinematic.master.intensity' })
     .toggleRow('Graphs', [
-      { label: 'Points', obj: state.cinematicFx.points, key: 'enabled' },
-      { label: 'Lines', obj: state.cinematicFx.atlasLines, key: 'enabled' },
+      { label: 'Points', obj: state.cinematicFx.points, key: 'enabled', onChange: () => regenerate() },
+      { label: 'Lines', obj: state.cinematicFx.atlasLines, key: 'enabled', onChange: () => regenerate() },
     ])
     .toggleRow('Guides', [
       { label: 'Grid', obj: state.visualHelpers, key: 'grid', onChange: () => applyVisualHelpers() },
-      { label: 'Ghost', obj: state.cinematicFx.ghostTraces, key: 'enabled' },
+      { label: 'Ghost', obj: state.cinematicFx.ghostTraces, key: 'enabled', onChange: () => regenerate() },
       { label: 'Reference', obj: state.visualHelpers, key: 'referenceRings', onChange: () => applyVisualHelpers() },
       { label: 'Orbit', obj: state.visualHelpers, key: 'orbitRing', onChange: () => applyVisualHelpers() },
     ])
@@ -2204,10 +2212,10 @@ function buildControls() {
     .modeToggle('View', getViewMode, setViewMode, '3d', '2d', '3D', '2D')
     .modeToggle('Render', getRenderMode, setRenderMode, 'cinematic', 'performance', 'Cinematic', 'Performance')
     .toggleRow('Effects', [
-      { label: 'Stars', obj: state.cinematicFx.stars, key: 'enabled' },
-      { label: 'Bloom', obj: state.cinematicFx.bloom, key: 'enabled' },
-      { label: 'Fog', obj: state.cinematicFx.fog, key: 'enabled' },
-      { label: 'Tone', obj: state.cinematicFx.tone, key: 'enabled' },
+      { label: 'Stars', obj: state.cinematicFx.stars, key: 'enabled', onChange: () => regenerate() },
+      { label: 'Bloom', obj: state.cinematicFx.bloom, key: 'enabled', onChange: () => regenerate() },
+      { label: 'Fog', obj: state.cinematicFx.fog, key: 'enabled', onChange: () => regenerate() },
+      { label: 'Tone', obj: state.cinematicFx.tone, key: 'enabled', onChange: () => regenerate() },
     ], { cssClass: 'cinematic-only' })
     .childSection('Advanced FX', true, { cssClass: 'cinematic-only' })
     .slider('star opacity', state.cinematicFx.stars, 'opacity', 0, 1, 0.01, { linkPath: 'cinematic.stars.opacity' })
@@ -2348,21 +2356,14 @@ function buildControls() {
 
   b.section('n Domain', true)
     .info('Canonical n = [Z_min+1 ... Z_max-1], with fixed 710 boundary coloring.')
-    .slider('Z', state, 'Z', 1, 50000, 1, {
+    .slider('Z_min', state, 'Z_min', -50000, 0, 1, {
       fmt: (v) => v.toFixed(0),
       heavy: true,
-      onCommit: (v) => applyZRangeCommit(state, 'Z', v),
-    })
-    .slider('Z_min', state, 'Z_min', -state.Z, 0, 1, {
-      fmt: (v) => v.toFixed(0),
-      heavy: true,
-      dynamicBounds: () => computeZRangeBounds(state).zMin,
       onCommit: (v) => applyZRangeCommit(state, 'Z_min', v),
     })
-    .slider('Z_max', state, 'Z_max', 0, state.Z, 1, {
+    .slider('Z_max', state, 'Z_max', 0, 50000, 1, {
       fmt: (v) => v.toFixed(0),
       heavy: true,
-      dynamicBounds: () => computeZRangeBounds(state).zMax,
       onCommit: (v) => applyZRangeCommit(state, 'Z_max', v),
     })
     .slider('path budget', state, 'pathBudget', 10, 2000, 10, { fmt: (v) => v.toFixed(0), heavy: true });

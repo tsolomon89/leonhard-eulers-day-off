@@ -583,3 +583,37 @@
 ::ffff:127.0.0.1 - - [05/Apr/2026 21:50:04] "GET /js/link-engine.js HTTP/1.1" 200 -
 ::ffff:127.0.0.1 - - [05/Apr/2026 21:50:05] code 404, message File not found
 ::ffff:127.0.0.1 - - [05/Apr/2026 21:50:05] "GET /favicon.ico HTTP/1.1" 404 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:56:48] "GET / HTTP/1.1" 304 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:56:48] "GET /styles.css HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:56:48] "GET /js/scene.js HTTP/1.1" 304 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:56:48] "GET /js/controls.js HTTP/1.1" 304 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:56:48] "GET /js/modes.js HTTP/1.1" 304 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:56:49] code 404, message File not found
+::ffff:127.0.0.1 - - [05/Apr/2026 21:56:49] "GET /favicon.ico HTTP/1.1" 404 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET / HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /styles.css HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/main.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/scene.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/controls.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/camera-panel.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/complex.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/modes.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/derivation.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/generators.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/expression-model.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/function-registry.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/animation.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/playback-buffer.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/controls-commit.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/cinematic-fx.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/linked-params.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /js/link-engine.js HTTP/1.1" 200 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] code 404, message File not found
+::ffff:127.0.0.1 - - [05/Apr/2026 21:58:26] "GET /favicon.ico HTTP/1.1" 404 -
+::ffff:127.0.0.1 - - [05/Apr/2026 21:59:01] "GET /styles.css HTTP/1.1" 200 -
+::1 - - [05/Apr/2026 23:12:50] code 501, message Unsupported method ('POST')
+::1 - - [05/Apr/2026 23:12:50] code 501, message Unsupported method ('POST')
+::1 - - [05/Apr/2026 23:12:50] "POST / HTTP/1.1" 501 -
+::1 - - [05/Apr/2026 23:12:50] "POST / HTTP/1.1" 501 -
+::1 - - [05/Apr/2026 23:12:50] code 501, message Unsupported method ('POST')
+::1 - - [05/Apr/2026 23:12:50] "POST / HTTP/1.1" 501 -

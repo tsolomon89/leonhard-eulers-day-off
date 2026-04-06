@@ -56,7 +56,7 @@ export function resolveCommittedValue(rawValue, bounds, mode = 'snap') {
 export function applyBoundedTripletCommit(state, config, key, rawValue) {
   if (!state || typeof state !== 'object') return { value: rawValue, status: 'applied' };
   const { keys = [], coerce = (v) => v, normalize } = config || {};
-  if (!Array.isArray(keys) || keys.length !== 3 || !keys.includes(key) || typeof normalize !== 'function') {
+  if (!Array.isArray(keys) || keys.length < 2 || !keys.includes(key) || typeof normalize !== 'function') {
     return { value: rawValue, status: 'applied' };
   }
 
@@ -108,35 +108,28 @@ export function applyZRangeCommit(state, key, value) {
   return applyBoundedTripletCommit(
     state,
     {
-      keys: ['Z', 'Z_min', 'Z_max'],
+      keys: ['Z_min', 'Z_max'],
       coerce: (raw) => Math.floor(Number(raw)),
       normalize: (next, editedKey) => {
-        let rawZ = Number.isFinite(next.Z) ? Math.floor(next.Z) : 1;
-        let Z = Math.max(1, rawZ);
-
         let Z_min = Number.isFinite(next.Z_min) ? Math.floor(next.Z_min) : 0;
-        let Z_max = Number.isFinite(next.Z_max) ? Math.floor(next.Z_max) : Z;
+        let Z_max = Number.isFinite(next.Z_max) ? Math.floor(next.Z_max) : 710;
 
-        if (Z_max > Z) {
-          Z = Z_max;
-        }
+        Z_min = clamp(Z_min, -50000, 0);
+        Z_max = clamp(Z_max, 0, 50000);
 
-        // JSON-literal linkage: Z_min in [-Z,0], Z_max in [0,Z],
+        // JSON-literal linkage: Z_min in <=0, Z_max >= 0,
         // with n=[Z_min+1...Z_max-1], so enforce Z_max - Z_min >= 2.
-        Z_max = clamp(Z_max, 0, Z);
-        Z_min = clamp(Z_min, -Z, 0);
-
         if ((Z_max - Z_min) < 2) {
           if (editedKey === 'Z_min') {
-            Z_max = clamp(Z_min + 2, 0, Z);
-            if ((Z_max - Z_min) < 2) Z_min = clamp(Z_max - 2, -Z, 0);
+            Z_max = clamp(Z_min + 2, 0, 50000);
+            if ((Z_max - Z_min) < 2) Z_min = clamp(Z_max - 2, -50000, 0);
           } else {
-            Z_min = clamp(Z_max - 2, -Z, 0);
-            if ((Z_max - Z_min) < 2) Z_max = clamp(Z_min + 2, 0, Z);
+            Z_min = clamp(Z_max - 2, -50000, 0);
+            if ((Z_max - Z_min) < 2) Z_max = clamp(Z_min + 2, 0, 50000);
           }
         }
 
-        return { Z, Z_min, Z_max };
+        return { Z_min, Z_max };
       },
     },
     key,
@@ -148,12 +141,4 @@ export function computeTraversalTBounds(state, step = 0.00001) {
   const a = Number.isFinite(state?.T_lowerBound) ? state.T_lowerBound : 0;
   const b = Number.isFinite(state?.T_upperBound) ? state.T_upperBound : 1;
   return { min: Math.min(a, b), max: Math.max(a, b), step };
-}
-
-export function computeZRangeBounds(state) {
-  const Z = Math.max(1, Math.floor(Number.isFinite(state?.Z) ? state.Z : 710));
-  return {
-    zMin: { min: -Z, max: 0, step: 1 },
-    zMax: { min: 0, max: Z, step: 1 },
-  };
 }

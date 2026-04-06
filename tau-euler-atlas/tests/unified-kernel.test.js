@@ -69,10 +69,9 @@ function makeExpressionModel(enableAllTransforms = false) {
 function baseState(overrides = {}) {
   return {
     T: 2,
-    T_start: 1.99999,
-    T_stop: 2,
+    T_lowerBound: 1.99999,
+    T_upperBound: 2,
     b: 1000,
-    Z: 720,
     Z_min: 0,
     Z_max: 720,
     l_base: 10,
@@ -94,8 +93,8 @@ test('JSON-literal k semantics: bool=0 uses T, bool=1 uses kAligned', () => {
   const direct = buildDerivedState(baseState({
     kStepsInAlignmentsBool: 0,
     T: 1.75,
-    T_start: 1,
-    T_stop: 3,
+    T_lowerBound: 1,
+    T_upperBound: 3,
   }));
   assert.ok(approx(direct.k, 1.75, 1e-12));
 
@@ -153,13 +152,13 @@ test('JSON-literal q/corr/k1 derivation matches formulas', () => {
 });
 
 test('n domain follows JSON-literal [Z_min+1 ... Z_max-1] with negative Z_min support', () => {
-  const d = buildDerivedState(baseState({ Z: 1000, Z_min: 5, Z_max: 12 }));
+  const d = buildDerivedState(baseState({ Z_min: 5, Z_max: 12 }));
   assert.deepEqual(d.nList, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
-  const neg = buildDerivedState(baseState({ Z: 10, Z_min: -3, Z_max: 3 }));
+  const neg = buildDerivedState(baseState({ Z_min: -3, Z_max: 3 }));
   assert.deepEqual(neg.nList, [-2, -1, 0, 1, 2]);
 
-  const minGap = buildDerivedState(baseState({ Z: 10, Z_min: 0, Z_max: 1 }));
+  const minGap = buildDerivedState(baseState({ Z_min: 0, Z_max: 1 }));
   assert.deepEqual(minGap.nList, [1]);
 });
 
@@ -169,12 +168,14 @@ test('registry contains exact 24 plotted base children (12 positive + 12 negativ
   assert.equal(POSITIVE_CHILDREN.length + NEGATIVE_CHILDREN.length, 24);
 });
 
-test('default tri-state resolves exponents/functions as enabled (not mixed)', () => {
+test('default tri-state resolves exponents as enabled, functions as mixed', () => {
   const model = defaultExpressionModel();
+  // Exponents: all 12 functions ON → enabled
   assert.equal(resolveExponentTriState(model, 'positive'), 'enabled');
   assert.equal(resolveExponentTriState(model, 'negative'), 'enabled');
-  assert.equal(resolveFunctionTriState(model, 'positiveImaginaryVectorB'), 'enabled');
-  assert.equal(resolveFunctionTriState(model, 'negativeImaginaryVectorB'), 'enabled');
+  // Functions: only base+sin variants ON (2/8) → mixed
+  assert.equal(resolveFunctionTriState(model, 'positiveImaginaryVectorB'), 'mixed');
+  assert.equal(resolveFunctionTriState(model, 'negativeImaginaryVectorB'), 'mixed');
 });
 
 test('transform expansion includes base/sin/cos/tan and log wrappers', () => {
@@ -368,7 +369,7 @@ test('enabling function subtree auto-enables exponent ancestor', () => {
 
   setFunctionNodeEnabledWithAncestors(expressionModel, 'positive', functionKey, true);
   assert.equal(expressionModel.sets.positive.enabled, true);
-  assert.equal(resolveExponentTriState(expressionModel, 'positive'), 'enabled');
+  assert.equal(resolveExponentTriState(expressionModel, 'positive'), 'mixed');
   assert.equal(resolveFunctionTriState(expressionModel, functionKey), 'enabled');
 });
 
@@ -386,8 +387,16 @@ test('enabling variant auto-enables function and exponent ancestors', () => {
   assert.equal(expressionModel.sets.positive.enabled, true);
   assert.equal(expressionModel.children[functionKey].enabled, true);
   assert.equal(expressionModel.childVariants[functionKey][variantKey].enabled, true);
-  assert.equal(resolveFunctionTriState(expressionModel, functionKey), 'enabled');
-  assert.equal(resolveExponentTriState(expressionModel, 'positive'), 'enabled');
+  assert.equal(resolveFunctionTriState(expressionModel, functionKey), 'mixed');
+  assert.equal(resolveExponentTriState(expressionModel, 'positive'), 'mixed');
+});
+
+test('default model starts in mixed state at function level, enabled at exponent level', () => {
+  const model = defaultExpressionModel();
+  assert.equal(resolveFunctionTriState(model, 'positiveImaginary'), 'mixed');
+  assert.equal(resolveFunctionTriState(model, 'negativeImaginary'), 'mixed');
+  assert.equal(resolveExponentTriState(model, 'positive'), 'enabled');
+  assert.equal(resolveExponentTriState(model, 'negative'), 'enabled');
 });
 
 test('visual helper defaults include decoupled reference and orbit ring toggles', () => {
@@ -405,9 +414,8 @@ test('visual helper defaults include decoupled reference and orbit ring toggles'
 test('formula mode tau/euler base kernels are both evaluable and deterministic', () => {
   const params = baseState({
     T: 2,
-    T_start: 1.5,
-    T_stop: 2.5,
-    Z: 12,
+    T_lowerBound: 1.5,
+    T_upperBound: 2.5,
     Z_min: 0,
     Z_max: 12,
   });
@@ -426,8 +434,8 @@ test('negative exponent branch mirrors positive branch with conjugate symmetry w
   const params = baseState({
     kStepsInAlignmentsBool: 0,
     T: 2,
-    T_start: 1.8,
-    T_stop: 2.2,
+    T_lowerBound: 1.8,
+    T_upperBound: 2.2,
   });
   const nValue = 137;
   const nOrdinal = 42;
@@ -457,8 +465,8 @@ test('alignment-locked T≈2 can collapse +/- base and vector families onto the 
   const params = baseState({
     kStepsInAlignmentsBool: 1,
     T: 2,
-    T_start: 1.99999,
-    T_stop: 2,
+    T_lowerBound: 1.99999,
+    T_upperBound: 2,
   });
 
   const basePositive = evaluateBaseChildForMode(params, 'positive', 'positiveImaginary', 250, 100, 'tau');
@@ -476,8 +484,8 @@ test('CircleA uses shared canonical k so T updates drive both imaginary sets', (
   const paramsA = baseState({
     kStepsInAlignmentsBool: 0,
     T: 1.8,
-    T_start: 1.7,
-    T_stop: 2.2,
+    T_lowerBound: 1.7,
+    T_upperBound: 2.2,
   });
   const paramsB = {
     ...paramsA,
@@ -497,8 +505,8 @@ test('CircleA tau/euler implementations share equivalent angle construction with
   const params = baseState({
     kStepsInAlignmentsBool: 0,
     T: 2.05,
-    T_start: 2,
-    T_stop: 2.2,
+    T_lowerBound: 2,
+    T_upperBound: 2.2,
   });
   const nValue = 1;
   const derived = buildDerivedState(params);
@@ -522,7 +530,6 @@ test('CircleA tau/euler implementations share equivalent angle construction with
 
 test('equivalence proof rows cover all base children across both sets', () => {
   const proof = computeEquivalenceProofRows(baseState({
-    Z: 16,
     Z_min: 0,
     Z_max: 16,
   }));
@@ -610,7 +617,6 @@ test('paths split across fixed 710-color boundary blocks when range exceeds 710'
   expressionModel.sets.negative.enabled = false;
 
   const paths = generateAtlasPaths(baseState({
-    Z: 2000,
     Z_min: 0,
     Z_max: 720,
     expressionModel,
@@ -626,16 +632,16 @@ test('paths split across fixed 710-color boundary blocks when range exceeds 710'
 test('legacy numStrands field does not affect canonical outputs', () => {
   const base = baseState();
   const a = generateAllPoints({ ...base, numStrands: 1 });
+  const aPos = Array.from(a.positions.slice(0, 120));
+  const aCol = Array.from(a.colors.slice(0, 120));
+
   const b = generateAllPoints({ ...base, numStrands: 16 });
+  const bPos = Array.from(b.positions.slice(0, 120));
+  const bCol = Array.from(b.colors.slice(0, 120));
+
   assert.equal(a.count, b.count);
-  assert.deepEqual(
-    Array.from(a.positions.slice(0, 120)),
-    Array.from(b.positions.slice(0, 120)),
-  );
-  assert.deepEqual(
-    Array.from(a.colors.slice(0, 120)),
-    Array.from(b.colors.slice(0, 120)),
-  );
+  assert.deepEqual(aPos, bPos);
+  assert.deepEqual(aCol, bCol);
 });
 
 test('q_scale materially changes spoke-driving output family', () => {
@@ -655,16 +661,16 @@ test('q_scale materially changes spoke-driving output family', () => {
     q_scale: 1,
     expressionModel: model,
   }));
+  const aPos = Array.from(a.positions.slice(0, 12));
+
   const b = generateAllPoints(baseState({
     q_bool: 0,
     q_scale: 2,
     expressionModel: model,
   }));
+  const bPos = Array.from(b.positions.slice(0, 12));
 
   assert.ok(a.count > 0);
   assert.ok(b.count > 0);
-  assert.notDeepEqual(
-    Array.from(a.positions.slice(0, 12)),
-    Array.from(b.positions.slice(0, 12)),
-  );
+  assert.notDeepEqual(aPos, bPos);
 });

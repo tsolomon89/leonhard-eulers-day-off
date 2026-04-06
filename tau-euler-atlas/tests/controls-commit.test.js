@@ -6,7 +6,6 @@ import {
   applyTraversalCommit,
   applyZRangeCommit,
   computeTraversalTBounds,
-  computeZRangeBounds,
   parseNumericInput,
   resolveCommittedValue,
 } from '../js/controls-commit.js';
@@ -17,57 +16,49 @@ function approx(a, b, eps = EPS) {
   return Math.abs(a - b) <= eps;
 }
 
-test('typed T commits clamp into [T_start, T_stop]', () => {
-  const s = { T: 2, T_start: 1.99999, T_stop: 2 };
+test('typed T commits clamp into [T_lowerBound, T_upperBound]', () => {
+  const s = { T: 2, T_lowerBound: 1.99999, T_upperBound: 2 };
   const out = applyTraversalCommit(s, 'T', -100.123456789);
 
   assert.ok(approx(s.T, 1.99999));
-  assert.ok(approx(s.T_start, 1.99999));
-  assert.ok(approx(s.T_stop, 2));
+  assert.ok(approx(s.T_lowerBound, 1.99999));
+  assert.ok(approx(s.T_upperBound, 2));
   assert.equal(out.status, 'normalized');
 });
 
-test('typed T_start/T_stop preserve order and keep T inside window', () => {
-  const s = { T: 2, T_start: -1, T_stop: 1 };
+test('typed T_lowerBound/T_upperBound preserve order and keep T inside window', () => {
+  const s = { T: 2, T_lowerBound: -1, T_upperBound: 1 };
 
-  const outStart = applyTraversalCommit(s, 'T_start', 5);
+  const outStart = applyTraversalCommit(s, 'T_lowerBound', 5);
   assert.equal(outStart.status, 'normalized');
-  assert.equal(s.T_start, 1);
-  assert.equal(s.T_stop, 5);
+  assert.equal(s.T_lowerBound, 1);
+  assert.equal(s.T_upperBound, 5);
   assert.equal(s.T, 2);
 
-  const outStop = applyTraversalCommit(s, 'T_stop', -2);
+  const outStop = applyTraversalCommit(s, 'T_upperBound', -2);
   assert.equal(outStop.status, 'normalized');
-  assert.equal(s.T_start, -2);
-  assert.equal(s.T_stop, 1);
+  assert.equal(s.T_lowerBound, -2);
+  assert.equal(s.T_upperBound, 1);
   assert.equal(s.T, 1);
 });
 
-test('Z/Z_min/Z_max edits preserve invariant 1<=Z, -Z<=Z_min<=0, 0<=Z_max<=Z, and Z_max-Z_min>=2', () => {
-  const s = { Z: 10, Z_min: 0, Z_max: 10 };
+test('Z_min/Z_max edits preserve invariants: Z_min<=0, Z_max>=0, Z_max-Z_min>=2', () => {
+  const s = { Z_min: -10, Z_max: 10 };
 
   const minOut = applyZRangeCommit(s, 'Z_min', 12);
   assert.equal(minOut.status, 'normalized');
-  assert.equal(s.Z, 10);
-  assert.equal(s.Z_min, 0);
+  assert.equal(s.Z_min, 0); // clamped
   assert.equal(s.Z_max, 10);
 
-  const minNegOut = applyZRangeCommit(s, 'Z_min', -12);
-  assert.equal(minNegOut.status, 'normalized');
-  assert.equal(s.Z_min, -10);
+  const minNegOut = applyZRangeCommit(s, 'Z_min', -100);
+  assert.equal(minNegOut.status, 'applied');
+  assert.equal(s.Z_min, -100);
   assert.equal(s.Z_max, 10);
 
-  const maxOut = applyZRangeCommit(s, 'Z_max', 0);
-  assert.equal(maxOut.status, 'applied');
-  assert.equal(s.Z, 10);
-  assert.equal(s.Z_min, -10);
+  const maxOut = applyZRangeCommit(s, 'Z_max', -5);
+  assert.equal(maxOut.status, 'normalized');
+  assert.equal(s.Z_min, -100);
   assert.equal(s.Z_max, 0);
-
-  const zOut = applyZRangeCommit(s, 'Z', 0);
-  assert.equal(zOut.status, 'normalized');
-  assert.equal(s.Z, 1);
-  assert.equal(s.Z_min, -1);
-  assert.equal(s.Z_max, 1);
 });
 
 test('generic bounded triplet helper is reusable across grouped ranges', () => {
@@ -113,15 +104,11 @@ test('typed values keep precision in exact mode while drag snap quantizes', () =
   assert.equal(snapped.status, 'normalized');
 });
 
-test('dynamic bounds helpers track traversal and Z-range updates', () => {
-  const traversal = computeTraversalTBounds({ T_start: -100, T_stop: 100 }, 0.0001);
+test('dynamic bounds helpers track traversal updates', () => {
+  const traversal = computeTraversalTBounds({ T_lowerBound: -100, T_upperBound: 100 }, 0.0001);
   assert.equal(traversal.min, -100);
   assert.equal(traversal.max, 100);
   assert.equal(traversal.step, 0.0001);
-
-  const z = computeZRangeBounds({ Z: 710 });
-  assert.deepEqual(z.zMin, { min: -710, max: 0, step: 1 });
-  assert.deepEqual(z.zMax, { min: 0, max: 710, step: 1 });
 });
 
 test('parseNumericInput accepts comma and dot decimals', () => {

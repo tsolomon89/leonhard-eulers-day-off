@@ -248,8 +248,8 @@ export function summarizeExponentSubtree(model, exponentKey) {
 
 export function resolveExponentTriState(model, exponentKey) {
   const snapshot = summarizeExponentSubtree(model, exponentKey);
-  if (snapshot.setEnabled && snapshot.descendantEnabledCount > 0) return 'enabled';
-  if (!snapshot.setEnabled && snapshot.descendantsNoneEnabled) return 'disabled';
+  if (snapshot.setEnabled && snapshot.functionEnabledCount === snapshot.functionCount) return 'enabled';
+  if (!snapshot.setEnabled && snapshot.functionEnabledCount === 0) return 'disabled';
   return 'mixed';
 }
 
@@ -261,10 +261,11 @@ export function setExponentSubtreeEnabled(model, exponentKey, enabled) {
 
   for (const node of nodes) {
     if (model.children?.[node.key]) model.children[node.key].enabled = next;
-    if (!model.childVariants?.[node.key]) continue;
-    for (const variant of VARIANT_DEFINITIONS) {
-      if (model.childVariants[node.key][variant.key]) {
-        model.childVariants[node.key][variant.key].enabled = next;
+    if (model.childVariants?.[node.key]) {
+      for (const variant of VARIANT_DEFINITIONS) {
+        if (model.childVariants[node.key][variant.key]) {
+          model.childVariants[node.key][variant.key].enabled = next;
+        }
       }
     }
   }
@@ -293,7 +294,7 @@ export function summarizeFunctionSubtree(model, functionKey) {
 
 export function resolveFunctionTriState(model, functionKey) {
   const snapshot = summarizeFunctionSubtree(model, functionKey);
-  if (snapshot.childEnabled && snapshot.variantEnabledCount > 0) return 'enabled';
+  if (snapshot.childEnabled && snapshot.variantsAllEnabled) return 'enabled';
   if (!snapshot.childEnabled && snapshot.variantsNoneEnabled) return 'disabled';
   return 'mixed';
 }
@@ -303,10 +304,11 @@ export function setFunctionSubtreeEnabled(model, functionKey, enabled) {
 
   if (model.children?.[functionKey]) model.children[functionKey].enabled = next;
 
-  if (!model.childVariants?.[functionKey]) return;
-  for (const variant of VARIANT_DEFINITIONS) {
-    if (model.childVariants[functionKey][variant.key]) {
-      model.childVariants[functionKey][variant.key].enabled = next;
+  if (model.childVariants?.[functionKey]) {
+    for (const variant of VARIANT_DEFINITIONS) {
+      if (model.childVariants[functionKey][variant.key]) {
+        model.childVariants[functionKey][variant.key].enabled = next;
+      }
     }
   }
 }

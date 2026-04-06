@@ -78,26 +78,19 @@ export function buildNListFromRange(ZMin, ZMaxExclusive) {
 export function buildDerivedState(input) {
   const base = { ...input };
 
-  let Z = Math.max(1, Math.floor(Number.isFinite(base.Z) ? base.Z : 710));
-  const ZMaxInput = Number.isFinite(base.Z_max) ? Math.floor(base.Z_max) : Z;
+  const ZMaxInput = Number.isFinite(base.Z_max) ? Math.floor(base.Z_max) : 710;
   const ZMinInput = Number.isFinite(base.Z_min) ? Math.floor(base.Z_min) : 0;
-  let Z_max = clamp(ZMaxInput, 0, Z);
-  let Z_min = clamp(ZMinInput, -Z, 0);
-
-  if (ZMaxInput > Z) {
-    Z = ZMaxInput;
-    Z_max = ZMaxInput;
-    Z_min = clamp(ZMinInput, -Z, 0);
-  }
+  let Z_max = clamp(ZMaxInput, 0, 50000);
+  let Z_min = clamp(ZMinInput, -50000, 0);
 
   // JSON-literal domain: n = [Z_min + 1 ... Z_max - 1]
   // Keep deterministic validity by ensuring at least one sample (Z_max - Z_min >= 2).
   if ((Z_max - Z_min) < 2) {
     if (ZMaxInput <= ZMinInput) {
-      Z_min = clamp(Z_max - 2, -Z, 0);
+      Z_min = clamp(Z_max - 2, -50000, 0);
     } else {
-      Z_max = clamp(Z_min + 2, 0, Z);
-      if ((Z_max - Z_min) < 2) Z_min = clamp(Z_max - 2, -Z, 0);
+      Z_max = clamp(Z_min + 2, 0, 50000);
+      if ((Z_max - Z_min) < 2) Z_min = clamp(Z_max - 2, -50000, 0);
     }
   }
 
@@ -183,7 +176,6 @@ export function buildDerivedState(input) {
 
   return {
     ...base,
-    Z,
     Z_min,
     Z_max,
     n,
