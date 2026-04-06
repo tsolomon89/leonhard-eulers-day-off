@@ -1,8 +1,6 @@
-const EPS = 1e-12;
+import { clamp } from './complex.js';
 
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
+const EPS = 1e-12;
 
 function quantize(v, min, max, step) {
   const clamped = clamp(v, min, max);
@@ -85,20 +83,20 @@ export function applyTraversalCommit(state, key, value) {
   return applyBoundedTripletCommit(
     state,
     {
-      keys: ['T', 'T_start', 'T_stop'],
+      keys: ['T', 'T_lowerBound', 'T_upperBound'],
       coerce: (raw) => Number(raw),
       normalize: (next) => {
-        let T_start = Number.isFinite(next.T_start) ? next.T_start : 0;
-        let T_stop = Number.isFinite(next.T_stop) ? next.T_stop : T_start + 1;
-        if (T_start > T_stop) {
-          const tmp = T_start;
-          T_start = T_stop;
-          T_stop = tmp;
+        let T_lowerBound = Number.isFinite(next.T_lowerBound) ? next.T_lowerBound : 0;
+        let T_upperBound = Number.isFinite(next.T_upperBound) ? next.T_upperBound : T_lowerBound + 1;
+        if (T_lowerBound > T_upperBound) {
+          const tmp = T_lowerBound;
+          T_lowerBound = T_upperBound;
+          T_upperBound = tmp;
         }
 
-        let T = Number.isFinite(next.T) ? next.T : T_start;
-        T = clamp(T, T_start, T_stop);
-        return { T, T_start, T_stop };
+        let T = Number.isFinite(next.T) ? next.T : T_lowerBound;
+        T = clamp(T, T_lowerBound, T_upperBound);
+        return { T, T_lowerBound, T_upperBound };
       },
     },
     key,
@@ -113,11 +111,15 @@ export function applyZRangeCommit(state, key, value) {
       keys: ['Z', 'Z_min', 'Z_max'],
       coerce: (raw) => Math.floor(Number(raw)),
       normalize: (next, editedKey) => {
-        const rawZ = Number.isFinite(next.Z) ? Math.floor(next.Z) : 1;
-        const Z = Math.max(1, rawZ);
+        let rawZ = Number.isFinite(next.Z) ? Math.floor(next.Z) : 1;
+        let Z = Math.max(1, rawZ);
 
         let Z_min = Number.isFinite(next.Z_min) ? Math.floor(next.Z_min) : 0;
         let Z_max = Number.isFinite(next.Z_max) ? Math.floor(next.Z_max) : Z;
+
+        if (Z_max > Z) {
+          Z = Z_max;
+        }
 
         // JSON-literal linkage: Z_min in [-Z,0], Z_max in [0,Z],
         // with n=[Z_min+1...Z_max-1], so enforce Z_max - Z_min >= 2.
@@ -143,8 +145,8 @@ export function applyZRangeCommit(state, key, value) {
 }
 
 export function computeTraversalTBounds(state, step = 0.00001) {
-  const a = Number.isFinite(state?.T_start) ? state.T_start : 0;
-  const b = Number.isFinite(state?.T_stop) ? state.T_stop : 1;
+  const a = Number.isFinite(state?.T_lowerBound) ? state.T_lowerBound : 0;
+  const b = Number.isFinite(state?.T_upperBound) ? state.T_upperBound : 1;
   return { min: Math.min(a, b), max: Math.max(a, b), step };
 }
 

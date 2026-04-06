@@ -1,8 +1,6 @@
-const EPS = 1e-12;
+import { clamp } from './complex.js';
 
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
+const EPS = 1e-12;
 
 function safeNumber(v, fallback = 0) {
   return Number.isFinite(v) ? v : fallback;
@@ -36,7 +34,7 @@ export function ensureLinkedParam(registry, path, initialValue) {
 
 export function resolveLinkedValue(linked, progress) {
   if (!linked || typeof linked !== 'object') return NaN;
-  const base = safeNumber(linked.value, 0);
+  const base = safeNumber(linked.baseValue ?? linked.value, 0);
   const end = linked.endValue;
   if (!linked.isLinked || !Number.isFinite(end)) return base;
 
@@ -71,8 +69,8 @@ const CORE_LINKABLE_FIELDS = new Set([
 ]);
 
 const EXCLUDED_LINK_FIELDS = new Set([
-  'T_start',
-  'T_stop',
+  'T_lowerBound',
+  'T_upperBound',
   'Z',
   'Z_min',
   'Z_max',

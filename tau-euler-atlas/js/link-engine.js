@@ -3,10 +3,7 @@ import {
   sanitizeDirection,
   seedEndpoint,
 } from './linked-params.js';
-
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
+import { clamp } from './complex.js';
 
 function toNumber(v, fallback = NaN) {
   return Number.isFinite(v) ? v : fallback;
@@ -198,12 +195,15 @@ export function createLinkEngine(options = {}) {
       return base;
     }
     const resolved = resolveLinkedValue({
-      value: record.baseValue,
+      baseValue: record.baseValue,
       endValue: record.endValue,
       isLinked: record.isLinked,
       direction: record.direction,
     }, progress);
-    const next = clamp(toNumber(resolved, record.baseValue), bounds.min, bounds.max);
+    let next = clamp(toNumber(resolved, record.baseValue), bounds.min, bounds.max);
+    if (Number.isFinite(bounds.step) && bounds.step > 0) {
+      next = clamp(Math.round((next - bounds.min) / bounds.step) * bounds.step + bounds.min, bounds.min, bounds.max);
+    }
     record.adapter.setLive(next);
     record.lastResolved = next;
     return next;

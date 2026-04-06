@@ -15,6 +15,11 @@
 export const TAU = 2 * Math.PI;
 export const LN_TAU = Math.log(TAU);  // ln(τ) — the bridge between base-e and base-τ
 
+// ── Shared numeric utility ───────────────────────────────────
+export function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
 // ── Complex constructors & arithmetic ──────────────────────────
 export const C    = (r, i) => [r, i];
 export const cAdd = (a, b) => [a[0] + b[0], a[1] + b[1]];

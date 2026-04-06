@@ -28,14 +28,19 @@ let perspCam, orthoCam;
 let activeCamera;
 let bloomPass, renderPass, outputPass;
 let pointCloud = null;
-let strandLines = [];
-let atlasLines  = [];  // independent layer for atlas expression curves
+let pointCloudMat = null;   // persistent material — never disposed
+let strandLines = [];       // object pool — entries hidden, not disposed
+let atlasLines  = [];       // object pool — independent layer for atlas expression curves
 let gridGroup = null;
 let refCircles = null;
 let starSystem = null;
-let ghostTauLine = null;    // τ-native circle trace (cyan)
-let ghostAlphaLine = null;  // α-base circle trace (amber, proof)
-let orbitCircle = null;     // dynamic r = τ^{-k} circle
+let ghostTauLine = null;    // τ-native circle trace (cyan) — singleton, reused
+let ghostAlphaLine = null;  // α-base circle trace (amber, proof) — singleton, reused
+let orbitCircle = null;     // dynamic r = τ^{-k} circle — singleton, reused
+
+// ── Cached DOM references (set once in initScene) ────────────
+let _fpsEl = null;
+let _nodeDispEl = null;
 let time = 0;
 let frameCount = 0, lastFpsTime = performance.now(), fps = 60;
 let idleTimer = 0;
@@ -394,6 +399,10 @@ export function initScene() {
 
   document.getElementById('container').appendChild(renderer.domElement);
 
+  // Cache DOM refs for hot-path updates
+  _fpsEl = document.getElementById('fps-display');
+  _nodeDispEl = document.getElementById('node-display');
+
   // Controls — damping 0.07, zoom 0.8 matches style examples
   controls = new OrbitControls(activeCamera, renderer.domElement);
   controls.enableDamping = true;
@@ -470,12 +479,15 @@ function handleResize() {
   renderer.setSize(w, h);
   composer.setSize(w, h);
 
-  // Update Line2 materials resolution
-  strandLines.forEach(line => {
-    if (line.material.resolution) {
-      line.material.resolution.set(w, h);
-    }
-  });
+  // Update Line2 materials resolution (both pools)
+  for (const line of strandLines) {
+    if (line.material.resolution) line.material.resolution.set(w, h);
+  }
+  for (const line of atlasLines) {
+    if (line.material.resolution) line.material.resolution.set(w, h);
+  }
+  if (ghostTauLine?.material.resolution) ghostTauLine.material.resolution.set(w, h);
+  if (ghostAlphaLine?.material.resolution) ghostAlphaLine.material.resolution.set(w, h);
 }
 
 // ── Mode change handlers ─────────────────────────────────────
@@ -534,87 +546,103 @@ function handleViewChange(mode) {
 export function updatePointCloud(data, ptSize, ptOpacity) {
   const { positions, colors, sizes, count } = data;
 
-  if (pointCloud) {
-    scene.remove(pointCloud);
-    pointCloud.geometry.dispose();
-    pointCloud.material.dispose();
-    pointCloud = null;
+  if (count === 0) {
+    if (pointCloud) pointCloud.visible = false;
+    if (_nodeDispEl) _nodeDispEl.textContent = '0';
+    return;
   }
 
-  if (count === 0) return;
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
   const tex = isPerformance() ? perfTexture : cinematicTexture;
-  // Size 3.0 base in cinematic mode (matching style_example_2), scaled by user ptSize
   const baseSize = isCinematic() ? 0.06 : 0.03;
-  const mat = new THREE.PointsMaterial({
-    size: Math.max(0.005, ptSize * baseSize),
-    map: tex,
-    vertexColors: true,
-    transparent: true,
-    opacity: Math.max(0.01, ptOpacity),
-    blending: isDark() ? THREE.AdditiveBlending : THREE.NormalBlending,
-    depthWrite: false,
-    sizeAttenuation: true
-  });
 
-  pointCloud = new THREE.Points(geo, mat);
-  scene.add(pointCloud);
+  if (!pointCloud) {
+    // First-time allocation — material and mesh persist for the session
+    pointCloudMat = new THREE.PointsMaterial({
+      size: Math.max(0.005, ptSize * baseSize),
+      map: tex,
+      vertexColors: true,
+      transparent: true,
+      opacity: Math.max(0.01, ptOpacity),
+      blending: isDark() ? THREE.AdditiveBlending : THREE.NormalBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    });
+    const geo = new THREE.BufferGeometry();
+    pointCloud = new THREE.Points(geo, pointCloudMat);
+    scene.add(pointCloud);
+  }
 
-  const nodeDisp = document.getElementById('node-display');
-  if (nodeDisp) nodeDisp.textContent = count.toLocaleString();
+  // Swap buffer data without disposing geometry
+  pointCloud.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  pointCloud.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  pointCloud.geometry.computeBoundingSphere();
+
+  // Mutate persistent material properties
+  pointCloudMat.size = Math.max(0.005, ptSize * baseSize);
+  pointCloudMat.map = tex;
+  pointCloudMat.opacity = Math.max(0.01, ptOpacity);
+  pointCloudMat.blending = isDark() ? THREE.AdditiveBlending : THREE.NormalBlending;
+  pointCloudMat.needsUpdate = true;
+
+  pointCloud.visible = true;
+
+  const countStr = count.toLocaleString();
+  if (_nodeDispEl && _nodeDispEl.textContent !== countStr) _nodeDispEl.textContent = countStr;
 }
 
 // ── Line2 strand path management ─────────────────────────────
 
 export function updateStrandPaths(paths, lineWidth, lineOpacity, showLines) {
-  // Dispose old
-  strandLines.forEach(line => {
-    scene.remove(line);
-    line.geometry.dispose();
-    line.material.dispose();
-  });
-  strandLines = [];
-
-  if (!showLines || !paths || paths.length === 0 || lineOpacity < 0.01 || lineWidth < 0.1) return;
+  if (!showLines || !paths || paths.length === 0 || lineOpacity < 0.01 || lineWidth < 0.1) {
+    // Hide all pooled lines
+    for (const line of strandLines) line.visible = false;
+    return;
+  }
 
   const w = window.innerWidth, h = window.innerHeight;
+  let poolIdx = 0;
 
   for (const path of paths) {
     if (path.pointCount < 2) continue;
 
-    const geo = new LineGeometry();
+    let line = strandLines[poolIdx];
+    if (!line) {
+      // Grow pool — only happens when more curves appear than ever before
+      const geo = new LineGeometry();
+      const mat = new LineMaterial({
+        vertexColors: true,
+        transparent: true,
+        worldUnits: false,
+        alphaToCoverage: false,
+        depthWrite: false,
+      });
+      line = new Line2(geo, mat);
+      scene.add(line);
+      strandLines.push(line);
+    }
 
-    // LineGeometry expects flat position array [x,y,z, x,y,z, ...]
-    geo.setPositions(path.positions);
-
-    // Set per-vertex colors
+    // Rewrite geometry data in-place
+    line.geometry.setPositions(path.positions);
     const flatColors = new Float32Array(path.pointCount * 3);
     for (let i = 0; i < path.pointCount; i++) {
       flatColors[i * 3]     = path.color[0];
       flatColors[i * 3 + 1] = path.color[1];
       flatColors[i * 3 + 2] = path.color[2];
     }
-    geo.setColors(flatColors);
-
-    const mat = new LineMaterial({
-      linewidth: Math.max(0.5, lineWidth),
-      vertexColors: true,
-      transparent: true,
-      opacity: lineOpacity,
-      worldUnits: false,  // screen-space pixels
-      alphaToCoverage: false,
-      depthWrite: false,
-    });
-    mat.resolution.set(w, h);
-
-    const line = new Line2(geo, mat);
+    line.geometry.setColors(flatColors);
     line.computeLineDistances();
-    scene.add(line);
-    strandLines.push(line);
+
+    // Mutate material
+    line.material.linewidth = Math.max(0.5, lineWidth);
+    line.material.opacity = lineOpacity;
+    line.material.resolution.set(w, h);
+    line.visible = true;
+    poolIdx++;
+  }
+
+  // Hide unused pool entries
+  for (let i = poolIdx; i < strandLines.length; i++) {
+    strandLines[i].visible = false;
   }
 }
 
@@ -624,52 +652,54 @@ export function updateStrandPaths(paths, lineWidth, lineOpacity, showLines) {
 //  where widthMul = Π(group.lineW) × Π(member.sizes[i])  — the s_ system
 
 export function updateAtlasPaths(paths, globalWidth, lineOpacity) {
-  // Dispose old atlas lines
-  atlasLines.forEach(line => {
-    scene.remove(line);
-    line.geometry.dispose();
-    line.material.dispose();
-  });
-  atlasLines = [];
-
-  if (!paths || paths.length === 0 || lineOpacity < 0.01 || globalWidth < 0.05) return;
+  if (!paths || paths.length === 0 || lineOpacity < 0.01 || globalWidth < 0.05) {
+    for (const line of atlasLines) line.visible = false;
+    return;
+  }
 
   const w = window.innerWidth, h = window.innerHeight;
+  let poolIdx = 0;
 
   for (const path of paths) {
     if (path.pointCount < 2) continue;
 
-    const geo = new LineGeometry();
-    geo.setPositions(path.positions);
+    let line = atlasLines[poolIdx];
+    if (!line) {
+      const geo = new LineGeometry();
+      const mat = new LineMaterial({
+        vertexColors: true,
+        transparent: true,
+        worldUnits: false,
+        alphaToCoverage: false,
+        depthWrite: false,
+      });
+      line = new Line2(geo, mat);
+      scene.add(line);
+      atlasLines.push(line);
+    }
 
+    line.geometry.setPositions(path.positions);
     const flatColors = new Float32Array(path.pointCount * 3);
     for (let i = 0; i < path.pointCount; i++) {
       flatColors[i * 3]     = path.color[0];
       flatColors[i * 3 + 1] = path.color[1];
       flatColors[i * 3 + 2] = path.color[2];
     }
-    geo.setColors(flatColors);
+    line.geometry.setColors(flatColors);
+    line.computeLineDistances();
 
     // Apply per-path width multiplier (s_ system: global × widthMul)
-    const pw = Math.max(0.2, globalWidth * (path.widthMul ?? 1));
+    line.material.linewidth = Math.max(0.2, globalWidth * (path.widthMul ?? 1));
     // Apply per-path opacity multiplier (lineOp system: global × opacityMul)
-    const po = Math.min(1, lineOpacity * (path.opacityMul ?? 1));
+    line.material.opacity = Math.min(1, lineOpacity * (path.opacityMul ?? 1));
+    line.material.resolution.set(w, h);
+    line.visible = true;
+    poolIdx++;
+  }
 
-    const mat = new LineMaterial({
-      linewidth: pw,
-      vertexColors: true,
-      transparent: true,
-      opacity: po,
-      worldUnits: false,
-      alphaToCoverage: false,
-      depthWrite: false,
-    });
-    mat.resolution.set(w, h);
-
-    const line = new Line2(geo, mat);
-    line.computeLineDistances();
-    scene.add(line);
-    atlasLines.push(line);
+  // Hide unused pool entries
+  for (let i = poolIdx; i < atlasLines.length; i++) {
+    atlasLines[i].visible = false;
   }
 }
 
@@ -677,117 +707,115 @@ export function updateAtlasPaths(paths, globalWidth, lineOpacity) {
 //  τ trace:  τ^{i·nτ^k/ln(τ)} — always closes at n=1 (cyan)
 //  α trace:  α^{i·nα^k/ln(α)} — only closes at n=1 when α=τ (amber)
 
-export function updateGhostTraces(tauPts, alphaPts, showAlpha) {
-  // Dispose old traces
-  if (ghostTauLine) {
-    scene.remove(ghostTauLine);
-    ghostTauLine.geometry.dispose();
-    ghostTauLine.material.dispose();
-    ghostTauLine = null;
-  }
-  if (ghostAlphaLine) {
-    scene.remove(ghostAlphaLine);
-    ghostAlphaLine.geometry.dispose();
-    ghostAlphaLine.material.dispose();
-    ghostAlphaLine = null;
-  }
+function ensureGhostLine(existing, linewidth, opacity, r, g, b) {
+  if (existing) return existing;
+  const geo = new LineGeometry();
+  const mat = new LineMaterial({
+    linewidth,
+    vertexColors: true,
+    transparent: true,
+    opacity,
+    worldUnits: false,
+    depthWrite: false,
+  });
+  const line = new Line2(geo, mat);
+  line.visible = false;
+  scene.add(line);
+  return line;
+}
 
+// Pre-allocated buffers for ghost traces (max 257 vertices × 3 floats)
+const GHOST_MAX_PTS = 257;
+const _ghostTauPos = new Float32Array(GHOST_MAX_PTS * 3);
+const _ghostTauCol = new Float32Array(GHOST_MAX_PTS * 3);
+const _ghostAlphaPos = new Float32Array(GHOST_MAX_PTS * 3);
+const _ghostAlphaCol = new Float32Array(GHOST_MAX_PTS * 3);
+
+export function updateGhostTraces(tauPts, alphaPts, showAlpha) {
   const w = window.innerWidth, h = window.innerHeight;
 
   // τ trace — always shown (cyan, bright)
   if (tauPts && tauPts.length >= 2) {
-    const pos = new Float32Array(tauPts.length * 3);
-    const col = new Float32Array(tauPts.length * 3);
-    for (let i = 0; i < tauPts.length; i++) {
-      pos[i * 3] = tauPts[i][0];
-      pos[i * 3 + 1] = tauPts[i][1];
-      pos[i * 3 + 2] = 0;
-      col[i * 3]     = 0.2;
-      col[i * 3 + 1] = 0.85;
-      col[i * 3 + 2] = 1.0;
+    ghostTauLine = ensureGhostLine(ghostTauLine, 3, 0.7, 0.2, 0.85, 1.0);
+    const len = Math.min(tauPts.length, GHOST_MAX_PTS);
+    for (let i = 0; i < len; i++) {
+      _ghostTauPos[i * 3] = tauPts[i][0];
+      _ghostTauPos[i * 3 + 1] = tauPts[i][1];
+      _ghostTauPos[i * 3 + 2] = 0;
+      _ghostTauCol[i * 3]     = 0.2;
+      _ghostTauCol[i * 3 + 1] = 0.85;
+      _ghostTauCol[i * 3 + 2] = 1.0;
     }
-    const geo = new LineGeometry();
-    geo.setPositions(pos);
-    geo.setColors(col);
-    const mat = new LineMaterial({
-      linewidth: 3,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.7,
-      worldUnits: false,
-      depthWrite: false,
-    });
-    mat.resolution.set(w, h);
-    ghostTauLine = new Line2(geo, mat);
+    ghostTauLine.geometry.setPositions(_ghostTauPos.subarray(0, len * 3));
+    ghostTauLine.geometry.setColors(_ghostTauCol.subarray(0, len * 3));
     ghostTauLine.computeLineDistances();
-    scene.add(ghostTauLine);
+    ghostTauLine.material.resolution.set(w, h);
+    ghostTauLine.visible = true;
+  } else if (ghostTauLine) {
+    ghostTauLine.visible = false;
   }
 
   // α trace — shown only when α ≠ τ (amber, dimmer)
   if (showAlpha && alphaPts && alphaPts.length >= 2) {
-    const pos = new Float32Array(alphaPts.length * 3);
-    const col = new Float32Array(alphaPts.length * 3);
-    for (let i = 0; i < alphaPts.length; i++) {
-      pos[i * 3] = alphaPts[i][0];
-      pos[i * 3 + 1] = alphaPts[i][1];
-      pos[i * 3 + 2] = 0;
-      col[i * 3]     = 1.0;
-      col[i * 3 + 1] = 0.65;
-      col[i * 3 + 2] = 0.15;
+    ghostAlphaLine = ensureGhostLine(ghostAlphaLine, 2.5, 0.55, 1.0, 0.65, 0.15);
+    const len = Math.min(alphaPts.length, GHOST_MAX_PTS);
+    for (let i = 0; i < len; i++) {
+      _ghostAlphaPos[i * 3] = alphaPts[i][0];
+      _ghostAlphaPos[i * 3 + 1] = alphaPts[i][1];
+      _ghostAlphaPos[i * 3 + 2] = 0;
+      _ghostAlphaCol[i * 3]     = 1.0;
+      _ghostAlphaCol[i * 3 + 1] = 0.65;
+      _ghostAlphaCol[i * 3 + 2] = 0.15;
     }
-    const geo = new LineGeometry();
-    geo.setPositions(pos);
-    geo.setColors(col);
-    const mat = new LineMaterial({
-      linewidth: 2.5,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.55,
-      worldUnits: false,
-      depthWrite: false,
-    });
-    mat.resolution.set(w, h);
-    ghostAlphaLine = new Line2(geo, mat);
+    ghostAlphaLine.geometry.setPositions(_ghostAlphaPos.subarray(0, len * 3));
+    ghostAlphaLine.geometry.setColors(_ghostAlphaCol.subarray(0, len * 3));
     ghostAlphaLine.computeLineDistances();
-    scene.add(ghostAlphaLine);
+    ghostAlphaLine.material.resolution.set(w, h);
+    ghostAlphaLine.visible = true;
+  } else if (ghostAlphaLine) {
+    ghostAlphaLine.visible = false;
   }
 }
 
 // ── Dynamic orbit circle at r = τ^{-k} ──────────────────────
 
+// Pre-allocate orbit circle position buffer (257 vertices × 3 floats)
+const _orbitPositions = new Float32Array(257 * 3);
+
 export function updateOrbitCircle(k) {
-  if (orbitCircle) {
-    scene.remove(orbitCircle);
-    orbitCircle.geometry.dispose();
-    orbitCircle.material.dispose();
-    orbitCircle = null;
+  const radius = Math.pow(TAU, -k);
+  const hide = radius < 0.001 || radius > 100 || !isFinite(radius)
+    || Math.abs(radius - 1) < 0.02
+    || Math.abs(radius - 1 / TAU) < 0.02;
+
+  if (hide) {
+    if (orbitCircle) orbitCircle.visible = false;
+    return;
   }
 
-  const radius = Math.pow(TAU, -k);
-  if (radius < 0.001 || radius > 100 || !isFinite(radius)) return;
+  if (!orbitCircle) {
+    // One-time allocation
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(_orbitPositions, 3));
+    const mat = new THREE.LineDashedMaterial({
+      color: 0x336688,
+      dashSize: 0.03, gapSize: 0.02,
+      transparent: true, opacity: 0.4,
+    });
+    orbitCircle = new THREE.Line(geo, mat);
+    scene.add(orbitCircle);
+  }
 
-  // Don't draw if it's basically the unit circle (already shown)
-  if (Math.abs(radius - 1) < 0.02) return;
-  // Don't draw if it's basically the 1/τ circle (already shown)
-  if (Math.abs(radius - 1 / TAU) < 0.02) return;
-
-  const pts = [];
+  // Write positions into the persistent buffer
   for (let i = 0; i <= 256; i++) {
     const angle = (i / 256) * TAU;
-    pts.push(new THREE.Vector3(
-      Math.cos(angle) * radius,
-      Math.sin(angle) * radius, 0
-    ));
+    _orbitPositions[i * 3]     = Math.cos(angle) * radius;
+    _orbitPositions[i * 3 + 1] = Math.sin(angle) * radius;
+    _orbitPositions[i * 3 + 2] = 0;
   }
-  const geo = new THREE.BufferGeometry().setFromPoints(pts);
-  const mat = new THREE.LineDashedMaterial({
-    color: 0x336688,
-    dashSize: 0.03, gapSize: 0.02,
-    transparent: true, opacity: 0.4
-  });
-  orbitCircle = new THREE.Line(geo, mat);
+  orbitCircle.geometry.attributes.position.needsUpdate = true;
   orbitCircle.computeLineDistances();
-  scene.add(orbitCircle);
+  orbitCircle.visible = true;
 }
 
 // ── FPS tracking ─────────────────────────────────────────────
@@ -797,8 +825,10 @@ function updateFps() {
   const now = performance.now();
   if (now - lastFpsTime >= 1000) {
     fps = Math.round(frameCount * 1000 / (now - lastFpsTime));
-    const fpsEl = document.getElementById('fps-display');
-    if (fpsEl) fpsEl.textContent = fps;
+    if (_fpsEl) {
+      const fpsStr = String(fps);
+      if (_fpsEl.textContent !== fpsStr) _fpsEl.textContent = fpsStr;
+    }
     frameCount = 0;
     lastFpsTime = now;
   }

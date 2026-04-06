@@ -1,11 +1,9 @@
+import { clamp } from './complex.js';
+
 const DEFAULT_BUFFER_FPS = 60;
 export const MAX_PRECOMPUTE_BUFFER_FRAMES = 600;
 export const DEFAULT_BUFFER_MAX_BYTES = 96 * 1024 * 1024;
 export const BUFFER_PHASES = Object.freeze(['idle', 'prefill', 'background']);
-
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
 
 export function resolvePrecomputeBufferFrames(unit, value, fps = DEFAULT_BUFFER_FPS) {
   const safeUnit = unit === 'seconds' ? 'seconds' : 'frames';

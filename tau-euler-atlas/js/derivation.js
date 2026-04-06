@@ -1,4 +1,4 @@
-import { TAU } from './complex.js';
+import { TAU, clamp } from './complex.js';
 import {
   resolvePrecomputeBufferFrames,
   sanitizeBufferPhase,
@@ -7,10 +7,6 @@ import {
 const EPS = 1e-12;
 export const COLOR_BLOCK_SIZE = 710;
 export const STEP_LOOP_MODES = ['clamp', 'bounce'];
-
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
 
 function sanitizeStepLoopMode(mode) {
   return STEP_LOOP_MODES.includes(mode) ? mode : 'clamp';
@@ -78,71 +74,6 @@ export function buildNListFromRange(ZMin, ZMaxExclusive) {
   return Array.from({ length: hi - lo }, (_, i) => lo + i);
 }
 
-export function computeStepDelta(derived, dtSeconds) {
-  const s = Number.isFinite(derived.s) ? derived.s : 0;
-  return s * dtSeconds;
-}
-
-export function computeWindowProgress(value, start, stop) {
-  const a = Number.isFinite(start) ? start : 0;
-  const b = Number.isFinite(stop) ? stop : a + 1;
-  const v = Number.isFinite(value) ? value : a;
-  const span = b - a;
-  if (!Number.isFinite(span) || Math.abs(span) < EPS) return 0;
-  return clamp((v - a) / span, 0, 1);
-}
-
-export function advanceStepTraversal({
-  T,
-  T_start,
-  T_stop,
-  dtSeconds,
-  s,
-  stepLoopMode = 'clamp',
-  bounceDir = 1,
-}) {
-  const a = Number.isFinite(T_start) ? T_start : 0;
-  const b = Number.isFinite(T_stop) ? T_stop : a + 1;
-  const minT = Math.min(a, b);
-  const maxT = Math.max(a, b);
-  const span = maxT - minT;
-  const current = clamp(Number.isFinite(T) ? T : minT, minT, maxT);
-  const safeS = Number.isFinite(s) ? s : 0;
-  const magnitude = Math.abs(safeS) * Math.max(0, Number.isFinite(dtSeconds) ? dtSeconds : 0);
-  if (magnitude <= 0 || span < EPS) {
-    return { T: current, bounceDir, moved: false };
-  }
-
-  const baseSign = Math.sign(safeS) || 1;
-  const currentBounce = Math.sign(Number.isFinite(bounceDir) ? bounceDir : 0) || 1;
-  const effectiveSign = baseSign * currentBounce;
-  const mode = sanitizeStepLoopMode(stepLoopMode);
-  const rawNext = current + (magnitude * effectiveSign);
-
-  if (mode === 'clamp') {
-    return { T: clamp(rawNext, minT, maxT), bounceDir: currentBounce, moved: true };
-  }
-
-  const period = 2 * span;
-  const linearPos = (current - minT) + (magnitude * effectiveSign);
-  let wrapped = linearPos % period;
-  if (wrapped < 0) wrapped += period;
-
-  let localPos = wrapped;
-  let segmentSign = 1;
-  if (wrapped > span) {
-    localPos = period - wrapped;
-    segmentSign = -1;
-  }
-  const nextT = minT + localPos;
-  const nextEffectiveSign = effectiveSign * segmentSign;
-  const nextBounceDir = nextEffectiveSign * baseSign;
-  return { T: clamp(nextT, minT, maxT), bounceDir: nextBounceDir, moved: true };
-}
-
-export function shouldAdvanceStep(derived, isPlaying) {
-  return !!isPlaying;
-}
 
 export function buildDerivedState(input) {
   const base = { ...input };
@@ -173,16 +104,16 @@ export function buildDerivedState(input) {
   const nList = buildNListFromRange(Z_min + 1, Z_max);
   const n = nList.length;
 
-  let T_start = Number.isFinite(base.T_start) ? base.T_start : 1.99999;
-  let T_stop = Number.isFinite(base.T_stop) ? base.T_stop : 2;
-  if (T_start > T_stop) {
-    const temp = T_start;
-    T_start = T_stop;
-    T_stop = temp;
+  let T_lowerBound = Number.isFinite(base.T_lowerBound) ? base.T_lowerBound : 1.99999;
+  let T_upperBound = Number.isFinite(base.T_upperBound) ? base.T_upperBound : 2;
+  if (T_lowerBound > T_upperBound) {
+    const temp = T_lowerBound;
+    T_lowerBound = T_upperBound;
+    T_upperBound = temp;
   }
 
   let T = Number.isFinite(base.T) ? base.T : 2;
-  T = clamp(T, T_start, T_stop);
+  T = clamp(T, T_lowerBound, T_upperBound);
 
   const l_base = sanitizeLogBase(base.l_base, 10);
   const l_func = sanitizeLogBase(base.l_func, 10);
@@ -258,8 +189,8 @@ export function buildDerivedState(input) {
     n,
     nList,
     T,
-    T_start,
-    T_stop,
+    T_lowerBound,
+    T_upperBound,
     l_base,
     l_func,
     kStepsInAlignmentsBool,

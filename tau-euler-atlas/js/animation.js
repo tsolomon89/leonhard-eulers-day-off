@@ -3,11 +3,9 @@
 // tau-Euler Atlas
 // ============================================================================
 
-const EPS = 1e-12;
+import { clamp } from './complex.js';
 
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
+const EPS = 1e-12;
 
 export function computeWindowProgress(value, start, stop) {
   const a = Number.isFinite(start) ? start : 0;

@@ -13,6 +13,7 @@ import {
   cTauPow,
   cAlphaPow,
   ok,
+  clamp,
 } from './complex.js';
 import { buildDerivedState, COLOR_BLOCK_SIZE } from './derivation.js';
 import {
@@ -57,11 +58,32 @@ const BLOCK_TINTS = [
 
 let _pointBudget = 200_000;
 export function setPointBudget(n) {
-  _pointBudget = Math.max(1, Math.floor(Number.isFinite(n) ? n : 200_000));
+  const next = Math.max(1, Math.floor(Number.isFinite(n) ? n : 200_000));
+  if (next !== _pointBudget) {
+    _pointBudget = next;
+    // Invalidate persistent buffers so they reallocate at the new size
+    _posPool = null;
+    _colPool = null;
+    _sizPool = null;
+  }
 }
 
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
+// ── Persistent output buffers (only reallocated when budget changes) ──
+let _posPool = null;   // Float32Array(budget * 3)
+let _colPool = null;   // Float32Array(budget * 3)
+let _sizPool = null;   // Float32Array(budget)
+
+function ensureBufferPool() {
+  if (!_posPool || _posPool.length !== _pointBudget * 3) {
+    _posPool = new Float32Array(_pointBudget * 3);
+    _colPool = new Float32Array(_pointBudget * 3);
+    _sizPool = new Float32Array(_pointBudget);
+  }
+}
+
+/** Skip buildDerivedState if params is already derived (has nList). */
+function ensureDerived(params) {
+  return Array.isArray(params.nList) ? params : buildDerivedState(params);
 }
 
 function hexToRgb(hex) {
@@ -331,7 +353,7 @@ function metadataFromDerived(derived, fPositive, computeMs) {
 
 export function generateAllPoints(params) {
   const t0 = performance.now();
-  const derived = buildDerivedState(params);
+  const derived = ensureDerived(params);
   const expressionModel = normalizeExpressionModel(derived.expressionModel);
   const combos = activeCombos(expressionModel);
 
@@ -350,10 +372,11 @@ export function generateAllPoints(params) {
     };
   }
 
+  ensureBufferPool();
   const maxPts = _pointBudget;
-  const positions = new Float32Array(maxPts * 3);
-  const colors = new Float32Array(maxPts * 3);
-  const sizes = new Float32Array(maxPts);
+  const positions = _posPool;
+  const colors = _colPool;
+  const sizes = _sizPool;
 
   let count = 0;
   const styleBloomGain = Number.isFinite(derived.styleBloomGain) ? derived.styleBloomGain : 1;
@@ -413,7 +436,7 @@ function buildLinePath(points) {
 }
 
 export function generateAtlasPaths(params) {
-  const derived = buildDerivedState(params);
+  const derived = ensureDerived(params);
   const expressionModel = normalizeExpressionModel(derived.expressionModel);
   const combos = activeCombos(expressionModel);
   const pathBudget = Math.max(1, Math.floor(Number.isFinite(derived.pathBudget) ? derived.pathBudget : 500));

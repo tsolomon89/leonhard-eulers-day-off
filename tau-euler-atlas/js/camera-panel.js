@@ -1,6 +1,5 @@
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
+import { clamp } from './complex.js';
+
 
 function finite(v, fallback) {
   return Number.isFinite(v) ? v : fallback;

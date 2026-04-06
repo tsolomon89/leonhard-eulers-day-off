@@ -1,3 +1,5 @@
+import { clamp } from './complex.js';
+
 const DEFAULT_CINEMATIC_FX = Object.freeze({
   master: { enabled: true, intensity: 1 },
   points: { enabled: true, size: 1.5, opacity: 0.7, k3: 1 },
@@ -28,9 +30,6 @@ function pickBool(primary, fallback, defaultValue) {
   return defaultValue;
 }
 
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
 
 function sanitizeRenderMode(mode) {
   return mode === 'performance' ? 'performance' : 'cinematic';

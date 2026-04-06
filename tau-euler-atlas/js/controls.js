@@ -1,4 +1,4 @@
-import { TAU } from './complex.js';
+import { TAU, clamp } from './complex.js';
 import {
   computeProofPayloadFromState,
   generateAllPoints,
@@ -10,8 +10,6 @@ import {
 import {
   buildDerivedState,
   applyDerivedState,
-  advanceStepTraversal,
-  shouldAdvanceStep,
 } from './derivation.js';
 import {
   defaultExpressionModel,
@@ -109,14 +107,10 @@ const onCameraPanelChange = typeof sceneApi.onCameraPanelChange === 'function'
   ? sceneApi.onCameraPanelChange
   : () => () => {};
 
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
-
 export const state = {
   T: 2,
-  T_start: 1.99999,
-  T_stop: 2,
+  T_lowerBound: 1.99999,
+  T_upperBound: 2,
   timeMode: 'step',
   stepLoopMode: 'clamp',
   b: 36000000,
@@ -256,6 +250,7 @@ const cameraSliderBoundsSyncFns = [];
 const playbackBuffer = new PlaybackPrecomputeBuffer();
 let lastMathSignature = '';
 let lastProofSignature = '';
+let _expressionModelGen = 0;  // bumped when expressionModel mutates
 let pendingRenderPayload = null;
 let cameraPanelUnsubscribe = null;
 const activeLinkedPaths = new Set();
@@ -412,40 +407,28 @@ function computeMathSignature(derived, budget) {
   const theme = getTheme();
   const fx = getEffectiveFx();
   const styleBloomGain = resolveStyleBloomGain({ renderMode, theme });
-  return JSON.stringify({
-    budget,
-    renderMode,
-    theme,
-    styleBloomGain,
-    T_start: derived.T_start,
-    T_stop: derived.T_stop,
-    Z: derived.Z,
-    Z_min: derived.Z_min,
-    Z_max: derived.Z_max,
-    formulaMode: derived.formulaMode,
-    pathBudget: derived.pathBudget,
-    l_base: derived.l_base,
-    l_func: derived.l_func,
-    kStepsInAlignmentsBool: derived.kStepsInAlignmentsBool,
-    q_scale: derived.q_scale,
-    q_tauScale: derived.q_tauScale,
-    q_bool: derived.q_bool,
-    q_correction: derived.q_correction,
-    k2: derived.k2,
-    k3: derived.k3,
-    alpha: derived.alpha,
-    P: derived.P,
-    b: derived.b,
-    stepLoopMode: derived.stepLoopMode,
-    syncTStepToS: derived.syncTStepToS,
-    precomputeBufferFrames: derived.precomputeBufferFrames,
-    expressionModel: derived.expressionModel,
-    pointsVisible: !!(fx.points.enabled && fx.points.opacity > 0.001),
-    linesVisible: !!(fx.atlasLines.enabled && fx.atlasLines.opacity > 0.001),
-    ghostsVisible: !!fx.ghostTraces.enabled,
-    referenceRingsVisible: !!state.visualHelpers?.referenceRings,
-    orbitRingVisible: !!state.visualHelpers?.orbitRing,
-  });
+  const ptsVis = !!(fx.points.enabled && fx.points.opacity > 0.001);
+  const lnVis  = !!(fx.atlasLines.enabled && fx.atlasLines.opacity > 0.001);
+  const ghVis  = !!fx.ghostTraces.enabled;
+  // Fast delimited string — avoids JSON.stringify overhead per frame
+  return [
+    budget, renderMode, theme, styleBloomGain,
+    derived.T_lowerBound, derived.T_upperBound,
+    derived.Z, derived.Z_min, derived.Z_max,
+    derived.formulaMode, derived.pathBudget,
+    derived.l_base, derived.l_func,
+    derived.kStepsInAlignmentsBool,
+    derived.q_scale, derived.q_tauScale,
+    derived.q_bool, derived.q_correction,
+    derived.k2, derived.k3,
+    derived.alpha, derived.P, derived.b,
+    derived.stepLoopMode, derived.syncTStepToS,
+    derived.precomputeBufferFrames,
+    _expressionModelGen,
+    ptsVis, lnVis, ghVis,
+    !!state.visualHelpers?.referenceRings,
+    !!state.visualHelpers?.orbitRing,
+  ].join('|');
 }
 
 function buildRenderPayload(derived, budget, signature, fx) {
@@ -727,24 +710,8 @@ function fillPlaybackBuffer(derived, signature, budget, maxBuild, fx, generation
       }
     },
     buildNext: ({ T, bounceDir }) => {
-      const advance = advanceStepTraversal({
-        T,
-        T_start: derived.T_start,
-        T_stop: derived.T_stop,
-        dtSeconds: 1 / PRECOMPUTE_FPS,
-        s: derived.s,
-        stepLoopMode: derived.stepLoopMode,
-        bounceDir,
-      });
-      const nextBounceDir = derived.stepLoopMode === 'bounce' ? advance.bounceDir : 1;
-      const nextDerived = buildDerivedState({ ...derived, T: advance.T });
-      const payload = buildRenderPayload(nextDerived, budget, signature, fx);
-      payload.bounceDir = nextBounceDir;
-      return {
-        payload,
-        nextT: nextDerived.T,
-        nextBounceDir,
-      };
+      // Automatic step traversal is disabled.
+      return { payload: null, nextT: T, bounceDir };
     },
   });
 }
@@ -763,6 +730,7 @@ function syncSignatureAndBufferState(derived, signature, reason = 'math') {
 }
 
 export function regenerate(isHeavy = false) {
+  _expressionModelGen++;
   clearTimeout(regenerateTimeout);
   const delay = isHeavy ? 48 : 16;
 
@@ -1167,13 +1135,15 @@ class UIBuilder {
         linkEngine.updateBaseFromLive(path);
       }
       const base = clamp(getBaseValue(), lo, hi);
-      inputBase.value = String(base);
+      const strBase = String(base);
+      if (inputBase.value !== strBase) inputBase.value = strBase;
       if (!baseChip.classList.contains('editing')) baseChip.textContent = format(base);
 
       const hasEndpoint = !!(rec && rec.isLinked && Number.isFinite(rec.endValue));
       if (hasEndpoint) {
         const end = clamp(Number(rec.endValue), lo, hi);
-        inputTarget.value = String(end);
+        const strEnd = String(end);
+        if (inputTarget.value !== strEnd) inputTarget.value = strEnd;
         inputTarget.classList.remove('hidden');
         targetChip.classList.remove('hidden');
         if (!targetChip.classList.contains('editing')) targetChip.textContent = format(end);
@@ -1181,10 +1151,12 @@ class UIBuilder {
         // -- Live / current value thumb ----------------------------------------
         const liveVal = Number.isFinite(rec.lastResolved) ? rec.lastResolved : getLiveValue();
         const live = clamp(liveVal, lo, hi);
-        inputLive.value = String(live);
+        const strLive = String(live);
+        if (inputLive.value !== strLive) inputLive.value = strLive;
         inputLive.classList.remove('hidden');
         if (!liveNumberInput.classList.contains('editing')) {
-          liveNumberInput.value = format(live);
+           const fmtLive = format(live);
+           if (liveNumberInput.value !== fmtLive) liveNumberInput.value = fmtLive;
         }
         liveNumberInput.classList.remove('hidden');
 
@@ -1250,7 +1222,11 @@ class UIBuilder {
       if (triggerChange && onChange) onChange(next);
       refreshSliderBounds();
       refreshCameraSliderBounds();
-      syncUI();
+      if (status === 'normalized') {
+        for (const sync of sliderUiSyncFns) sync();
+      } else {
+        syncUI();
+      }
       pushCommitStatus(row, status);
       regenerate(heavy);
     };
@@ -1264,7 +1240,11 @@ class UIBuilder {
       applyResolvedToField();
       refreshSliderBounds();
       refreshCameraSliderBounds();
-      syncUI();
+      if (resolved.status === 'normalized') {
+        for (const sync of sliderUiSyncFns) sync();
+      } else {
+        syncUI();
+      }
       pushCommitStatus(row, source === 'text' ? 'applied' : resolved.status);
       regenerate(heavy);
     };
@@ -2062,22 +2042,20 @@ function buildControls() {
 
   b.section('Traversal', true)
     .info('JSON-literal k: k={bool=0:T, bool>0:kAligned}. Playback is binary (play/pause) and uses deterministic stepping.')
-    .slider('T', state, 'T', state.T_start, state.T_stop, getTSliderStep(), {
-      fmt: (v) => v.toFixed(6),
-      commitMode: 'exact',
+    .slider('T', state, 'T', state.T_lowerBound, state.T_upperBound, getTSliderStep(), {
+      fmt: (v) => v.toFixed(5),
       dynamicBounds: () => computeTraversalTBounds(state, getTSliderStep()),
-      onCommit: (v) => applyTraversalCommit(state, 'T', v),
       linkPath: 'T',
     })
-    .slider('T_start', state, 'T_start', -1000000, 1000000, 0.000001, {
-      fmt: (v) => v.toFixed(6),
-      commitMode: 'exact',
-      onCommit: (v) => applyTraversalCommit(state, 'T_start', v),
+    .slider('T_lowerBound', state, 'T_lowerBound', -1000000, 1000000, 0.000001, {
+      fmt: (v) => v.toFixed(5),
+      label: 'T lowerBound',
+      onCommit: (v) => applyTraversalCommit(state, 'T_lowerBound', v),
     })
-    .slider('T_stop', state, 'T_stop', -1000000, 1000000, 0.000001, {
-      fmt: (v) => v.toFixed(6),
-      commitMode: 'exact',
-      onCommit: (v) => applyTraversalCommit(state, 'T_stop', v),
+    .slider('T_upperBound', state, 'T_upperBound', -1000000, 1000000, 0.000001, {
+      fmt: (v) => v.toFixed(5),
+      label: 'T upperBound',
+      onCommit: (v) => applyTraversalCommit(state, 'T_upperBound', v),
     })
     .html(`<div class="mode-row">
       <span class="slider-label">step loop</span>
@@ -2345,13 +2323,10 @@ function buildTransportBar() {
   scrub.step = 1;
   scrub.value = `${animation.progress * 1000}`;
   scrub.addEventListener('input', () => {
-    const p = parseFloat(scrub.value) / 1000;
+    const value = parseFloat(scrub.value);
+    const p = Number.isNaN(value) ? 0 : clamp(value / 1000, 0, 1);
     animation.seek(p);
     deriveState();
-    const nextT = state.T_start + ((state.T_stop - state.T_start) * p);
-    const commit = applyTraversalCommit(state, 'T', nextT);
-    state.T = commit.value;
-    _stepBounceDir = 1;
     const signature = computeMathSignature(state, computePointBudget());
     if (state.bufferEnabled) {
       beginHardPrefill(state, signature, 'scrub seek', true);
@@ -2388,30 +2363,8 @@ function updateTransportUI() {
 function consumeBufferedPayload(derived, signature, budget, fx, stepsToConsume) {
   let latest = null;
   const steps = Math.max(1, Math.floor(Number.isFinite(stepsToConsume) ? stepsToConsume : 1));
-  for (let i = 0; i < steps; i++) {
-    let frame = playbackBuffer.consume();
-    if (!frame) {
-      const advance = advanceStepTraversal({
-        T: derived.T,
-        T_start: derived.T_start,
-        T_stop: derived.T_stop,
-        dtSeconds: 1 / PRECOMPUTE_FPS,
-        s: derived.s,
-        stepLoopMode: derived.stepLoopMode,
-        bounceDir: _stepBounceDir,
-      });
-      _stepBounceDir = derived.stepLoopMode === 'bounce' ? advance.bounceDir : 1;
-      const fallbackDerived = buildDerivedState({ ...derived, T: advance.T });
-      frame = buildRenderPayload(fallbackDerived, budget, signature, fx);
-      frame.bounceDir = _stepBounceDir;
-      derived = fallbackDerived;
-    } else {
-      _stepBounceDir = frame.bounceDir ?? _stepBounceDir;
-      derived = frame.derived;
-    }
-    latest = frame;
-  }
-  return latest;
+  // Buffer consumption for step-based animation removed.
+  return null;
 }
 
 function animationFrame() {
@@ -2434,79 +2387,13 @@ function animationFrame() {
   const signature = computeMathSignature(derived, budget);
   syncSignatureAndBufferState(derived, signature, 'frame');
 
-  if (!state.bufferEnabled) {
-    setBufferPhase('idle');
-    state.bufferProgress = 0;
-    state.bufferNotice = '';
-    if (shouldAdvanceStep(state, animation.playing)) {
-      const advance = advanceStepTraversal({
-        T: derived.T,
-        T_start: derived.T_start,
-        T_stop: derived.T_stop,
-        dtSeconds,
-        s: derived.s,
-        stepLoopMode: derived.stepLoopMode,
-        bounceDir: _stepBounceDir,
-      });
-      _stepBounceDir = derived.stepLoopMode === 'bounce' ? advance.bounceDir : 1;
-      if (Math.abs(advance.T - state.T) > 1e-12) {
-        const nextDerived = buildDerivedState({ ...derived, T: advance.T });
-        state.T = nextDerived.T;
-        pendingRenderPayload = buildRenderPayload(nextDerived, budget, signature, fx);
-        regenerate();
-      }
+    if (state.bufferEnabled) {
+      setBufferPhase('idle');
+      state.bufferProgress = 0;
+      state.bufferNotice = '';
+      updateBufferStatus();
     }
-    updateBufferStatus();
     return;
-  }
-
-  const target = applyBufferTargetWithMemoryGuard(derived);
-  const prefillMinDepth = computePrefillMinDepth(target);
-  const fps = getCurrentFps();
-
-  if (state.bufferPhase === 'prefill') {
-    const prefillBudget = computeAdaptiveBuildBudget({
-      phase: 'prefill',
-      fps,
-      depth: playbackBuffer.depth,
-      target,
-    });
-    fillPlaybackBuffer(derived, signature, budget, prefillBudget, fx, _bufferGenerationToken);
-    state.bufferProgress = computeBufferProgress(playbackBuffer.depth, prefillMinDepth);
-
-    if (playbackBuffer.depth >= prefillMinDepth) {
-      setBufferPhase('background');
-      state.bufferProgress = 1;
-      if (state.bufferNotice.startsWith('play start') || state.bufferNotice.startsWith('scrub') || state.bufferNotice.startsWith('frame') || state.bufferNotice.startsWith('regenerate') || state.bufferNotice.startsWith('toggle on') || state.bufferNotice.startsWith('buffer')) {
-        state.bufferNotice = '';
-      }
-    }
-    updateBufferStatus();
-    return;
-  }
-
-  if (shouldAdvanceStep(state, animation.playing)) {
-    const consumeCount = Math.max(1, Math.min(8, Math.round(dtSeconds * PRECOMPUTE_FPS)));
-    const frame = consumeBufferedPayload(derived, signature, budget, fx, consumeCount);
-    if (frame && Math.abs(frame.derived.T - state.T) > 1e-12) {
-      state.T = frame.derived.T;
-      pendingRenderPayload = frame;
-      regenerate();
-    }
-  }
-
-  if (playbackBuffer.depth < target) {
-    const backgroundBudget = computeAdaptiveBuildBudget({
-      phase: 'background',
-      fps,
-      depth: playbackBuffer.depth,
-      target,
-    });
-    const refillDerived = buildDerivedState(state);
-    fillPlaybackBuffer(refillDerived, signature, budget, backgroundBudget, fx, _bufferGenerationToken);
-  }
-  state.bufferProgress = 1;
-  updateBufferStatus();
 }
 
 function setupKeyboard() {
