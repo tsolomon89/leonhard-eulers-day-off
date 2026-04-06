@@ -2387,13 +2387,36 @@ function animationFrame() {
   const signature = computeMathSignature(derived, budget);
   syncSignatureAndBufferState(derived, signature, 'frame');
 
-    if (state.bufferEnabled) {
-      setBufferPhase('idle');
-      state.bufferProgress = 0;
-      state.bufferNotice = '';
+  if (state.bufferEnabled) {
+    if (state.bufferPhase === 'prefill') {
+      // Still pre-filling — skip render, just update buffer status
       updateBufferStatus();
+      return;
     }
-    return;
+    applyBufferTargetWithMemoryGuard(derived);
+  }
+
+  // Build and apply the render payload
+  let payload = pendingRenderPayload;
+  pendingRenderPayload = null;
+  if (!payload || payload.signature !== signature || Math.abs(payload.derived.T - derived.T) > 1e-12) {
+    payload = buildRenderPayload(derived, budget, signature, fx);
+    payload.bounceDir = _stepBounceDir;
+  }
+  applyRenderPayload(payload, fx);
+  updateProofPayload();
+
+  // Background buffer fill when idle
+  if (state.bufferEnabled && !animation.playing && state.bufferPhase !== 'prefill') {
+    const bgBudget = computeAdaptiveBuildBudget({
+      phase: 'background',
+      fps: getCurrentFps(),
+      depth: playbackBuffer.depth,
+      target: state.bufferTargetFrames,
+    });
+    fillPlaybackBuffer(derived, signature, budget, bgBudget, fx);
+  }
+  updateBufferStatus();
 }
 
 function setupKeyboard() {
