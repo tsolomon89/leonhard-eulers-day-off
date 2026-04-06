@@ -33,6 +33,7 @@ function cloneRecord(record) {
 
 export function createLinkEngine(options = {}) {
   const records = new Map();
+  let _mutating = false;
   const debug = options.debug === true;
   const debugFilter = typeof options.debugFilter === 'function'
     ? options.debugFilter
@@ -107,6 +108,7 @@ export function createLinkEngine(options = {}) {
   }
 
   function updateBaseFromLive(path) {
+    if (_mutating) return null; // Protect against re-entrant corruption
     const record = getRecord(path);
     if (!record) return null;
     if (record.isLinked) return record;
@@ -156,6 +158,13 @@ export function createLinkEngine(options = {}) {
     }
     record.direction = sanitizeDirection(record.direction);
     record.isLinked = true;
+    _mutating = true;
+    try {
+      record.adapter.setLive(record.baseValue);
+      record.lastResolved = record.baseValue;
+    } finally {
+      _mutating = false;
+    }
     maybeLog(path, 'linkOn', before, cloneRecord(record));
     return record;
   }
@@ -168,8 +177,13 @@ export function createLinkEngine(options = {}) {
     record.baseValue = clamp(toNumber(record.baseValue, toNumber(record.adapter.getLive(), bounds.min)), bounds.min, bounds.max);
     record.isLinked = false;
     record.endValue = null;
-    record.adapter.setLive(record.baseValue);
-    record.lastResolved = record.baseValue;
+    _mutating = true;
+    try {
+      record.adapter.setLive(record.baseValue);
+      record.lastResolved = record.baseValue;
+    } finally {
+      _mutating = false;
+    }
     maybeLog(path, 'linkOff', before, cloneRecord(record));
     return record;
   }
@@ -236,5 +250,6 @@ export function createLinkEngine(options = {}) {
     applyPath,
     prune,
     updateBaseFromLive,
+    isMutating: () => _mutating,
   };
 }
