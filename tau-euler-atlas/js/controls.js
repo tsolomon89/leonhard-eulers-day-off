@@ -69,6 +69,7 @@ import {
   isLinkEligiblePath,
 } from './linked-params.js';
 import { createLinkEngine } from './link-engine.js';
+import * as audioPlayer from './audio-player.js';
 
 const updatePointCloud = sceneApi.updatePointCloud;
 const updateStrandPaths = sceneApi.updateStrandPaths;
@@ -1865,36 +1866,228 @@ function initCameraPanelBridge() {
   });
 }
 
+// ── Audio Panel ──────────────────────────────────────────────
+
+let audioContainer = null;
+let _audioUnsub = null;
+let _audioPanelOpen = false;
+
+function _fmtTime(s) {
+  if (!Number.isFinite(s) || s < 0) return '0:00';
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+}
+
+function _renderAudioUI(container) {
+  const st = audioPlayer.getState();
+  container.innerHTML = '';
+
+  const b = new UIBuilder(container);
+  b.section('Audio', !_audioPanelOpen, {
+    onToggle: (open) => { _audioPanelOpen = open; },
+  });
+
+  const body = b.currentBody;
+
+  if (st.loading) {
+    const empty = document.createElement('div');
+    empty.className = 'audio-empty';
+    empty.textContent = 'Loading tracks…';
+    body.appendChild(empty);
+    return;
+  }
+
+  if (st.tracks.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'audio-empty';
+    empty.textContent = 'No audio files found in audio/';
+    body.appendChild(empty);
+    return;
+  }
+
+  // Now Playing
+  const nowPlaying = document.createElement('div');
+  nowPlaying.className = 'audio-now-playing';
+  const title = document.createElement('div');
+  title.className = 'audio-now-title';
+  title.textContent = st.currentIndex >= 0 ? st.tracks[st.currentIndex].title : '—';
+  const timeDisp = document.createElement('div');
+  timeDisp.className = 'audio-now-time';
+  timeDisp.id = 'audio-time-display';
+  timeDisp.textContent = `${_fmtTime(st.currentTime)} / ${_fmtTime(st.duration)}`;
+  nowPlaying.appendChild(title);
+  nowPlaying.appendChild(timeDisp);
+  body.appendChild(nowPlaying);
+
+  // Progress bar
+  const progressWrap = document.createElement('div');
+  progressWrap.className = 'audio-progress-wrap';
+  const progressBar = document.createElement('div');
+  progressBar.className = 'audio-progress-bar';
+  progressBar.id = 'audio-progress-bar';
+  const pct = st.duration > 0 ? (st.currentTime / st.duration) * 100 : 0;
+  progressBar.style.width = `${pct}%`;
+  progressWrap.appendChild(progressBar);
+  progressWrap.addEventListener('click', (e) => {
+    const rect = progressWrap.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    audioPlayer.seekTime(ratio * (audioPlayer.getState().duration || 0));
+  });
+  body.appendChild(progressWrap);
+
+  // Transport buttons
+  const transport = document.createElement('div');
+  transport.className = 'audio-transport';
+
+  const prevBtn = document.createElement('button');
+  prevBtn.className = 'audio-transport-btn ctrl-interactive';
+  prevBtn.innerHTML = '⏮';
+  prevBtn.title = 'Previous';
+  prevBtn.addEventListener('click', () => audioPlayer.prev());
+
+  const playBtn = document.createElement('button');
+  playBtn.className = `audio-transport-btn audio-play-btn ctrl-interactive${st.playing ? ' playing' : ''}`;
+  playBtn.innerHTML = st.playing ? '❚❚' : '▶';
+  playBtn.title = st.playing ? 'Pause' : 'Play';
+  playBtn.id = 'audio-play-btn';
+  playBtn.addEventListener('click', () => audioPlayer.toggle());
+
+  const nextBtn = document.createElement('button');
+  nextBtn.className = 'audio-transport-btn ctrl-interactive';
+  nextBtn.innerHTML = '⏭';
+  nextBtn.title = 'Next';
+  nextBtn.addEventListener('click', () => audioPlayer.next());
+
+  transport.appendChild(prevBtn);
+  transport.appendChild(playBtn);
+  transport.appendChild(nextBtn);
+  body.appendChild(transport);
+
+  // Volume row
+  const volRow = document.createElement('div');
+  volRow.className = 'audio-volume-row';
+  const volIcon = document.createElement('span');
+  volIcon.className = 'audio-volume-icon';
+  volIcon.textContent = st.volume > 0.5 ? '🔊' : st.volume > 0 ? '🔉' : '🔈';
+  const volSlider = document.createElement('input');
+  volSlider.type = 'range';
+  volSlider.className = 'audio-volume-slider';
+  volSlider.min = '0';
+  volSlider.max = '1';
+  volSlider.step = '0.01';
+  volSlider.value = String(st.volume);
+  const volPct = document.createElement('span');
+  volPct.className = 'audio-volume-pct';
+  volPct.textContent = `${Math.round(st.volume * 100)}%`;
+  volSlider.addEventListener('input', () => {
+    const v = parseFloat(volSlider.value);
+    audioPlayer.setVolume(v);
+    volPct.textContent = `${Math.round(v * 100)}%`;
+    volIcon.textContent = v > 0.5 ? '🔊' : v > 0 ? '🔉' : '🔈';
+  });
+  volRow.appendChild(volIcon);
+  volRow.appendChild(volSlider);
+  volRow.appendChild(volPct);
+  body.appendChild(volRow);
+
+  // Track list
+  const list = document.createElement('div');
+  list.className = 'audio-track-list';
+  st.tracks.forEach((track, i) => {
+    const item = document.createElement('div');
+    item.className = `audio-track-item${i === st.currentIndex ? ' active' : ''}`;
+    item.addEventListener('click', () => audioPlayer.seekTo(i));
+
+    const idx = document.createElement('span');
+    idx.className = 'audio-track-index';
+    idx.textContent = `${i + 1}`;
+
+    const name = document.createElement('span');
+    name.className = 'audio-track-name';
+    name.textContent = track.title;
+
+    const dur = document.createElement('span');
+    dur.className = 'audio-track-dur';
+    dur.textContent = track.duration > 0 ? _fmtTime(track.duration) : '';
+
+    item.appendChild(idx);
+    item.appendChild(name);
+    item.appendChild(dur);
+    list.appendChild(item);
+  });
+  body.appendChild(list);
+}
+
+function _updateAudioLive() {
+  const st = audioPlayer.getState();
+
+  // Time display
+  const timeEl = document.getElementById('audio-time-display');
+  if (timeEl) timeEl.textContent = `${_fmtTime(st.currentTime)} / ${_fmtTime(st.duration)}`;
+
+  // Progress bar
+  const bar = document.getElementById('audio-progress-bar');
+  if (bar) {
+    const pct = st.duration > 0 ? (st.currentTime / st.duration) * 100 : 0;
+    bar.style.width = `${pct}%`;
+  }
+
+  // Play button state
+  const playBtn = document.getElementById('audio-play-btn');
+  if (playBtn) {
+    playBtn.innerHTML = st.playing ? '❚❚' : '▶';
+    playBtn.title = st.playing ? 'Pause' : 'Play';
+    playBtn.classList.toggle('playing', st.playing);
+  }
+}
+
+let _lastAudioRenderKey = '';
+
+function _onAudioChange(st) {
+  // Build a lightweight key for changes that require a full re-render
+  const renderKey = `${st.currentIndex}|${st.tracks.length}|${st.loading}`;
+  if (renderKey !== _lastAudioRenderKey) {
+    _lastAudioRenderKey = renderKey;
+    if (audioContainer) _renderAudioUI(audioContainer);
+    return;
+  }
+  // Otherwise just update the live elements
+  _updateAudioLive();
+}
+
+function buildAudioPanel() {
+  if (!audioContainer) audioContainer = document.getElementById('audio-panel');
+  if (!audioContainer) return;
+  _renderAudioUI(audioContainer);
+  if (!_audioUnsub) {
+    _audioUnsub = audioPlayer.onChange(_onAudioChange);
+  }
+}
+
 function buildProofPanel() {
   if (!proofsContainer) proofsContainer = document.getElementById('proofs-panel');
   if (!proofsContainer) return;
 
   proofsContainer.innerHTML = '';
 
-  const wrap = document.createElement('div');
-  wrap.className = 'accordion-panel';
-  const header = document.createElement('div');
-  const collapsed = state.proofPanelOpen !== true;
-  header.className = `accordion-header${collapsed ? ' collapsed' : ''}`;
-  const title = document.createElement('span');
-  title.className = 'accordion-header-label';
-  title.textContent = 'Proofs';
-  header.appendChild(title);
-  const body = document.createElement('div');
-  body.className = `accordion-body${collapsed ? ' collapsed' : ''}`;
-
-  header.addEventListener('click', () => {
-    header.classList.toggle('collapsed');
-    body.classList.toggle('collapsed');
-    state.proofPanelOpen = !header.classList.contains('collapsed');
-    if (state.proofPanelOpen) updateProofPayload(true);
+  const b = new UIBuilder(proofsContainer);
+  b.section('Proofs', state.proofPanelOpen !== true, {
+    onToggle: (open) => {
+      state.proofPanelOpen = open;
+      if (open) updateProofPayload(true);
+    },
   });
-
-  wrap.appendChild(header);
-  wrap.appendChild(body);
-  proofsContainer.appendChild(wrap);
-
-  const b = new UIBuilder(body);
+  b.info('Global formula kernel for chart generation and proof comparison.')
+    .modeToggle(
+      'formula',
+      () => state.formulaMode,
+      (v) => { state.formulaMode = (v === 'euler' ? 'euler' : 'tau'); },
+      'tau',
+      'euler',
+      'Tau',
+      'Euler',
+    );
   b.info('Proof diagnostics for Euler/Tau equivalence across all base children.');
   b.info('P = strand-offset index used by E_proof. alpha = comparison base used by closure trace (alpha=tau => 1 step = 1 turn).');
   b.html(`
@@ -2028,17 +2221,6 @@ function buildControls() {
     .slider('tone exposure', state.cinematicFx.tone, 'exposure', 0.5, 3, 0.01, { linkPath: 'cinematic.tone.exposure' });
   b.endChild();
 
-  b.section('Kernel', true)
-    .info('Global formula kernel for chart generation and proof comparison.')
-    .modeToggle(
-      'formula',
-      () => state.formulaMode,
-      (v) => { state.formulaMode = (v === 'euler' ? 'euler' : 'tau'); },
-      'tau',
-      'euler',
-      'Tau',
-      'Euler',
-    );
 
   b.section('Traversal', true)
     .info('JSON-literal k: k={bool=0:T, bool>0:kAligned}. Playback is binary (play/pause) and uses deterministic stepping.')
@@ -2244,6 +2426,7 @@ function buildControls() {
   const shotBtn = document.getElementById('btn-screenshot');
   if (resetBtn) resetBtn.addEventListener('click', () => resetCamera());
   if (shotBtn) shotBtn.addEventListener('click', () => captureScreenshot());
+  buildAudioPanel();
   buildProofPanel();
   linkEngine.prune((path) => {
     if (path.startsWith('camera.')) return activeCameraLinkedPaths.has(path);
@@ -2481,6 +2664,10 @@ export function initControls() {
   setupKeyboard();
   setExternalUpdate(animationFrame);
   regenerate();
+  // Init audio player (async — doesn't block render)
+  audioPlayer.init().then(() => {
+    console.log(`[audio-player] ${audioPlayer.getState().tracks.length} track(s) discovered`);
+  });
 }
 
 
