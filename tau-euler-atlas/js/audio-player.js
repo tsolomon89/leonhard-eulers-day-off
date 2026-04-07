@@ -134,22 +134,39 @@ export function setVolume(v) {
 // ── Track Discovery ──────────────────────────────────────────
 
 async function _discoverTracks() {
-  const resp = await fetch(AUDIO_DIR);
-  if (!resp.ok) throw new Error(`Directory listing failed: ${resp.status}`);
+  const FALLBACK_TRACKS = [
+    'Beyond_the_Euclidean_Roof.mp3',
+    'Bounded_From_Itself.mp3',
+    'Hanging_Up_The_Variables.mp3',
+    'The_Answer_Is_Forty_Two.mp3',
+    'The_Art_of_the_Bet.mp3',
+    'The_Bin_Of_Inconceivable_Things.mp3',
+    'The_Formal_Door.mp3',
+    'The_Geometry_of_Home.mp3',
+    'The_Unfinished_Proof.mp3'
+  ];
 
-  const html = await resp.text();
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  const links = Array.from(doc.querySelectorAll('a[href]'));
+  let files = [];
+  try {
+    const resp = await fetch(AUDIO_DIR);
+    if (!resp.ok) throw new Error(`Directory listing failed: ${resp.status}`);
 
-  const files = [];
-  for (const a of links) {
-    const href = decodeURIComponent(a.getAttribute('href') || '');
-    const name = href.split(/[/\\]/).pop();
-    if (!name) continue;
-    const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
-    if (AUDIO_EXTS.includes(ext)) {
-      files.push(name);
+    const html = await resp.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const links = Array.from(doc.querySelectorAll('a[href]'));
+
+    for (const a of links) {
+      const href = decodeURIComponent(a.getAttribute('href') || '');
+      const name = href.split(/[/\\]/).pop();
+      if (!name) continue;
+      const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
+      if (AUDIO_EXTS.includes(ext)) {
+        files.push(name);
+      }
     }
+  } catch (err) {
+    console.warn('[audio-player] Auto-discovery failed, using static fallback list.', err);
+    files = FALLBACK_TRACKS;
   }
 
   // Sort alphabetically, deduplicate
