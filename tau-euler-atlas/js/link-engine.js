@@ -238,6 +238,62 @@ export function createLinkEngine(options = {}) {
     }
   }
 
+  /**
+   * Serialize all link records to a plain object for scene save/restore.
+   * Returns { [path]: { baseValue, endValue, isLinked, direction } }
+   */
+  function snapshot() {
+    const snap = {};
+    for (const [path, record] of records.entries()) {
+      snap[path] = {
+        baseValue: record.baseValue,
+        endValue: record.endValue,
+        isLinked: record.isLinked,
+        direction: record.direction,
+      };
+    }
+    return snap;
+  }
+
+  /**
+   * Restore link records from a previously saved snapshot.
+   * Only updates records that are already registered (does not create new ones).
+   * Records NOT in the snapshot are unlinked (reverted to their current live value).
+   *
+   * @param {Object} snap - snapshot from snapshot()
+   */
+  function restore(snap) {
+    if (!snap || typeof snap !== 'object') return;
+    _mutating = true;
+    try {
+      for (const [path, record] of records.entries()) {
+        const saved = snap[path];
+        if (saved) {
+          record.baseValue = toNumber(saved.baseValue, record.baseValue);
+          record.endValue = Number.isFinite(saved.endValue) ? saved.endValue : null;
+          record.isLinked = saved.isLinked === true;
+          record.direction = sanitizeDirection(saved.direction);
+        } else {
+          // Not in snapshot → unlink, keep at current live value
+          record.isLinked = false;
+          record.endValue = null;
+          const live = toNumber(record.adapter.getLive(), record.baseValue);
+          record.baseValue = live;
+        }
+      }
+    } finally {
+      _mutating = false;
+    }
+  }
+
+  /**
+   * Get all currently registered paths.
+   * @returns {string[]}
+   */
+  function registeredPaths() {
+    return Array.from(records.keys());
+  }
+
   return {
     register,
     get,
@@ -250,6 +306,9 @@ export function createLinkEngine(options = {}) {
     applyPath,
     prune,
     updateBaseFromLive,
+    snapshot,
+    restore,
+    registeredPaths,
     isMutating: () => _mutating,
   };
 }

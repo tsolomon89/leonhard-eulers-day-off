@@ -40,8 +40,34 @@ class ProgressEngine {
     this.duration = 30;
     this.loop = 'wrap'; // none | wrap | bounce
 
+    // Scene timeline override: when non-null, this duration is used instead of this.duration
+    this._timelineDuration = null;
+
     this._lastFrameTime = 0;
     this._stateChangeCbs = [];
+  }
+
+  /** Get the duration used for playback (timeline duration if set, else default). */
+  getEffectiveDuration() {
+    return (Number.isFinite(this._timelineDuration) && this._timelineDuration > 0)
+      ? this._timelineDuration
+      : this.duration;
+  }
+
+  /** Set the timeline duration override. Pass null to clear. */
+  setTimelineDuration(seconds) {
+    this._timelineDuration = (Number.isFinite(seconds) && seconds > 0) ? seconds : null;
+  }
+
+  /** Get the absolute time in seconds based on current progress. */
+  getAbsoluteTime() {
+    return this.progress * this.getEffectiveDuration();
+  }
+
+  /** Seek to an absolute time in seconds. */
+  seekToTime(seconds) {
+    const dur = this.getEffectiveDuration();
+    this.seek(dur > 0 ? seconds / dur : 0);
   }
 
   play() {
@@ -87,7 +113,7 @@ class ProgressEngine {
     this._lastFrameTime = now;
 
     const prev = this.progress;
-    this.progress += dt / this.duration;
+    this.progress += dt / this.getEffectiveDuration();
 
     if (this.loop === 'none' && this.progress >= 1) {
       this.progress = 1;
