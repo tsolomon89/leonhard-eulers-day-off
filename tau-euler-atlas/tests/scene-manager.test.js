@@ -74,53 +74,7 @@ test('setTimeline sets the active timeline', () => {
 // Authoring: load/save scene
 // ═════════════════════════════════════════════════════════════
 
-test('loadSceneForAuthoring loads links into the engine', () => {
-  const store = { T: 0, b: 50 };
-  const engine = createLinkEngine();
-  engine.register('T', makeAdapter(store, 'T'));
-  engine.register('b', makeAdapter(store, 'b'));
 
-  const anim = makeAnimationMock();
-  const sm = createSceneManager({ linkEngine: engine, animation: anim, getState: () => store });
-
-  const tl = createTimeline();
-  addTrack(tl.scenes[0], 'T', 0, 5);
-  sm.setTimeline(tl);
-
-  sm.loadSceneForAuthoring(0);
-
-  const tRecord = engine.get('T');
-  assert.equal(tRecord.isLinked, true);
-  assert.equal(tRecord.baseValue, 0);
-  assert.equal(tRecord.endValue, 5);
-
-  // b should be unlinked (not in scene's links)
-  const bRecord = engine.get('b');
-  assert.equal(bRecord.isLinked, false);
-});
-
-test('saveCurrentToScene persists link engine state to scene', () => {
-  const store = { T: 0 };
-  const engine = createLinkEngine();
-  engine.register('T', makeAdapter(store, 'T'));
-
-  const anim = makeAnimationMock();
-  const sm = createSceneManager({ linkEngine: engine, animation: anim, getState: () => store });
-
-  const tl = createTimeline();
-  sm.setTimeline(tl);
-
-  // Simulate user linking T via the engine
-  engine.setBase('T', 0);
-  engine.setEnd('T', 10);
-  engine.linkOn('T');
-
-  sm.saveCurrentToScene();
-
-  assert.equal(tl.scenes[0].links.length, 1);
-  assert.equal(tl.scenes[0].links[0].path, 'T');
-  assert.equal(tl.scenes[0].links[0].endValue, 10);
-});
 
 // ═════════════════════════════════════════════════════════════
 // Playback: start/stop

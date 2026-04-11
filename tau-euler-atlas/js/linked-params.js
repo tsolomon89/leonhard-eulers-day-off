@@ -66,7 +66,21 @@ const CORE_LINKABLE_FIELDS = new Set([
   'q_tauScale',
   'k2',
   'k3',
+  'themeBlend',
+  'visualHelpers.gridOpacity',
+  'visualHelpers.referenceOpacity',
+  'visualHelpers.orbitOpacity',
 ]);
+
+const INSTANT_LINK_PATHS = new Set([
+  'kStepsInAlignmentsBool',
+  'q_bool',
+  'q_correction',
+]);
+
+export function isInstantLinkPath(path) {
+  return INSTANT_LINK_PATHS.has(path);
+}
 
 const EXCLUDED_LINK_FIELDS = new Set([
   'T_lowerBound',
@@ -80,6 +94,7 @@ export function isLinkEligiblePath(path) {
   if (typeof path !== 'string' || path.length === 0) return false;
   if (EXCLUDED_LINK_FIELDS.has(path)) return false;
   if (CORE_LINKABLE_FIELDS.has(path)) return true;
+  if (INSTANT_LINK_PATHS.has(path)) return true;
   if (path.startsWith('camera.')) return true;
   if (path.startsWith('expression.')) return true;
   if (path.startsWith('cinematic.')) return true;

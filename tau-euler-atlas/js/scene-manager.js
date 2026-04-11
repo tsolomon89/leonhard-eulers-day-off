@@ -2,8 +2,10 @@
 //  scene-manager.js — Scene timeline orchestrator
 //  τ-Euler Atlas · Scene Timeline
 //
-//  Coordinates between the scene data model, the link engine,
-//  and the animation progress engine to drive playback.
+//  Drives scene playback by interpolating directly from scene
+//  model data → writePath(). Completely decoupled from the
+//  link engine—sliders are normal value setters, scene tracks
+//  are edited in the timeline panel.
 // ═══════════════════════════════════════════════════════════════
 
 import { getEasing } from './easing.js';
@@ -11,32 +13,37 @@ import {
   totalDuration,
   resolveTimePosition,
   buildSceneSnapshots,
-  readPath,
   writePath,
+  readPath,
   getActiveScene,
+  getInheritedBases,
 } from './scene-data.js';
+import { isInstantLinkPath } from './linked-params.js';
 
 // ── Scene Manager ────────────────────────────────────────────
 
 /**
  * Create a scene manager that bridges the timeline data model
- * with the link engine and animation engine.
+ * with the animation engine for playback.
+ *
+ * The link engine is NOT used during scene playback—values are
+ * interpolated directly from scene track data and written to
+ * state via writePath().
  *
  * @param {Object} options
- * @param {Object} options.linkEngine     - link engine instance (from createLinkEngine)
  * @param {Object} options.animation      - animation/progress engine instance
  * @param {Function} options.getState     - returns the mutable app state object
  * @param {Function} [options.onSceneChange] - called when active scene changes during playback
  * @returns {SceneManager}
  */
 export function createSceneManager(options) {
-  const { linkEngine, animation: anim, getState, onSceneChange } = options;
+  const { animation: anim, getState, onSceneChange } = options;
 
   let _timeline = null;       // Current Timeline object
   let _isPlaying = false;     // True during timeline playback
   let _initialSnapshot = null; // Snapshot of state at playback start
   let _lastSceneIndex = -1;    // Track scene transitions during playback
-  let _sceneSnapshots = {};    // Per-scene link engine snapshots (for fast scene switching)
+  let _savedLoop = null;       // Saved animation loop mode (restored on stop)
 
   // ── Authoring ────────────────────────────────────────────
 
@@ -61,57 +68,14 @@ export function createSceneManager(options) {
   }
 
   /**
-   * Load a scene's link configuration into the link engine for authoring.
-   * Call this when the user switches the active scene in the UI.
+   * Switch the active scene in the UI for authoring.
+   * Does NOT mutate the link engine or any slider state.
    *
    * @param {number} sceneIndex
    */
   function loadSceneForAuthoring(sceneIndex) {
     if (!_timeline || sceneIndex < 0 || sceneIndex >= _timeline.scenes.length) return;
-
-    const scene = _timeline.scenes[sceneIndex];
     _timeline.activeSceneIndex = sceneIndex;
-
-    // Build a link snapshot from the scene's link list
-    const snap = {};
-    for (const link of scene.links) {
-      snap[link.path] = {
-        baseValue: link.baseValue,
-        endValue: link.endValue,
-        isLinked: true,
-        direction: link.direction,
-      };
-    }
-
-    // Restore into link engine (unlinked paths revert)
-    linkEngine.restore(snap);
-  }
-
-  /**
-   * Save the current link engine state back into the active scene's links.
-   * Call this after the user modifies links via the slider UI.
-   */
-  function saveCurrentToScene() {
-    if (!_timeline) return;
-    const scene = getActiveScene(_timeline);
-    if (!scene) return;
-
-    // Read current link records from the engine
-    const paths = linkEngine.registeredPaths();
-    const updatedLinks = [];
-
-    for (const path of paths) {
-      const record = linkEngine.get(path);
-      if (!record || !record.isLinked) continue;
-      updatedLinks.push({
-        path,
-        baseValue: record.baseValue,
-        endValue: Number.isFinite(record.endValue) ? record.endValue : record.baseValue,
-        direction: record.direction,
-      });
-    }
-
-    scene.links = updatedLinks;
   }
 
   // ── Playback ─────────────────────────────────────────────
@@ -124,35 +88,23 @@ export function createSceneManager(options) {
   function startPlayback() {
     if (!_timeline || _timeline.scenes.length === 0) return;
 
-    // Snapshot current state
+    // Snapshot current state for playback
     const state = getState();
     _initialSnapshot = JSON.parse(JSON.stringify(state));
 
-    // Build scene snapshots (inheritance chain)
+    // Build scene snapshots (forces baseValues via inheritance chain)
     buildSceneSnapshots(_timeline, _initialSnapshot);
 
-    // Compute total duration and configure animation engine
+    // Configure animation engine
     const total = totalDuration(_timeline);
     anim.setTimelineDuration(total);
 
-    // Build per-scene link engine snapshots
-    _sceneSnapshots = {};
-    for (let i = 0; i < _timeline.scenes.length; i++) {
-      const scene = _timeline.scenes[i];
-      const snap = {};
-      for (const link of scene.links) {
-        snap[link.path] = {
-          baseValue: link.baseValue,
-          endValue: link.endValue,
-          isLinked: true,
-          direction: link.direction,
-        };
-      }
-      _sceneSnapshots[i] = snap;
-    }
+    // Set animation loop mode
+    _savedLoop = anim.loop;
+    anim.loop = _timeline.loop ? 'wrap' : 'none';
 
     _isPlaying = true;
-    _lastSceneIndex = -1; // Force first load
+    _lastSceneIndex = -1;
   }
 
   /**
@@ -163,13 +115,53 @@ export function createSceneManager(options) {
     _isPlaying = false;
     _lastSceneIndex = -1;
     anim.setTimelineDuration(null);
+    // Restore original animation loop mode
+    if (_savedLoop !== null) {
+      anim.loop = _savedLoop;
+      _savedLoop = null;
+    }
+
+    // Revert the application state to exactly how it was before playback began
+    if (_initialSnapshot && _timeline) {
+      const state = getState();
+      const modifiedPaths = new Set();
+      
+      // Determine what the timeline might have touched
+      _timeline.scenes.forEach(scene => {
+        scene.links.forEach(link => modifiedPaths.add(link.path));
+      });
+      
+      // Revert each touched path back to the pre-playback value
+      modifiedPaths.forEach(path => {
+        const originalValue = readPath(_initialSnapshot, path);
+        if (originalValue !== undefined) {
+          writePath(state, path, originalValue);
+          if (options.onTrackUpdate) {
+            options.onTrackUpdate(path, originalValue);
+          }
+        }
+      });
+      
+      _initialSnapshot = null;
+    }
   }
 
   /**
-   * Resolve the current timeline state for the given animation progress.
+   * Update the global animation engine's target duration to reflect
+   * live edits made to the timeline scenes during playback.
+   */
+  function updateTimelineDuration() {
+    if (_isPlaying && _timeline) {
+      anim.setTimelineDuration(totalDuration(_timeline));
+    }
+  }
+
+  /**
+   * Resolve the current timeline state for the given animation time.
    * Called from the animation frame loop.
    *
-   * Writes resolved values into the app state object via the link engine.
+   * Interpolates each track's base→end directly and writes to app
+   * state via writePath(). No link engine involved.
    *
    * @returns {{ sceneIndex: number, localProgress: number, easedProgress: number, changed: boolean }}
    */
@@ -182,45 +174,39 @@ export function createSceneManager(options) {
     const { sceneIndex, localProgress } = resolveTimePosition(_timeline, absoluteTime);
     const scene = _timeline.scenes[sceneIndex];
 
-    // Load this scene's links into the engine if scene changed
-    const sceneChanged = sceneIndex !== _lastSceneIndex;
-    if (sceneChanged) {
-      // Apply the scene's base snapshot to state first
-      if (scene.snapshot) {
-        const state = getState();
-        const registeredPaths = linkEngine.registeredPaths();
-        for (const path of registeredPaths) {
-          const snapshotValue = readPath(scene.snapshot, path);
-          if (Number.isFinite(snapshotValue)) {
-            const record = linkEngine.get(path);
-            if (record && !_sceneSnapshots[sceneIndex]?.[path]) {
-              // Path not linked in this scene → set to inherited value
-              record.adapter.setLive(snapshotValue);
-            }
-          }
-        }
+    // Apply easing
+    const easingFn = getEasing(scene.easing);
+    const t = easingFn(Math.max(0, Math.min(1, localProgress)));
+
+    // Write interpolated values directly to state
+    const state = getState();
+    for (const link of scene.links) {
+      if (isInstantLinkPath(link.path)) {
+        writePath(state, link.path, link.baseValue);
+      } else {
+        const tf = link.transitionFactor;
+        const effectiveT = (tf > 0 && tf < 1) ? Math.min(1.0, t / tf) : t;
+        const value = link.baseValue + (link.endValue - link.baseValue) * effectiveT;
+        writePath(state, link.path, value);
       }
 
-      // Restore this scene's link configuration
-      linkEngine.restore(_sceneSnapshots[sceneIndex] || {});
-      _lastSceneIndex = sceneIndex;
-
-      if (onSceneChange) {
-        onSceneChange(sceneIndex, scene);
+      if (options.onTrackUpdate) {
+        options.onTrackUpdate(link.path, readPath(state, link.path));
       }
     }
 
-    // Apply easing
-    const easingFn = getEasing(scene.easing);
-    const easedProgress = easingFn(Math.max(0, Math.min(1, localProgress)));
+    // Track scene transitions
+    const sceneChanged = sceneIndex !== _lastSceneIndex;
+    _lastSceneIndex = sceneIndex;
 
-    // Resolve link engine at eased progress
-    linkEngine.resolveAndApply(easedProgress);
+    if (sceneChanged && onSceneChange) {
+      onSceneChange(sceneIndex, scene);
+    }
 
     return {
       sceneIndex,
       localProgress,
-      easedProgress,
+      easedProgress: t,
       changed: sceneChanged,
     };
   }
@@ -262,11 +248,12 @@ export function createSceneManager(options) {
     getTimeline,
     isPlaying,
     loadSceneForAuthoring,
-    saveCurrentToScene,
     startPlayback,
+    updateTimelineDuration,
     stopPlayback,
     resolve,
     getPlaybackInfo,
     getInitialSnapshot: () => _initialSnapshot,
+    getState,
   };
 }

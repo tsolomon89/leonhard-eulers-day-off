@@ -58,6 +58,7 @@ let fogEnabled = true;
 let fogDensity = 0.0008;
 let toneEnabled = true;
 let toneExposure = 1.05;
+let currentThemeBlend = 0;
 
 function emitCameraPanelChange(reason = 'scene', source = 'scene') {
   if (cameraPanelListeners.size === 0) return;
@@ -122,7 +123,7 @@ function applyToneRuntime() {
 
 function applyStarRuntime() {
   if (!starSystem) return;
-  const visible = isCinematic() && isDark() && cinematic.starsEnabled && !suspendHeavyEffects;
+  const visible = isCinematic() && cinematic.starsEnabled && !suspendHeavyEffects;
   starSystem.visible = visible;
   starSystem.material.opacity = cinematic.starOpacity;
 }
@@ -357,9 +358,29 @@ export function setReferenceCirclesVisible(v) {
   refCircles.visible = !!v;
 }
 
+export function setReferenceOpacity(v) {
+  if (!refCircles) return;
+  const hide = v <= 0.001;
+  refCircles.visible = !hide;
+  if (hide) return;
+  refCircles.children.forEach((c) => {
+    if (c.material) c.material.opacity = v;
+  });
+}
+
 export function setGridVisible(v) {
   if (!gridGroup) return;
   gridGroup.visible = !!v;
+}
+
+export function setGridOpacity(v) {
+  if (!gridGroup) return;
+  const hide = v <= 0.001;
+  gridGroup.visible = !hide;
+  if (hide) return;
+  gridGroup.children.forEach((c) => {
+    if (c.material) c.material.opacity = v;
+  });
 }
 
 // ── Scene initialization ─────────────────────────────────────
@@ -435,7 +456,7 @@ export function initScene() {
   // Scene elements
   buildGrid();
   buildRefCircles();
-  if (isDark()) buildStars();
+  buildStars();
   applyBloomRuntime();
   applyFogRuntime();
   applyToneRuntime();
@@ -463,7 +484,9 @@ export function initScene() {
 }
 
 function handleResize() {
-  const w = window.innerWidth, h = window.innerHeight;
+  const el = document.getElementById('container');
+  const w = el ? el.clientWidth : window.innerWidth;
+  const h = el ? el.clientHeight : window.innerHeight;
   const aspect = w / h;
 
   perspCam.aspect = aspect;
@@ -506,7 +529,7 @@ function handleThemeChange(theme) {
     });
   }
   buildGrid();
-  if (isDark() && !starSystem) buildStars();
+  if (!starSystem) buildStars();
   applyBloomRuntime();
   applyFogRuntime();
   applyToneRuntime();
@@ -514,7 +537,7 @@ function handleThemeChange(theme) {
 }
 
 function handleRenderChange(mode) {
-  if (mode === 'cinematic' && isDark() && !starSystem) buildStars();
+  if (mode === 'cinematic' && !starSystem) buildStars();
   applyBloomRuntime();
   applyFogRuntime();
   applyToneRuntime();
@@ -563,7 +586,7 @@ export function updatePointCloud(data, ptSize, ptOpacity) {
       vertexColors: true,
       transparent: true,
       opacity: Math.max(0.01, ptOpacity),
-      blending: isDark() ? THREE.AdditiveBlending : THREE.NormalBlending,
+      blending: THREE.AdditiveBlending,
       depthWrite: false,
       sizeAttenuation: true,
     });
@@ -581,7 +604,7 @@ export function updatePointCloud(data, ptSize, ptOpacity) {
   pointCloudMat.size = Math.max(0.005, ptSize * baseSize);
   pointCloudMat.map = tex;
   pointCloudMat.opacity = Math.max(0.01, ptOpacity);
-  pointCloudMat.blending = isDark() ? THREE.AdditiveBlending : THREE.NormalBlending;
+  pointCloudMat.blending = THREE.AdditiveBlending;
   pointCloudMat.needsUpdate = true;
 
   pointCloud.visible = true;
@@ -777,6 +800,18 @@ export function updateGhostTraces(tauPts, alphaPts, showAlpha) {
   }
 }
 
+export function setGhostOpacity(v) {
+  const hide = v <= 0.001;
+  if (ghostTauLine) {
+    ghostTauLine.material.opacity = v;
+    if (hide) ghostTauLine.visible = false;
+  }
+  if (ghostAlphaLine) {
+    ghostAlphaLine.material.opacity = v * (0.55 / 0.7); // scale proportionally
+    if (hide) ghostAlphaLine.visible = false;
+  }
+}
+
 // ── Dynamic orbit circle at r = τ^{-k} ──────────────────────
 
 // Pre-allocate orbit circle position buffer (257 vertices × 3 floats)
@@ -816,6 +851,27 @@ export function updateOrbitCircle(k) {
   orbitCircle.geometry.attributes.position.needsUpdate = true;
   orbitCircle.computeLineDistances();
   orbitCircle.visible = true;
+}
+
+export function setOrbitOpacity(v) {
+  if (!orbitCircle) return;
+  orbitCircle.material.opacity = v;
+  if (v <= 0.001) orbitCircle.visible = false;
+}
+
+export function setThemeBlend(v) {
+  currentThemeBlend = v;
+  const appRoot = document.getElementById('app-root');
+  if (appRoot) {
+    appRoot.style.filter = `invert(${v}) hue-rotate(${v * 180}deg)`;
+  }
+  if (renderer) {
+    // Clear residual filter from canvas if exist
+    renderer.domElement.style.filter = '';
+  }
+  applyBloomRuntime();
+  applyStarRuntime();
+  applyFogRuntime();
 }
 
 // ── FPS tracking ─────────────────────────────────────────────

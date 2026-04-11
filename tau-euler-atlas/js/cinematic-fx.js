@@ -5,7 +5,7 @@ const DEFAULT_CINEMATIC_FX = Object.freeze({
   points: { enabled: true, size: 1.5, opacity: 0.7, k3: 1 },
   primaryLines: { enabled: true, width: 2.0, opacity: 0.5 },
   atlasLines: { enabled: true, width: 1.0, opacity: 0.35, pathBudget: 200 },
-  ghostTraces: { enabled: true, showAlpha: true },
+  ghostTraces: { enabled: true, showAlpha: true, opacity: 0.7 },
   stars: { enabled: true, opacity: 0.25, rotX: 0.00008, rotY: 0.0002, drift: 0.04 },
   bloom: { enabled: true, strength: 0.45, radius: 0.45, threshold: 0.8 },
   fog: { enabled: true, density: 0.0008 },
@@ -100,6 +100,7 @@ export function normalizeCinematicFx(rawFx = null, legacy = {}) {
     ghostTraces: {
       enabled: pickBool(ghostTraces.enabled, null, defaults.ghostTraces.enabled),
       showAlpha: pickBool(ghostTraces.showAlpha, legacy.showAlpha, defaults.ghostTraces.showAlpha),
+      opacity: clamp(pickNum(ghostTraces.opacity, legacy.ghostOpacity, defaults.ghostTraces.opacity), 0, 1),
     },
     stars: {
       enabled: pickBool(stars.enabled, null, defaults.stars.enabled),
@@ -163,10 +164,7 @@ export function resolveEffectiveCinematicFx(rawFx, options = {}) {
   const primaryEnabled = effectiveSubsystemEnabled(masterEnabled, fx.primaryLines.enabled, renderMode, 'primaryLines');
   const atlasEnabled = effectiveSubsystemEnabled(masterEnabled, fx.atlasLines.enabled, renderMode, 'atlasLines');
   const ghostEnabled = effectiveSubsystemEnabled(masterEnabled, fx.ghostTraces.enabled, renderMode, 'ghostTraces');
-  const starsEnabled = (
-    effectiveSubsystemEnabled(masterEnabled, fx.stars.enabled, renderMode, 'stars')
-    && theme !== 'light'
-  );
+  const starsEnabled = effectiveSubsystemEnabled(masterEnabled, fx.stars.enabled, renderMode, 'stars');
   const bloomEnabled = effectiveSubsystemEnabled(masterEnabled, fx.bloom.enabled, renderMode, 'bloom');
   const fogEnabled = effectiveSubsystemEnabled(masterEnabled, fx.fog.enabled, renderMode, 'fog');
   const toneEnabled = effectiveSubsystemEnabled(masterEnabled, fx.tone.enabled, renderMode, 'tone');
@@ -201,6 +199,7 @@ export function resolveEffectiveCinematicFx(rawFx, options = {}) {
     ghostTraces: {
       enabled: ghostEnabled,
       showAlpha: ghostEnabled && fx.ghostTraces.showAlpha,
+      opacity: ghostEnabled ? clamp(scaled(fx.ghostTraces.opacity), 0, 1) : 0,
     },
     stars: {
       enabled: starsEnabled,

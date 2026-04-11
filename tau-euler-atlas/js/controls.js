@@ -69,6 +69,16 @@ import {
 } from './linked-params.js';
 import { createLinkEngine } from './link-engine.js';
 import * as audioPlayer from './audio-player.js';
+import { createSceneManager } from './scene-manager.js';
+import {
+  createTimeline,
+  totalDuration as timelineTotalDuration,
+  loadFromLocalStorage as loadTimelineFromLS,
+  saveToLocalStorage as saveTimelineToLS,
+  addTrackToAllScenes,
+  removeTrackFromAllScenes,
+} from './scene-data.js';
+import { initTimelinePanel } from './timeline-panel.js';
 
 const updatePointCloud = sceneApi.updatePointCloud;
 const updateStrandPaths = sceneApi.updateStrandPaths;
@@ -78,9 +88,14 @@ const updateOrbitCircle = sceneApi.updateOrbitCircle;
 const setReferenceCirclesVisible = typeof sceneApi.setReferenceCirclesVisible === 'function'
   ? sceneApi.setReferenceCirclesVisible
   : () => {};
+const setReferenceOpacity = typeof sceneApi.setReferenceOpacity === 'function' ? sceneApi.setReferenceOpacity : () => {};
 const setGridVisible = typeof sceneApi.setGridVisible === 'function'
   ? sceneApi.setGridVisible
   : () => {};
+const setGridOpacity = typeof sceneApi.setGridOpacity === 'function' ? sceneApi.setGridOpacity : () => {};
+const setOrbitOpacity = typeof sceneApi.setOrbitOpacity === 'function' ? sceneApi.setOrbitOpacity : () => {};
+const setGhostOpacity = typeof sceneApi.setGhostOpacity === 'function' ? sceneApi.setGhostOpacity : () => {};
+const setThemeBlend = typeof sceneApi.setThemeBlend === 'function' ? sceneApi.setThemeBlend : () => {};
 const setBloomEnabled = sceneApi.setBloomEnabled;
 const setBloomStrength = sceneApi.setBloomStrength;
 const setBloomRadius = sceneApi.setBloomRadius;
@@ -176,10 +191,11 @@ export const state = {
 
   expressionModel: defaultExpressionModel(),
   cinematicFx: defaultCinematicFx(),
+  themeBlend: 0,
   visualHelpers: {
-    referenceRings: true,
-    orbitRing: true,
-    grid: true,
+    referenceRings: true, referenceOpacity: 0.5,
+    orbitRing: true, orbitOpacity: 0.4,
+    grid: true, gridOpacity: 0.6,
   },
 };
 
@@ -241,6 +257,13 @@ const ICON_DIR_REV = `
   </svg>
 `;
 
+const ICON_BOUNDS = `
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7 8l5-5 5 5"></path>
+    <path d="M7 16l5 5 5-5"></path>
+  </svg>
+`;
+
 let regenerateTimeout = null;
 let controlsContainer = null;
 let cameraContainer = null;
@@ -267,6 +290,44 @@ const linkEngine = createLinkEngine({
   debug: DEBUG_CAMERA_LINKS,
   debugFilter: (path) => String(path).startsWith('camera.'),
 });
+
+// ── Scene Timeline ─────────────────────────────────────────
+const sceneManager = createSceneManager({
+  animation,
+  getState: () => state,
+  onTrackUpdate: (path, value) => {
+    // Push camera path updates to active camera automatically during playback
+    if (String(path).startsWith('camera.')) {
+      setCameraFieldFromUi(path.replace('camera.', ''), value);
+    }
+    // Apply theme blend in real-time during playback
+    if (path === 'themeBlend') {
+      setTheme(value);
+      setThemeBlend(value);
+    }
+  },
+  onSceneChange: (idx, scene) => {
+    console.debug('[scene-timeline] scene', idx, scene.name);
+  },
+});
+
+// Initialize with a default timeline (or restore from localStorage)
+(function _initTimeline() {
+  const saved = loadTimelineFromLS();
+  if (saved && saved.timeline) {
+    sceneManager.setTimeline(saved.timeline);
+  } else {
+    sceneManager.setTimeline(createTimeline());
+  }
+})();
+
+/** Auto-save timeline to localStorage on changes. */
+export function autoSaveTimeline() {
+  const tl = sceneManager.getTimeline();
+  if (tl) saveTimelineToLS(tl);
+}
+
+
 
 function decimalsForStep(step) {
   if (!Number.isFinite(step) || step >= 1) return 0;
@@ -297,9 +358,16 @@ function pushCommitStatus(row, status) {
 }
 
 export function deriveState() {
-  linkEngine.resolveAndApply(animation.progress);
+  if (sceneManager.isPlaying()) {
+    // Timeline playback: scene manager writes directly to state, no link engine
+    sceneManager.resolve();
+  }
   return applyDerivedState(state);
 }
+
+/** Expose the scene manager for the timeline panel UI. */
+export function getSceneManager() { return sceneManager; }
+export { linkEngine };
 
 function getTSliderStep() {
   if (!state.syncTStepToS) return 0.00001;
@@ -404,9 +472,10 @@ function getEffectiveFx() {
 function applyVisualHelpers() {
   normalizeVisualHelpers();
   const masterOn = state.cinematicFx.master.enabled;
-  setReferenceCirclesVisible(masterOn && state.visualHelpers.referenceRings);
+  sceneApi.setGridOpacity(state.visualHelpers.grid ? state.visualHelpers.gridOpacity : 0);
+  sceneApi.setReferenceOpacity(masterOn && state.visualHelpers.referenceRings ? state.visualHelpers.referenceOpacity : 0);
+  sceneApi.setOrbitOpacity(masterOn && state.visualHelpers.orbitRing ? state.visualHelpers.orbitOpacity : 0);
   updateOrbitCircle(masterOn && state.visualHelpers.orbitRing ? state.k : NaN);
-  setGridVisible(state.visualHelpers.grid);
 }
 
 function computeMathSignature(derived, budget) {
@@ -613,8 +682,10 @@ function applyRenderPayload(payload, fx) {
   const ghostEnabled = fx.ghostTraces.enabled && state.expressionModel.parent.enabled;
   if (ghostEnabled) {
     updateGhostTraces(payload.tauTrace, payload.alphaTrace, fx.ghostTraces.showAlpha && payload.showAlpha);
+    sceneApi.setGhostOpacity(fx.ghostTraces.opacity);
   } else {
     updateGhostTraces(null, null, false);
+    sceneApi.setGhostOpacity(0);
   }
   applyVisualHelpers();
   setText('formula-display', state.formulaMode === 'euler' ? 'Euler' : 'Tau');
@@ -947,13 +1018,31 @@ class UIBuilder {
     lbl.className = 'slider-label';
     lbl.textContent = label;
 
+    const path = typeof linkPath === 'string' ? linkPath : null;
+    const linkable = !!path && isLinkEligiblePath(path);
+
     let activeBounds = { min, max, step };
     const getCurrentBounds = () => {
       if (typeof dynamicBounds !== 'function') return { ...activeBounds };
       const next = dynamicBounds() || {};
-      const nextMin = Number.isFinite(next.min) ? next.min : activeBounds.min;
-      const nextMax = Number.isFinite(next.max) ? next.max : activeBounds.max;
+      let nextMin = Number.isFinite(next.min) ? next.min : activeBounds.min;
+      let nextMax = Number.isFinite(next.max) ? next.max : activeBounds.max;
       const nextStep = Number.isFinite(next.step) ? next.step : activeBounds.step;
+
+      // During playback, widen bounds to cover the scene track's full range
+      if (path && typeof sceneManager !== 'undefined' && sceneManager && sceneManager.isPlaying()) {
+        const timeline = sceneManager.getTimeline();
+        if (timeline) {
+          for (const scene of timeline.scenes) {
+            const link = scene.links.find(l => l.path === path);
+            if (link) {
+              nextMin = Math.min(nextMin, link.baseValue, link.endValue);
+              nextMax = Math.max(nextMax, link.baseValue, link.endValue);
+            }
+          }
+        }
+      }
+
       const orderedMin = Math.min(nextMin, nextMax);
       const orderedMax = Math.max(nextMin, nextMax);
       return { min: orderedMin, max: orderedMax, step: nextStep };
@@ -972,9 +1061,6 @@ class UIBuilder {
     };
 
     if (!Number.isFinite(getBoundValueRaw())) setBoundValueRaw(activeBounds.min);
-
-    const path = typeof linkPath === 'string' ? linkPath : null;
-    const linkable = !!path && isLinkEligiblePath(path);
     const getLiveValue = () => {
       const raw = typeof linkGetter === 'function' ? Number(linkGetter()) : getBoundValueRaw();
       return Number.isFinite(raw) ? raw : getBoundValueRaw();
@@ -1027,64 +1113,76 @@ class UIBuilder {
     if (id) inputBase.id = id;
     trackWrap.appendChild(inputBase);
 
-    const inputTarget = document.createElement('input');
-    inputTarget.type = 'range';
-    inputTarget.className = 'slider-input target-thumb hidden';
-    inputTarget.min = String(activeBounds.min);
-    inputTarget.max = String(activeBounds.max);
-    inputTarget.step = String(activeBounds.step);
-    inputTarget.value = String(getBaseValue());
-    trackWrap.appendChild(inputTarget);
 
-    // Third thumb: live/current value (ring, always on top — gets click priority when stacked)
-    const inputLive = document.createElement('input');
-    inputLive.type = 'range';
-    inputLive.className = 'slider-input live-thumb hidden';
-    inputLive.min = String(activeBounds.min);
-    inputLive.max = String(activeBounds.max);
-    inputLive.step = String(activeBounds.step);
-    inputLive.value = String(getBaseValue());
-    trackWrap.appendChild(inputLive);
 
-    const valueCluster = document.createElement('div');
-    valueCluster.className = 'slider-value-cluster';
-
-    const linkControls = document.createElement('div');
-    linkControls.className = 'slider-link-controls';
-
+    // -- Link button (🔗) --
     const linkBtn = document.createElement('button');
     linkBtn.type = 'button';
     linkBtn.className = 'slider-link-btn ctrl-interactive';
 
-    const dirBtn = document.createElement('button');
-    dirBtn.type = 'button';
-    dirBtn.className = 'slider-link-btn ctrl-interactive';
+    // -- Bounds toggle button (⇕) --
+    let boundsBtn = null;
+    let boundsOpen = false;
 
+    // -- Value stack (vertical: min / value / max) --
     const valueStack = document.createElement('div');
     valueStack.className = 'slider-value-stack';
 
-    const baseChip = document.createElement('button');
-    baseChip.className = 'value-chip ctrl-interactive';
+    const valueDisplay = document.createElement('span');
+    valueDisplay.className = 'slider-value-display';
+    valueDisplay.textContent = format(getBaseValue());
 
-    // Numeric input for precise current-value entry (shown only when linked)
-    const liveNumberInput = document.createElement('input');
-    liveNumberInput.type = 'number';
-    liveNumberInput.className = 'slider-live-number-input hidden';
-    liveNumberInput.setAttribute('aria-label', 'Current value');
-
-    const targetChip = document.createElement('button');
-    targetChip.className = 'value-chip value-chip-end ctrl-interactive hidden';
-
-    valueStack.appendChild(baseChip);
-    valueStack.appendChild(liveNumberInput);
-    valueStack.appendChild(targetChip);
-
+    let boundsMinInput = null;
+    let boundsMaxInput = null;
     if (linkable) {
-      linkControls.appendChild(linkBtn);
-      linkControls.appendChild(dirBtn);
-      valueCluster.appendChild(linkControls);
+      boundsBtn = document.createElement('button');
+      boundsBtn.type = 'button';
+      boundsBtn.className = 'slider-link-btn ctrl-interactive';
+      boundsBtn.innerHTML = ICON_BOUNDS;
+      boundsBtn.title = 'Toggle bounds';
+      boundsBtn.setAttribute('aria-label', 'Toggle bounds');
+
+      boundsMinInput = document.createElement('input');
+      boundsMinInput.type = 'number';
+      boundsMinInput.className = 'bounds-chip bounds-min hidden';
+      boundsMinInput.value = String(activeBounds.min);
+      boundsMinInput.title = 'Slider minimum';
+      boundsMinInput.setAttribute('aria-label', 'Slider minimum');
+      boundsMinInput.addEventListener('change', () => {
+        const v = parseFloat(boundsMinInput.value);
+        if (!Number.isFinite(v)) return;
+        activeBounds.min = v;
+        if (path === 'T') state.T_lowerBound = v;
+        syncBounds();
+        syncUI();
+      });
+
+      boundsMaxInput = document.createElement('input');
+      boundsMaxInput.type = 'number';
+      boundsMaxInput.className = 'bounds-chip bounds-max hidden';
+      boundsMaxInput.value = String(activeBounds.max);
+      boundsMaxInput.title = 'Slider maximum';
+      boundsMaxInput.setAttribute('aria-label', 'Slider maximum');
+      boundsMaxInput.addEventListener('change', () => {
+        const v = parseFloat(boundsMaxInput.value);
+        if (!Number.isFinite(v)) return;
+        activeBounds.max = v;
+        if (path === 'T') state.T_upperBound = v;
+        syncBounds();
+        syncUI();
+      });
+
+      boundsBtn.addEventListener('click', () => {
+        boundsOpen = !boundsOpen;
+        syncUI();
+      });
+
+      valueStack.appendChild(boundsMinInput);
     }
-    valueCluster.appendChild(valueStack);
+    valueStack.appendChild(valueDisplay);
+    if (linkable) {
+      valueStack.appendChild(boundsMaxInput);
+    }
 
     const syncBounds = () => {
       const next = getCurrentBounds();
@@ -1092,15 +1190,14 @@ class UIBuilder {
       inputBase.min = String(next.min);
       inputBase.max = String(next.max);
       inputBase.step = String(next.step);
-      inputTarget.min = String(next.min);
-      inputTarget.max = String(next.max);
-      inputTarget.step = String(next.step);
-      inputLive.min = String(next.min);
-      inputLive.max = String(next.max);
-      inputLive.step = String(next.step);
-      liveNumberInput.min = String(next.min);
-      liveNumberInput.max = String(next.max);
-      liveNumberInput.step = String(next.step);
+
+      // Update inline bounds chips (skip if user is editing)
+      if (boundsMinInput && document.activeElement !== boundsMinInput) {
+        boundsMinInput.value = String(next.min);
+      }
+      if (boundsMaxInput && document.activeElement !== boundsMaxInput) {
+        boundsMaxInput.value = String(next.max);
+      }
     };
     if (syncGroup === 'camera') cameraSliderBoundsSyncFns.push(syncBounds);
     else sliderBoundsSyncFns.push(syncBounds);
@@ -1116,21 +1213,15 @@ class UIBuilder {
     };
 
     const syncLinkUI = () => {
-      const rec = getLinkedRecord();
-      if (!rec) return;
-      linkBtn.classList.toggle('active', !!rec.isLinked);
-      linkBtn.setAttribute('aria-label', rec.isLinked ? 'Unlink parameter' : 'Link parameter');
-      linkBtn.title = rec.isLinked ? 'Linked' : 'Unlinked';
-      linkBtn.innerHTML = rec.isLinked ? ICON_LINK : ICON_UNLINK;
-
-      const showDirection = !!rec.isLinked;
-      dirBtn.classList.toggle('hidden', !showDirection);
-      if (showDirection) {
-        const isForward = rec.direction === 1;
-        dirBtn.setAttribute('aria-label', isForward ? 'Direction forward' : 'Direction reverse');
-        dirBtn.title = isForward ? 'Forward' : 'Reverse';
-        dirBtn.innerHTML = isForward ? ICON_DIR_FWD : ICON_DIR_REV;
-      }
+      // Check scene model tracking state (not link engine)
+      const timeline = sceneManager.getTimeline();
+      const isTracked = timeline && timeline.scenes.length > 0 &&
+        timeline.scenes[0].links.some(l => l.path === path);
+      linkBtn.classList.toggle('active', isTracked);
+      linkBtn.setAttribute('aria-label', isTracked ? 'Remove from scenes' : 'Add to all scenes');
+      linkBtn.title = isTracked ? 'Tracked in scenes' : 'Add to scenes';
+      linkBtn.innerHTML = isTracked ? ICON_LINK : ICON_UNLINK;
+      if (boundsBtn) boundsBtn.classList.toggle('active', boundsOpen);
     };
 
     const syncUI = () => {
@@ -1144,54 +1235,12 @@ class UIBuilder {
       const base = clamp(getBaseValue(), lo, hi);
       const strBase = String(base);
       if (inputBase.value !== strBase) inputBase.value = strBase;
-      if (!baseChip.classList.contains('editing')) baseChip.textContent = format(base);
+      if (!valueDisplay.classList.contains('editing')) valueDisplay.textContent = format(base);
 
-      const hasEndpoint = !!(rec && rec.isLinked && Number.isFinite(rec.endValue));
-      if (hasEndpoint) {
-        const end = clamp(Number(rec.endValue), lo, hi);
-        const strEnd = String(end);
-        if (inputTarget.value !== strEnd) inputTarget.value = strEnd;
-        inputTarget.classList.remove('hidden');
-        targetChip.classList.remove('hidden');
-        if (!targetChip.classList.contains('editing')) targetChip.textContent = format(end);
-
-        // -- Live / current value thumb ----------------------------------------
-        const liveVal = Number.isFinite(rec.lastResolved) ? rec.lastResolved : getLiveValue();
-        const live = clamp(liveVal, lo, hi);
-        const strLive = String(live);
-        if (inputLive.value !== strLive) inputLive.value = strLive;
-        inputLive.classList.remove('hidden');
-        if (!liveNumberInput.classList.contains('editing')) {
-           const fmtLive = format(live);
-           if (liveNumberInput.value !== fmtLive) liveNumberInput.value = fmtLive;
-        }
-        liveNumberInput.classList.remove('hidden');
-
-        // -- Colour boundary thumbs per direction (green=start, red=stop) ------
-        const isForward = !rec || rec.direction !== -1;
-        // base is the "from" point when forward, the "to" point when reverse
-        inputBase.classList.remove('base-thumb', 'start-thumb', 'stop-thumb');
-        inputTarget.classList.remove('target-thumb', 'start-thumb', 'stop-thumb');
-        inputBase.classList.add(isForward ? 'start-thumb' : 'stop-thumb');
-        inputTarget.classList.add(isForward ? 'stop-thumb' : 'start-thumb');
-        baseChip.classList.toggle('value-chip-start', isForward);
-        baseChip.classList.toggle('value-chip-stop', !isForward);
-        targetChip.classList.toggle('value-chip-stop', isForward);
-        targetChip.classList.toggle('value-chip-start', !isForward);
-      } else {
-        inputTarget.classList.add('hidden');
-        targetChip.classList.add('hidden');
-        inputLive.classList.add('hidden');
-        liveNumberInput.classList.add('hidden');
-
-        // Restore neutral thumb style when unlinked
-        inputBase.classList.remove('start-thumb', 'stop-thumb');
-        inputBase.classList.add('base-thumb');
-        inputTarget.classList.remove('start-thumb', 'stop-thumb');
-        inputTarget.classList.add('target-thumb');
-        baseChip.classList.remove('value-chip-start', 'value-chip-stop');
-        targetChip.classList.remove('value-chip-start', 'value-chip-stop');
-      }
+      // Bounds visibility
+      if (boundsMinInput) boundsMinInput.classList.toggle('hidden', !boundsOpen);
+      if (boundsMaxInput) boundsMaxInput.classList.toggle('hidden', !boundsOpen);
+      valueDisplay.classList.toggle('bounds-active', boundsOpen);
 
       syncLinkUI();
     };
@@ -1238,32 +1287,7 @@ class UIBuilder {
       regenerate(heavy);
     };
 
-    const commitEndpointValue = (raw, opts = {}) => {
-      if (!linkable) return;
-      const { mode = 'snap', source = 'endpoint' } = opts;
-      const resolved = resolveCommittedValue(raw, activeBounds, mode);
-      if (!resolved.ok) return;
-      linkEngine.setEnd(path, resolved.value, { autoLink: true });
-      applyResolvedToField();
-      refreshSliderBounds();
-      refreshCameraSliderBounds();
-      if (resolved.status === 'normalized') {
-        for (const sync of sliderUiSyncFns) sync();
-      } else {
-        syncUI();
-      }
-      pushCommitStatus(row, source === 'text' ? 'applied' : resolved.status);
-      regenerate(heavy);
-    };
 
-    const setEndpointFromPointer = (clientX) => {
-      if (!linkable) return;
-      const rect = trackWrap.getBoundingClientRect();
-      if (!rect || rect.width <= 0) return;
-      const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
-      const raw = activeBounds.min + ((activeBounds.max - activeBounds.min) * ratio);
-      commitEndpointValue(raw, { mode: 'snap', source: 'shift-click' });
-    };
 
     const startInlineEdit = (chip, getter, setter) => {
       if (chip.classList.contains('editing')) return;
@@ -1304,74 +1328,48 @@ class UIBuilder {
       commitBaseValue(Number(inputBase.value), { mode: 'snap', source: 'drag' });
     });
 
-    inputTarget.addEventListener('input', () => {
-      commitEndpointValue(Number(inputTarget.value), { mode: 'snap', source: 'endpoint-drag' });
-    });
-
-    // liveNumberInput: committing sets the base value when unlinked;
-    // when linked, treat it as setting the base (re-anchors the animation start)
-    liveNumberInput.addEventListener('change', () => {
-      const parsed = parseNumericInput(liveNumberInput.value, normalizeInput);
-      if (!Number.isFinite(parsed)) { syncUI(); return; }
-      commitBaseValue(parsed, { mode: commitMode, source: 'live-input' });
-    });
-    liveNumberInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') liveNumberInput.blur();
-      if (e.key === 'Escape') syncUI();
-    });
-
-    trackWrap.addEventListener('click', (e) => {
-      if (!linkable || !e.shiftKey) return;
-      if (e.target === inputBase || e.target === inputTarget) return;
-      setEndpointFromPointer(e.clientX);
-    });
-
-    baseChip.addEventListener('click', () => {
+    valueDisplay.addEventListener('click', () => {
       startInlineEdit(
-        baseChip,
+        valueDisplay,
         () => getBaseValue(),
         (v) => commitBaseValue(v, { mode: commitMode, source: 'text' }),
       );
     });
 
-    targetChip.addEventListener('click', () => {
-      const rec = getLinkedRecord();
-      if (!rec || !Number.isFinite(rec.endValue)) return;
-      startInlineEdit(
-        targetChip,
-        () => Number(getLinkedRecord()?.endValue),
-        (v) => commitEndpointValue(v, { mode: commitMode, source: 'text' }),
-      );
-    });
-
     if (linkable) {
       linkBtn.addEventListener('click', () => {
-        const rec = getLinkedRecord();
-        if (!rec) return;
-        if (rec.isLinked) linkEngine.linkOff(path);
-        else linkEngine.linkOn(path);
-        applyResolvedToField();
-        refreshSliderBounds();
-        refreshCameraSliderBounds();
-        syncUI();
-        regenerate(heavy);
+        const timeline = sceneManager.getTimeline();
+        if (!timeline || timeline.scenes.length === 0) return;
+
+        // Toggle: add/remove this parameter from ALL scenes
+        const isTracked = timeline.scenes[0].links.some(l => l.path === path);
+        if (isTracked) {
+          removeTrackFromAllScenes(timeline, path);
+        } else {
+          const currentValue = getBaseValue();
+          addTrackToAllScenes(timeline, path, currentValue);
+        }
+
+        // Update icon state
+        const nowTracked = timeline.scenes[0].links.some(l => l.path === path);
+        linkBtn.classList.toggle('active', nowTracked);
+        linkBtn.innerHTML = nowTracked ? ICON_LINK : ICON_UNLINK;
+
+        autoSaveTimeline();
+        if (typeof window.renderTimelinePanel === 'function') {
+          window.renderTimelinePanel();
+        }
       });
 
-      dirBtn.addEventListener('click', () => {
-        const rec = getLinkedRecord();
-        if (!rec || !rec.isLinked) return;
-        linkEngine.toggleDirection(path);
-        applyResolvedToField();
-        syncUI();
-        regenerate(heavy);
-      });
     }
 
     syncUI();
 
     row.appendChild(lbl);
+    if (linkable) row.appendChild(linkBtn);
     row.appendChild(trackWrap);
-    row.appendChild(valueCluster);
+    if (boundsBtn) row.appendChild(boundsBtn);
+    row.appendChild(valueStack);
     this._parent().appendChild(row);
     return this;
   }
@@ -1411,12 +1409,23 @@ class UIBuilder {
     return this;
   }
 
-  modeToggle(label, getter, setter, a, b, labelA, labelB) {
+  modeToggle(label, getter, setter, a, b, labelA, labelB, options = {}) {
     const row = document.createElement('div');
     row.className = 'mode-toggle-row';
     const lbl = document.createElement('span');
     lbl.className = 'mode-label';
     lbl.textContent = label;
+
+    const path = options.linkPath;
+    const linkable = !!path;
+    let linkBtn = null;
+    if (linkable) {
+      linkBtn = document.createElement('button');
+      linkBtn.className = 'slider-link-btn ctrl-interactive';
+      linkBtn.innerHTML = ICON_UNLINK;
+      linkBtn.title = 'Link parameter to all scenes';
+    }
+
     const group = document.createElement('div');
     group.className = 'toggle-group-inline';
 
@@ -1433,17 +1442,58 @@ class UIBuilder {
     btnA.addEventListener('click', () => {
       setter(a);
       setActive();
+      if (linkable && activeLinkedPaths.has(path)) {
+        const rec = linkEngine.get(path);
+        const resolvedVal = typeof options.linkValue === 'function' ? options.linkValue(a) : a;
+        if (rec) linkEngine.setEnd(path, resolvedVal, { autoLink: rec.isLinked });
+      }
       regenerate();
     });
     btnB.addEventListener('click', () => {
       setter(b);
       setActive();
+      if (linkable && activeLinkedPaths.has(path)) {
+        const rec = linkEngine.get(path);
+        const resolvedVal = typeof options.linkValue === 'function' ? options.linkValue(b) : b;
+        if (rec) linkEngine.setEnd(path, resolvedVal, { autoLink: rec.isLinked });
+      }
       regenerate();
     });
+
+    if (linkable) {
+      linkBtn.addEventListener('click', () => {
+        const timeline = sceneManager.getTimeline();
+        if (!timeline || timeline.scenes.length === 0) return;
+        const isTracked = timeline.scenes[0].links.some(l => l.path === path);
+        if (isTracked) removeTrackFromAllScenes(timeline, path);
+        else {
+          const resolvedVal = typeof options.linkValue === 'function' ? options.linkValue(getter()) : getter();
+          addTrackToAllScenes(timeline, path, resolvedVal);
+        }
+
+        const nowTracked = timeline.scenes[0].links.some(l => l.path === path);
+        linkBtn.classList.toggle('active', nowTracked);
+        linkBtn.innerHTML = nowTracked ? ICON_LINK : ICON_UNLINK;
+        autoSaveTimeline();
+        if (typeof window.renderTimelinePanel === 'function') window.renderTimelinePanel();
+      });
+
+      const syncUI = () => {
+        const timeline = sceneManager.getTimeline();
+        if (!timeline || timeline.scenes.length === 0) return;
+        const nowTracked = timeline.scenes[0].links.some(l => l.path === path);
+        linkBtn.classList.toggle('active', nowTracked);
+        linkBtn.innerHTML = nowTracked ? ICON_LINK : ICON_UNLINK;
+        if (nowTracked) activeLinkedPaths.add(path);
+      };
+      sliderUiSyncFns.push(syncUI);
+      syncUI();
+    }
 
     group.appendChild(btnA);
     group.appendChild(btnB);
     row.appendChild(lbl);
+    if (linkable) row.appendChild(linkBtn);
     row.appendChild(group);
     this._parent().appendChild(row);
     return this;
@@ -1463,16 +1513,64 @@ class UIBuilder {
     group.className = 'mode-btn-row-buttons';
 
     for (const t of toggles) {
+      const cell = document.createElement('div');
+      cell.className = 'toggle-cell';
+      
       const btn = document.createElement('button');
       btn.className = `mode-btn ctrl-interactive${t.obj[t.key] ? ' active-green' : ''}`;
       btn.textContent = t.label;
+
+      const path = t.linkPath;
+      const linkable = !!path;
+      let linkBtn = null;
+      if (linkable) {
+        linkBtn = document.createElement('button');
+        linkBtn.className = 'mini-link-btn ctrl-interactive';
+        linkBtn.innerHTML = ICON_UNLINK;
+        linkBtn.title = 'Link parameter to all scenes';
+      }
+
       btn.addEventListener('click', () => {
         t.obj[t.key] = !t.obj[t.key];
         btn.classList.toggle('active-green', t.obj[t.key]);
+        if (linkable && activeLinkedPaths.has(path)) {
+          const rec = linkEngine.get(path);
+          if (rec) linkEngine.setEnd(path, t.obj[t.key] ? 1 : 0, { autoLink: rec.isLinked });
+        }
         if (t.onChange) t.onChange(t.obj[t.key]);
         regenerate(t.heavy || false);
       });
-      group.appendChild(btn);
+
+      if (linkable) {
+        linkBtn.addEventListener('click', () => {
+          const timeline = sceneManager.getTimeline();
+          if (!timeline || timeline.scenes.length === 0) return;
+          const isTracked = timeline.scenes[0].links.some(l => l.path === path);
+          if (isTracked) removeTrackFromAllScenes(timeline, path);
+          else addTrackToAllScenes(timeline, path, t.obj[t.key] ? 1 : 0);
+
+          const nowTracked = timeline.scenes[0].links.some(l => l.path === path);
+          linkBtn.classList.toggle('active', nowTracked);
+          linkBtn.innerHTML = nowTracked ? ICON_LINK : ICON_UNLINK;
+          autoSaveTimeline();
+          if (typeof window.renderTimelinePanel === 'function') window.renderTimelinePanel();
+        });
+
+        const syncUI = () => {
+          const timeline = sceneManager.getTimeline();
+          if (!timeline || timeline.scenes.length === 0) return;
+          const nowTracked = timeline.scenes[0].links.some(l => l.path === path);
+          linkBtn.classList.toggle('active', nowTracked);
+          linkBtn.innerHTML = nowTracked ? ICON_LINK : ICON_UNLINK;
+          if (nowTracked) activeLinkedPaths.add(path);
+        };
+        sliderUiSyncFns.push(syncUI);
+        syncUI();
+      }
+
+      cell.appendChild(btn);
+      if (linkable) cell.appendChild(linkBtn);
+      group.appendChild(cell);
     }
 
     row.appendChild(group);
@@ -2199,34 +2297,34 @@ function buildControls() {
     .toggle('Master enabled', state.cinematicFx.master, 'enabled', () => { applyVisualHelpers(); regenerate(); })
     .slider('Master intensity', state.cinematicFx.master, 'intensity', 0, 2, 0.01, { fmt: (v) => v.toFixed(2), linkPath: 'cinematic.master.intensity' })
     .toggleRow('Graphs', [
-      { label: 'Points', obj: state.cinematicFx.points, key: 'enabled', onChange: () => regenerate() },
-      { label: 'Lines', obj: state.cinematicFx.atlasLines, key: 'enabled', onChange: () => regenerate() },
+      { label: 'Points', obj: state.cinematicFx.points, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.points.opacity' },
+      { label: 'Lines', obj: state.cinematicFx.atlasLines, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.atlasLines.opacity' },
     ])
     .toggleRow('Guides', [
-      { label: 'Grid', obj: state.visualHelpers, key: 'grid', onChange: () => applyVisualHelpers() },
-      { label: 'Ghost', obj: state.cinematicFx.ghostTraces, key: 'enabled', onChange: () => regenerate() },
-      { label: 'Reference', obj: state.visualHelpers, key: 'referenceRings', onChange: () => applyVisualHelpers() },
-      { label: 'Orbit', obj: state.visualHelpers, key: 'orbitRing', onChange: () => applyVisualHelpers() },
+      { label: 'Grid', obj: state.visualHelpers, key: 'grid', onChange: () => applyVisualHelpers(), linkPath: 'visualHelpers.gridOpacity' },
+      { label: 'Ghost', obj: state.cinematicFx.ghostTraces, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.ghostTraces.opacity' },
+      { label: 'Reference', obj: state.visualHelpers, key: 'referenceRings', onChange: () => applyVisualHelpers(), linkPath: 'visualHelpers.referenceOpacity' },
+      { label: 'Orbit', obj: state.visualHelpers, key: 'orbitRing', onChange: () => applyVisualHelpers(), linkPath: 'visualHelpers.orbitOpacity' },
     ])
-    .modeToggle('Theme', getTheme, setTheme, 'dark', 'light', 'Dark', 'Light')
+    .slider('Theme', state, 'themeBlend', 0, 1, 0.01, {
+      fmt: (v) => v > 0.5 ? 'Light' : 'Dark',
+      linkPath: 'themeBlend',
+      onChange: (v) => { setTheme(v); setThemeBlend(v); },
+    })
     .modeToggle('View', getViewMode, setViewMode, '3d', '2d', '3D', '2D')
     .modeToggle('Render', getRenderMode, setRenderMode, 'cinematic', 'performance', 'Cinematic', 'Performance')
     .toggleRow('Effects', [
-      { label: 'Stars', obj: state.cinematicFx.stars, key: 'enabled', onChange: () => regenerate() },
-      { label: 'Bloom', obj: state.cinematicFx.bloom, key: 'enabled', onChange: () => regenerate() },
-      { label: 'Fog', obj: state.cinematicFx.fog, key: 'enabled', onChange: () => regenerate() },
-      { label: 'Tone', obj: state.cinematicFx.tone, key: 'enabled', onChange: () => regenerate() },
+      { label: 'Stars', obj: state.cinematicFx.stars, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.stars.opacity' },
+      { label: 'Bloom', obj: state.cinematicFx.bloom, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.bloom.strength' },
+      { label: 'Fog', obj: state.cinematicFx.fog, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.fog.density' },
+      { label: 'Tone', obj: state.cinematicFx.tone, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.tone.exposure' },
     ], { cssClass: 'cinematic-only' })
     .childSection('Advanced FX', true, { cssClass: 'cinematic-only' })
-    .slider('star opacity', state.cinematicFx.stars, 'opacity', 0, 1, 0.01, { linkPath: 'cinematic.stars.opacity' })
     .slider('star rot Y', state.cinematicFx.stars, 'rotY', 0, 0.002, 0.0001, { fmt: (v) => v.toFixed(4), linkPath: 'cinematic.stars.rotY' })
     .slider('star rot X', state.cinematicFx.stars, 'rotX', 0, 0.001, 0.00005, { fmt: (v) => v.toFixed(5), linkPath: 'cinematic.stars.rotX' })
     .slider('star drift', state.cinematicFx.stars, 'drift', 0, 1, 0.01, { linkPath: 'cinematic.stars.drift' })
-    .slider('bloom strength', state.cinematicFx.bloom, 'strength', 0, 2, 0.05, { linkPath: 'cinematic.bloom.strength' })
     .slider('bloom radius', state.cinematicFx.bloom, 'radius', 0, 1, 0.05, { linkPath: 'cinematic.bloom.radius' })
-    .slider('bloom threshold', state.cinematicFx.bloom, 'threshold', 0, 1, 0.01, { linkPath: 'cinematic.bloom.threshold' })
-    .slider('fog density', state.cinematicFx.fog, 'density', 0, 0.01, 0.0001, { fmt: (v) => v.toFixed(4), linkPath: 'cinematic.fog.density' })
-    .slider('tone exposure', state.cinematicFx.tone, 'exposure', 0.5, 3, 0.01, { linkPath: 'cinematic.tone.exposure' });
+    .slider('bloom threshold', state.cinematicFx.bloom, 'threshold', 0, 1, 0.01, { linkPath: 'cinematic.bloom.threshold' });
   b.endChild();
 
 
@@ -2236,16 +2334,6 @@ function buildControls() {
       fmt: (v) => v.toFixed(5),
       dynamicBounds: () => computeTraversalTBounds(state, getTSliderStep()),
       linkPath: 'T',
-    })
-    .slider('T_lowerBound', state, 'T_lowerBound', -1000000, 1000000, 0.000001, {
-      fmt: (v) => v.toFixed(5),
-      label: 'T lowerBound',
-      onCommit: (v) => applyTraversalCommit(state, 'T_lowerBound', v),
-    })
-    .slider('T_upperBound', state, 'T_upperBound', -1000000, 1000000, 0.000001, {
-      fmt: (v) => v.toFixed(5),
-      label: 'T upperBound',
-      onCommit: (v) => applyTraversalCommit(state, 'T_upperBound', v),
     })
     .html(`<div class="mode-row">
       <span class="slider-label">step loop</span>
@@ -2371,52 +2459,40 @@ function buildControls() {
   b.section('Scaling', true)
     .slider('l_base', state, 'l_base', 0.01, 20, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'l_base' })
     .slider('l_func', state, 'l_func', 0.01, 20, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'l_func' })
-    .html(`<div class="mode-row">
-      <span class="slider-label">k alignment bool</span>
-      <button class="mode-pill ctrl-interactive" id="kbool-0">0</button>
-      <button class="mode-pill ctrl-interactive" id="kbool-1">1</button>
-    </div>`)
-    .slider('q_scale (strands)', state, 'q_scale', 0, 50, 0.001, {
-      fmt: (v) => v.toFixed(6),
-      linkPath: 'q_scale',
-      dynamicBounds: () => ({ min: 0, max: 50, step: state.q_scale_s || 0.001 }),
-    })
-    .slider('q_scale_b', state, 'q_scale_b', 1, 100000000, 1, { fmt: (v) => v.toFixed(0) })
-    .slider('q_tauScale', state, 'q_tauScale', -10, 10, 1, { fmt: (v) => v.toFixed(0), linkPath: 'q_tauScale' })
-    .html(`<div class="mode-row">
-      <span class="slider-label">q_bool</span>
-      <button class="mode-pill ctrl-interactive" id="qbool-0">0</button>
-      <button class="mode-pill ctrl-interactive" id="qbool-1">1</button>
-    </div>`)
-    .html(`<div class="mode-row">
-      <span class="slider-label">q_correction</span>
-      <button class="mode-pill ctrl-interactive" id="qcorr-0">0</button>
-      <button class="mode-pill ctrl-interactive" id="qcorr-1">1</button>
-    </div>`)
-    .slider('k2', state, 'k2', 0, 10, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'k2' })
-    .slider('k3', state, 'k3', 0.01, 10, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'k3' });
+    .modeToggle('k alignment bool', 
+      () => Number(state.kStepsInAlignmentsBool), 
+      (v) => { state.kStepsInAlignmentsBool = v; }, 
+      0, 1, '0', '1', 
+      { linkPath: 'kStepsInAlignmentsBool' }
+    );
 
-  bindModeButtons(
-    controlsContainer,
-    'kbool',
-    [{ value: '0' }, { value: '1' }],
-    () => String(state.kStepsInAlignmentsBool),
-    (v) => { state.kStepsInAlignmentsBool = Number(v); },
-  );
-  bindModeButtons(
-    controlsContainer,
-    'qbool',
-    [{ value: '0' }, { value: '1' }],
-    () => String(state.q_bool),
-    (v) => { state.q_bool = Number(v); },
-  );
-  bindModeButtons(
-    controlsContainer,
-    'qcorr',
-    [{ value: '0' }, { value: '1' }],
-    () => String(state.q_correction),
-    (v) => { state.q_correction = Number(v); },
-  );
+  // Q-parameters are only visible if kStepsInAlignmentsBool === 1
+  if (state.kStepsInAlignmentsBool === 1) {
+    b.childSection('q-Scaling', false)
+      .slider('q_scale (strands)', state, 'q_scale', 0, 50, 0.001, {
+        fmt: (v) => v.toFixed(6),
+        linkPath: 'q_scale',
+        dynamicBounds: () => ({ min: 0, max: 50, step: state.q_scale_s || 0.001 }),
+      })
+      .slider('q_scale_b', state, 'q_scale_b', 1, 100000000, 1, { fmt: (v) => v.toFixed(0) })
+      .slider('q_tauScale', state, 'q_tauScale', -10, 10, 1, { fmt: (v) => v.toFixed(0), linkPath: 'q_tauScale' })
+      .modeToggle('q_bool', 
+        () => Number(state.q_bool), 
+        (v) => { state.q_bool = v; }, 
+        0, 1, '0', '1', 
+        { linkPath: 'q_bool' }
+      )
+      .modeToggle('q_correction', 
+        () => Number(state.q_correction), 
+        (v) => { state.q_correction = v; }, 
+        0, 1, '0', '1', 
+        { linkPath: 'q_correction' }
+      );
+    b.endChild();
+  }
+
+  b.slider('k2', state, 'k2', 0, 10, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'k2' })
+   .slider('k3', state, 'k3', 0.01, 10, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'k3' });
 
   buildUnifiedFunctionControlSection(b);
 
@@ -2441,6 +2517,7 @@ function buildControls() {
     for (const sync of sliderUiSyncFns) sync();
     refreshCameraSliderBounds();
     syncCameraSliderUi();
+    syncSliderReadOnlyState();
   });
   refreshSliderBounds();
   for (const sync of sliderUiSyncFns) sync();
@@ -2464,6 +2541,14 @@ function buildTransportBar() {
       setCollapsed(true);
       buildTransportBar();
     }
+    // Start/stop timeline playback alongside animation
+    if (!wasPlaying) {
+      sceneManager.startPlayback();
+      audioPlayer.play();
+    } else {
+      // Pausing — pause audio but keep timeline data intact
+      audioPlayer.pause();
+    }
     animation.toggle();
     deriveState();
     const signature = computeMathSignature(state, computePointBudget());
@@ -2474,6 +2559,7 @@ function buildTransportBar() {
     }
     updateBufferStatus();
     updateTransportUI();
+    syncSliderReadOnlyState();
   });
 
   const stopBtn = document.createElement('button');
@@ -2483,6 +2569,8 @@ function buildTransportBar() {
   stopBtn.title = 'Stop';
   stopBtn.addEventListener('click', () => {
     animation.stop();
+    sceneManager.stopPlayback();
+    audioPlayer.pause();
     if (state.autoHidePanels && isCollapsed()) {
       setCollapsed(false);
       buildTransportBar();
@@ -2497,6 +2585,9 @@ function buildTransportBar() {
     updateBufferStatus();
     regenerate(true);
     updateTransportUI();
+    syncSliderReadOnlyState();
+    for (const sync of sliderUiSyncFns) sync();
+    syncCameraSliderUi();
   });
 
   const scrub = document.createElement('input');
@@ -2521,6 +2612,25 @@ function buildTransportBar() {
     regenerate();
   });
 
+  const timelineBtn = document.createElement('button');
+  timelineBtn.className = 'transport-btn-mini ctrl-interactive';
+  timelineBtn.innerHTML = '🎬';
+  timelineBtn.title = 'Timeline / Scenes';
+  timelineBtn.addEventListener('click', () => {
+    const pnl = document.getElementById('timeline-panel');
+    if (pnl) {
+      if (pnl.dataset.visible === 'true') {
+        pnl.dataset.visible = 'false';
+        document.body.dataset.timelineState = 'hidden';
+        document.body.classList.remove('tl-open');
+      } else {
+        pnl.dataset.visible = 'true';
+        document.body.dataset.timelineState = 'expanded';
+        document.body.classList.add('tl-open');
+      }
+    }
+  });
+
   const gearBtn = document.createElement('button');
   gearBtn.className = 'transport-gear ctrl-interactive';
   gearBtn.innerHTML = '&#9776;';
@@ -2530,6 +2640,7 @@ function buildTransportBar() {
   bar.appendChild(playBtn);
   bar.appendChild(stopBtn);
   bar.appendChild(scrub);
+  bar.appendChild(timelineBtn);
   bar.appendChild(gearBtn);
 }
 
@@ -2542,6 +2653,25 @@ function updateTransportUI() {
     playBtn.innerHTML = animation.playing ? '&#10074;&#10074;' : '&#9654;';
     playBtn.title = animation.playing ? 'Pause' : 'Play';
   }
+}
+
+function syncSliderReadOnlyState() {
+  const isPlaying = typeof sceneManager !== 'undefined' && sceneManager && sceneManager.isPlaying();
+  const containers = [
+    document.getElementById('controls-container'), 
+    document.getElementById('camera-accordion-body')
+  ];
+  
+  containers.forEach(container => {
+    if (!container) return;
+    const inputs = container.querySelectorAll('.slider-input, .ctrl-interactive, input[type="number"], input[type="text"]');
+    inputs.forEach(el => {
+      if (el.classList.contains('panel-visibility-btn')) return;
+      el.disabled = isPlaying;
+      el.style.pointerEvents = isPlaying ? 'none' : 'auto';
+      el.style.opacity = isPlaying ? '0.4' : '1';
+    });
+  });
 }
 
 function consumeBufferedPayload(derived, signature, budget, fx, stepsToConsume) {
@@ -2615,6 +2745,12 @@ function setupKeyboard() {
             setCollapsed(true);
             buildTransportBar();
           }
+          if (!wasPlaying) {
+            sceneManager.startPlayback();
+            audioPlayer.play();
+          } else {
+            audioPlayer.pause();
+          }
           animation.toggle();
           deriveState();
           const signature = computeMathSignature(state, computePointBudget());
@@ -2625,6 +2761,7 @@ function setupKeyboard() {
           }
           updateBufferStatus();
           updateTransportUI();
+          syncSliderReadOnlyState();
         }
         break;
       case 'Tab':
@@ -2634,6 +2771,8 @@ function setupKeyboard() {
         break;
       case 'Escape':
         animation.stop();
+        sceneManager.stopPlayback();
+        audioPlayer.pause();
         if (state.autoHidePanels && isCollapsed()) {
           setCollapsed(false);
           buildTransportBar();
@@ -2647,6 +2786,7 @@ function setupKeyboard() {
         updateBufferStatus();
         regenerate(true);
         updateTransportUI();
+        syncSliderReadOnlyState();
         break;
       case 'r':
       case 'R':
@@ -2663,6 +2803,7 @@ export function initControls() {
   console.log('[function-control] registry coverage', registryCoverageSummary());
   buildTransportBar();
   setupKeyboard();
+  initTimelinePanel();
   setExternalUpdate(animationFrame);
   regenerate();
   // Init audio player (async — doesn't block render)

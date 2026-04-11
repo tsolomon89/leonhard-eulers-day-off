@@ -29,19 +29,21 @@ function generateId() {
 
 /**
  * Create a scene link (a parameter animation track within a scene).
+ * Direction is implicit: if endValue > baseValue it goes forward,
+ * if endValue < baseValue it goes backward.
  *
  * @param {string} path      - dot-path, e.g. 'T', 'camera.position.z'
  * @param {number} baseValue - start value (forced from prior scene on playback)
  * @param {number} endValue  - end value (user-authored)
- * @param {number} [direction=1] - 1 (forward) or -1 (reverse)
  * @returns {SceneLink}
  */
-export function createSceneLink(path, baseValue, endValue, direction = 1) {
+export function createSceneLink(path, baseValue, endValue, opts = {}) {
   return {
     path: String(path),
     baseValue: Number.isFinite(baseValue) ? baseValue : 0,
     endValue: Number.isFinite(endValue) ? endValue : 0,
-    direction: direction === -1 ? -1 : 1,
+    transitionFactor: opts.transitionFactor ?? 0,
+    type: opts.type || 'numeric',
   };
 }
 
@@ -107,6 +109,15 @@ export function addScene(timeline, opts = {}, afterIndex) {
 
   const name = opts.name || `Scene ${timeline.scenes.length + 1}`;
   const scene = createScene({ ...opts, name });
+
+  // Auto-inherit tracked parameters from the preceding scene
+  const prevScene = idx > 0 ? timeline.scenes[idx - 1] : null;
+  if (prevScene && scene.links.length === 0) {
+    for (const link of prevScene.links) {
+      scene.links.push(createSceneLink(link.path, link.endValue, link.endValue, { transitionFactor: link.transitionFactor, type: link.type }));
+    }
+  }
+
   timeline.scenes.splice(idx, 0, scene);
   return scene;
 }
@@ -185,18 +196,18 @@ export function getActiveScene(timeline) {
  * @param {string} path
  * @param {number} baseValue
  * @param {number} endValue
- * @param {number} [direction=1]
  * @returns {SceneLink}
  */
-export function addTrack(scene, path, baseValue, endValue, direction = 1) {
+export function addTrack(scene, path, baseValue, endValue, opts = {}) {
   const existing = scene.links.find(l => l.path === path);
   if (existing) {
     existing.baseValue = Number.isFinite(baseValue) ? baseValue : existing.baseValue;
     existing.endValue = Number.isFinite(endValue) ? endValue : existing.endValue;
-    existing.direction = direction === -1 ? -1 : 1;
+    if (opts.transitionFactor !== undefined) existing.transitionFactor = opts.transitionFactor;
+    if (opts.type !== undefined) existing.type = opts.type;
     return existing;
   }
-  const link = createSceneLink(path, baseValue, endValue, direction);
+  const link = createSceneLink(path, baseValue, endValue, opts);
   scene.links.push(link);
   return link;
 }
@@ -224,6 +235,43 @@ export function removeTrack(scene, path) {
  */
 export function getTrack(scene, path) {
   return scene.links.find(l => l.path === path) || null;
+}
+
+/**
+ * Add a track to ALL scenes in the timeline.
+ * Scene 0 gets baseValue = defaultValue. Scene N>0 inherits from previous endValue.
+ *
+ * @param {Timeline} timeline
+ * @param {string} path
+ * @param {number} defaultValue - the current live value
+ * @param {Object} [opts] - additional link options
+ */
+export function addTrackToAllScenes(timeline, path, defaultValue, opts = {}) {
+  for (let i = 0; i < timeline.scenes.length; i++) {
+    const scene = timeline.scenes[i];
+    const existing = scene.links.find(l => l.path === path);
+    if (existing) continue;
+
+    if (i === 0) {
+      scene.links.push(createSceneLink(path, defaultValue, defaultValue, opts));
+    } else {
+      const prevLink = timeline.scenes[i - 1].links.find(l => l.path === path);
+      const base = prevLink ? prevLink.endValue : defaultValue;
+      scene.links.push(createSceneLink(path, base, base, opts));
+    }
+  }
+}
+
+/**
+ * Remove a track from ALL scenes in the timeline.
+ *
+ * @param {Timeline} timeline
+ * @param {string} path
+ */
+export function removeTrackFromAllScenes(timeline, path) {
+  for (const scene of timeline.scenes) {
+    removeTrack(scene, path);
+  }
 }
 
 // ── Timeline time computation ────────────────────────────────
@@ -374,6 +422,50 @@ export function buildSceneSnapshots(timeline, initialState) {
 }
 
 /**
+ * Compute the inherited base value for each linked path in a scene.
+ * For Scene 0, the base is the current live state.
+ * For Scene N>0, the inherited base for a path is the endValue of that
+ * path in the nearest preceding scene that also has it linked, or the
+ * current live state if no preceding scene links it.
+ *
+ * @param {Timeline} timeline
+ * @param {number} sceneIndex
+ * @param {Object} liveState - current state object (used for scene 0 and unlinked fallback)
+ * @returns {Map<string, number>} path → inherited base value
+ */
+export function getInheritedBases(timeline, sceneIndex, liveState) {
+  const result = new Map();
+  const scene = timeline.scenes[sceneIndex];
+  if (!scene) return result;
+
+  for (const link of scene.links) {
+    if (sceneIndex === 0) {
+      // Scene 0: base = current live value
+      const live = readPath(liveState, link.path);
+      result.set(link.path, Number.isFinite(live) ? live : link.baseValue);
+    } else {
+      // Walk backwards to find the nearest preceding scene with this path linked
+      let inherited = undefined;
+      for (let j = sceneIndex - 1; j >= 0; j--) {
+        const prevLink = timeline.scenes[j].links.find(l => l.path === link.path);
+        if (prevLink) {
+          inherited = prevLink.endValue;
+          break;
+        }
+      }
+      if (inherited === undefined) {
+        // No prior scene links this path — use live state as base
+        const live = readPath(liveState, link.path);
+        inherited = Number.isFinite(live) ? live : link.baseValue;
+      }
+      result.set(link.path, inherited);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Compute the terminal (end) state of the entire timeline.
  *
  * @param {Timeline} timeline
@@ -438,7 +530,6 @@ export function serializeTimeline(timeline, initialState = null) {
         path: l.path,
         baseValue: l.baseValue,
         endValue: l.endValue,
-        direction: l.direction,
       })),
     })),
   };
@@ -461,7 +552,7 @@ export function deserializeTimeline(data) {
       duration: s.duration,
       easing: s.easing,
       links: Array.isArray(s.links) ? s.links.map(l => createSceneLink(
-        l.path, l.baseValue, l.endValue, l.direction
+        l.path, l.baseValue, l.endValue
       )) : [],
     })),
     loop: data.loop === true,

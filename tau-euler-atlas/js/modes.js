@@ -8,6 +8,7 @@
 
 const modes = {
   theme: 'dark',           // 'dark' | 'light'
+  themeBlend: 0,           // 0.0 to 1.0
   render: 'cinematic',     // 'cinematic' | 'performance'
   view: '3d',              // '3d' | '2d'
   collapsed: false,
@@ -22,6 +23,7 @@ let _onCollapseChange = null;
 // ── Getters ──────────────────────────────────────────────────
 
 export function getTheme()     { return modes.theme; }
+export function getThemeBlend() { return modes.themeBlend; }
 export function getRenderMode(){ return modes.render; }
 export function getViewMode()  { return modes.view; }
 export function isCollapsed()  { return modes.collapsed; }
@@ -35,11 +37,18 @@ export function isLight()      { return modes.theme === 'light'; }
 // ── Setters ──────────────────────────────────────────────────
 
 export function setTheme(theme) {
-  modes.theme = theme;
-  document.body.setAttribute('data-theme', theme);
+  if (typeof theme === 'number') {
+    modes.themeBlend = Math.max(0, Math.min(1, theme));
+    modes.theme = modes.themeBlend > 0.5 ? 'light' : 'dark';
+  } else {
+    modes.theme = theme === 'light' ? 'light' : 'dark';
+    modes.themeBlend = modes.theme === 'light' ? 1 : 0;
+  }
+  
+  document.body.setAttribute('data-theme', modes.theme);
   // CSS body[data-theme="light"] handles all variable overrides —
   // no inline style overrides needed (v5 variable system).
-  if (_onThemeChange) _onThemeChange(theme);
+  if (_onThemeChange) _onThemeChange(modes.themeBlend, modes.theme);
 }
 
 export function setRenderMode(mode) {

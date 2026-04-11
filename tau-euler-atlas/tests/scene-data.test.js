@@ -68,16 +68,18 @@ test('createScene falls back to linear for invalid easing', () => {
 // ═════════════════════════════════════════════════════════════
 
 test('createSceneLink stores values', () => {
-  const l = createSceneLink('T', 0, 2, -1);
+  const l = createSceneLink('T', 0, 2, { transitionFactor: 0.5, type: 'numeric' });
   assert.equal(l.path, 'T');
   assert.equal(l.baseValue, 0);
   assert.equal(l.endValue, 2);
-  assert.equal(l.direction, -1);
+  assert.equal(l.transitionFactor, 0.5);
+  assert.equal(l.type, 'numeric');
 });
 
-test('createSceneLink defaults direction to 1', () => {
+test('createSceneLink defaults missing opts', () => {
   const l = createSceneLink('T', 0, 1);
-  assert.equal(l.direction, 1);
+  assert.equal(l.transitionFactor, 0);
+  assert.equal(l.type, 'numeric');
 });
 
 // ═════════════════════════════════════════════════════════════
