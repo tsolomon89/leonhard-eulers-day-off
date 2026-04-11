@@ -193,9 +193,9 @@ export const state = {
   cinematicFx: defaultCinematicFx(),
   themeBlend: 0,
   visualHelpers: {
-    referenceRings: true, referenceOpacity: 0.5,
-    orbitRing: true, orbitOpacity: 0.4,
-    grid: true, gridOpacity: 0.6,
+    referenceRings: false, referenceOpacity: 0.5,
+    orbitRing: false, orbitOpacity: 0.4,
+    grid: false, gridOpacity: 0.6,
   },
 };
 
@@ -272,6 +272,31 @@ let _lastFrameMs = performance.now();
 let _stepBounceDir = 1;
 let _bufferGenerationToken = 0;
 const MAX_BUFFER_BYTES = DEFAULT_BUFFER_MAX_BYTES;
+let _timelineHiddenByAutoHide = false;
+
+function hideTimelineForAutoHide() {
+  const pnl = document.getElementById('timeline-panel');
+  if (pnl && pnl.dataset.visible === 'true') {
+    pnl.dataset.visible = 'false';
+    document.body.dataset.timelineState = 'hidden';
+    document.body.classList.remove('tl-open');
+    _timelineHiddenByAutoHide = true;
+  } else {
+    _timelineHiddenByAutoHide = false;
+  }
+}
+
+function restoreTimelineForAutoHide() {
+  if (_timelineHiddenByAutoHide) {
+    const pnl = document.getElementById('timeline-panel');
+    if (pnl) {
+      pnl.dataset.visible = 'true';
+      document.body.dataset.timelineState = 'expanded';
+      document.body.classList.add('tl-open');
+    }
+    _timelineHiddenByAutoHide = false;
+  }
+}
 
 const sliderUiSyncFns = [];
 const sliderBoundsSyncFns = [];
@@ -444,17 +469,17 @@ function emptyPointCloudData() {
 
 function normalizeVisualHelpers() {
   if (!state.visualHelpers || typeof state.visualHelpers !== 'object') {
-    state.visualHelpers = { referenceRings: true, orbitRing: true, grid: true };
+    state.visualHelpers = { referenceRings: false, orbitRing: false, grid: false };
     return;
   }
   if (typeof state.visualHelpers.referenceRings !== 'boolean') {
-    state.visualHelpers.referenceRings = true;
+    state.visualHelpers.referenceRings = false;
   }
   if (typeof state.visualHelpers.orbitRing !== 'boolean') {
-    state.visualHelpers.orbitRing = true;
+    state.visualHelpers.orbitRing = false;
   }
   if (typeof state.visualHelpers.grid !== 'boolean') {
-    state.visualHelpers.grid = true;
+    state.visualHelpers.grid = false;
   }
 }
 
@@ -2540,6 +2565,7 @@ function buildTransportBar() {
     if (!wasPlaying && state.autoHidePanels && !isCollapsed()) {
       setCollapsed(true);
       buildTransportBar();
+      hideTimelineForAutoHide();
     }
     // Start/stop timeline playback alongside animation
     if (!wasPlaying) {
@@ -2574,6 +2600,7 @@ function buildTransportBar() {
     if (state.autoHidePanels && isCollapsed()) {
       setCollapsed(false);
       buildTransportBar();
+      restoreTimelineForAutoHide();
     }
     _stepBounceDir = 1;
     deriveState();
@@ -2744,6 +2771,7 @@ function setupKeyboard() {
           if (!wasPlaying && state.autoHidePanels && !isCollapsed()) {
             setCollapsed(true);
             buildTransportBar();
+            hideTimelineForAutoHide();
           }
           if (!wasPlaying) {
             sceneManager.startPlayback();
@@ -2776,6 +2804,7 @@ function setupKeyboard() {
         if (state.autoHidePanels && isCollapsed()) {
           setCollapsed(false);
           buildTransportBar();
+          restoreTimelineForAutoHide();
         }
         _stepBounceDir = 1;
         deriveState();

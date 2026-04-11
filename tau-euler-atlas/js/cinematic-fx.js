@@ -5,7 +5,7 @@ const DEFAULT_CINEMATIC_FX = Object.freeze({
   points: { enabled: true, size: 1.5, opacity: 0.7, k3: 1 },
   primaryLines: { enabled: true, width: 2.0, opacity: 0.5 },
   atlasLines: { enabled: true, width: 1.0, opacity: 0.35, pathBudget: 200 },
-  ghostTraces: { enabled: true, showAlpha: true, opacity: 0.7 },
+  ghostTraces: { enabled: false, showAlpha: true, opacity: 0.7 },
   stars: { enabled: true, opacity: 0.25, rotX: 0.00008, rotY: 0.0002, drift: 0.04 },
   bloom: { enabled: true, strength: 0.45, radius: 0.45, threshold: 0.8 },
   fog: { enabled: true, density: 0.0008 },
