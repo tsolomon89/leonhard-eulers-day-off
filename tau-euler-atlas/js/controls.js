@@ -324,7 +324,7 @@ const sceneManager = createSceneManager({
 /** Auto-save timeline to localStorage on changes. */
 export function autoSaveTimeline() {
   const tl = sceneManager.getTimeline();
-  if (tl) saveTimelineToLS(tl);
+  if (tl) { saveTimelineToLS(tl); audioPlayer.setTimelinePlaylist(tl.audioPlaylist || []); }
 }
 
 /**

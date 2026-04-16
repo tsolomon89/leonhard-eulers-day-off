@@ -5,6 +5,7 @@
 
 import { getSceneManager, autoSaveTimeline } from './controls.js';
 import { EASING_GROUPS } from './easing.js';
+import * as audioPlayer from './audio-player.js';
 import {
   addScene,
   deleteScene,
@@ -71,6 +72,9 @@ export function initTimelinePanel() {
   // We need to re-render when the timeline mutates or playback state changes
   // For MVP, we will expose a global function to trigger timeline render
   window.renderTimelinePanel = renderTimelinePanel;
+
+  // Listen to audio player state changes (e.g. tracks finished loading)
+  audioPlayer.onChange(() => renderTimelinePanel());
 
   // Initial render
   renderTimelinePanel();
@@ -143,6 +147,9 @@ export function renderTimelinePanel() {
           Total Duration: ${totalDuration(timeline).toFixed(1)}s<br/>
           Scenes: ${timeline.scenes.length}
         </div>
+      </div>
+      <div class="timeline-mid" id="tl-audio-column">
+        <!-- populated by renderAudioSequence -->
       </div>
       <div class="timeline-rhs">
         <div id="tl-scene-strip" class="scene-strip-container"></div>
@@ -236,6 +243,7 @@ export function renderTimelinePanel() {
   // Render RHS only if not fully collapsed, or just render it anyway so it's ready.
   renderSceneStrip(sm, timeline);
   renderSceneEditor(sm, timeline);
+  renderAudioSequence(timeline);
 }
 
 function renderSceneStrip(sm, timeline) {
@@ -606,6 +614,92 @@ function updatePlayheadUI(sm) {
  * Update live value readouts on each track row during playback.
  * Reads current state values and displays interpolated position.
  */
+function renderAudioSequence(timeline) {
+  const container = document.getElementById('tl-audio-column');
+  if (!container) return;
+
+  const available = audioPlayer.getAvailableTracks();
+  
+  let html = `
+    <div class="timeline-header" style="height: 29px;">
+      <span style="font-size: 11px; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.05em; font-weight: 600;">Audio Sequence</span>
+    </div>
+    <div style="display: flex; gap: 4px; margin-bottom: 8px;">
+      <select id="tl-audio-select" class="scene-input" style="flex: 1; min-width: 0; padding: 4px; font-family: var(--ui-font); font-size: 11px; background: var(--input-bg); color: var(--text-primary);">
+        <option value="" style="background: var(--body-bg); color: var(--text-primary);">-- Add Track --</option>
+        ${available.map(t => `<option value="${t.file}" style="background: var(--body-bg); color: var(--text-primary);">${t.title}</option>`).join('')}
+      </select>
+      <button id="tl-audio-add" class="timeline-btn" style="flex-shrink: 0; padding: 4px 8px;">+</button>
+    </div>
+    <div id="tl-audio-list" style="display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1; scrollbar-width: thin; padding-right: 2px;">
+  `;
+
+  if (!timeline.audioPlaylist || timeline.audioPlaylist.length === 0) {
+    html += `<div style="font-size: 11px; color: var(--text-dim); text-align: center; padding: 12px 0; font-style: italic;">(Alphabetical Default)</div>`;
+  } else {
+    timeline.audioPlaylist.forEach((file, idx) => {
+      const title = available.find(t => t.file === file)?.title || file;
+      html += `
+        <div class="audio-seq-item" style="display: flex; align-items: center; background: var(--child-bg); padding: 5px 6px; border-radius: 4px; border: 1px solid var(--child-border); gap: 4px;">
+          <div style="flex: 1; min-width: 0; font-size: 11px; font-family: var(--ui-font); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${title}">${title}</div>
+          <button class="mini-link-btn audio-up-btn" data-idx="${idx}" title="Move Up">↑</button>
+          <button class="mini-link-btn audio-down-btn" data-idx="${idx}" title="Move Down">↓</button>
+          <button class="mini-link-btn audio-del-btn" data-idx="${idx}" style="color: var(--accent-red);" title="Remove">✕</button>
+        </div>
+      `;
+    });
+  }
+
+  html += `</div>`;
+  container.innerHTML = html;
+
+  // Events
+  document.getElementById('tl-audio-add').addEventListener('click', () => {
+    const sel = document.getElementById('tl-audio-select');
+    if (sel.value) {
+      if (!timeline.audioPlaylist) timeline.audioPlaylist = [];
+      timeline.audioPlaylist.push(sel.value);
+      autoSaveTimeline();
+      renderTimelinePanel();
+    }
+  });
+
+  container.querySelectorAll('.audio-up-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.dataset.idx, 10);
+      if (idx > 0) {
+        const temp = timeline.audioPlaylist[idx];
+        timeline.audioPlaylist[idx] = timeline.audioPlaylist[idx - 1];
+        timeline.audioPlaylist[idx - 1] = temp;
+        autoSaveTimeline();
+        renderTimelinePanel();
+      }
+    });
+  });
+
+  container.querySelectorAll('.audio-down-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.dataset.idx, 10);
+      if (idx < timeline.audioPlaylist.length - 1) {
+        const temp = timeline.audioPlaylist[idx];
+        timeline.audioPlaylist[idx] = timeline.audioPlaylist[idx + 1];
+        timeline.audioPlaylist[idx + 1] = temp;
+        autoSaveTimeline();
+        renderTimelinePanel();
+      }
+    });
+  });
+
+  container.querySelectorAll('.audio-del-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.dataset.idx, 10);
+      timeline.audioPlaylist.splice(idx, 1);
+      autoSaveTimeline();
+      renderTimelinePanel();
+    });
+  });
+}
+
 function updateLiveValues(sm) {
   const info = sm.getPlaybackInfo();
   const timeline = sm.getTimeline();

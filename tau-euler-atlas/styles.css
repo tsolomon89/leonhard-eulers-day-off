@@ -1406,6 +1406,15 @@ body[data-render="performance"] .cinematic-only {
   overflow-y: auto;
   scrollbar-width: thin;
 }
+.timeline-mid {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  background: var(--section-bg);
+  border-right: 1px solid var(--section-border);
+  width: 250px;
+  flex-shrink: 0;
+}
 
 .scene-editor-title {
   font-size: 11px;

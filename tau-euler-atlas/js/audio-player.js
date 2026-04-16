@@ -13,7 +13,8 @@ const LS_VOLUME_KEY = 'tau-atlas-audio-volume';
 // ── State ────────────────────────────────────────────────────
 
 const state = {
-  tracks: [],          // [{ file, title, duration }]
+  allTracks: [],       // [{ file, title, duration }] (full directory cache)
+  tracks: [],          // [{ file, title, duration }] (active sequence)
   currentIndex: -1,
   playing: false,
   currentTime: 0,
@@ -38,6 +39,32 @@ export function onChange(fn) {
   return () => _listeners.delete(fn);
 }
 
+export function getAvailableTracks() {
+  return state.allTracks;
+}
+
+export function setTimelinePlaylist(filenames) {
+  if (!Array.isArray(filenames) || filenames.length === 0) {
+    state.tracks = state.allTracks.slice();
+  } else {
+    state.tracks = filenames
+      .map(name => state.allTracks.find(t => t.file === name))
+      .filter(t => !!t);
+  }
+  
+  // Hard stop and reset to start of new sequence
+  pause();
+  state.currentIndex = state.tracks.length > 0 ? 0 : -1;
+  state.currentTime = 0;
+  if (_audio) {
+    _audio.currentTime = 0;
+    if (state.currentIndex >= 0) {
+      _loadTrack(state.currentIndex, false);
+    }
+  }
+  _notify();
+}
+
 export async function init() {
   _audio = new Audio();
   _audio.volume = state.volume;
@@ -56,6 +83,7 @@ export async function init() {
 
   try {
     const tracks = await _discoverTracks();
+    state.allTracks = tracks;
     state.tracks = tracks;
     state.currentIndex = tracks.length > 0 ? 0 : -1;
     state.loading = false;

@@ -160,6 +160,7 @@ export function createTimeline() {
     scenes: [createScene({ name: 'Scene 1' })],
     loop: 'none',       // 'none' | 'wrap' | 'bounce'
     loopCount: 0,       // 0 = infinite, N > 0 = stop after N loops
+    audioPlaylist: ['Bounded_From_Itself.mp3'],  // ordered array of filenames
     activeSceneIndex: 0,
   };
 }
@@ -601,6 +602,7 @@ export function serializeTimeline(timeline, initialState = null) {
     initialState: sanitizeInitialStateSnapshot(initialState),
     loop: timeline.loop,
     loopCount: timeline.loopCount || 0,
+    audioPlaylist: Array.isArray(timeline.audioPlaylist) ? timeline.audioPlaylist : [],
     activeSceneIndex: timeline.activeSceneIndex,
     scenes: timeline.scenes.map(scene => ({
       id: scene.id,
@@ -636,6 +638,7 @@ export function deserializeTimeline(data) {
   }
 
   const timeline = {
+    audioPlaylist: Array.isArray(data.audioPlaylist) ? data.audioPlaylist.slice() : [],
     scenes: data.scenes.map(s => createScene({
       name: s.name,
       duration: s.duration,
