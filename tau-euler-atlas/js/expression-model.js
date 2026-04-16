@@ -2,6 +2,7 @@ import {
   EXPONENT_FAMILIES,
   FUNCTION_NODES,
   VARIANT_DEFINITIONS,
+  canonicalizeFunctionKey,
   getFunctionNodesByExponent,
 } from './function-registry.js';
 
@@ -32,6 +33,7 @@ const DEFAULT_STYLE = Object.freeze({
   lineOpacity: 1,
   pointBloom: 1,
   lineBloom: 1,
+  colorHue: undefined,
 });
 
 const DEFAULT_PARENT_STYLE = Object.freeze({
@@ -42,6 +44,7 @@ const DEFAULT_PARENT_STYLE = Object.freeze({
   lineOpacity: 0.42,
   pointBloom: 1,
   lineBloom: 1,
+  colorHue: 0.62,
 });
 
 const DEFAULT_SET_STYLE = Object.freeze({
@@ -60,50 +63,63 @@ const DEFAULT_TRANSFORM_STYLE = Object.freeze({
   log_tan: { ...DEFAULT_STYLE, enabled: false },
 });
 
-const POSITIVE_COLORS = [
-  '#ff4f4f',
-  '#ff7f50',
-  '#ffb347',
-  '#ffd166',
-  '#9be564',
-  '#35d07f',
-  '#2dbca8',
-  '#4ecdc4',
-  '#4da3ff',
-  '#9d6bff',
-  '#7ca2ff',
-  '#5fb8ff',
-];
+function wrapHue01(v) {
+  if (!Number.isFinite(v)) return undefined;
+  const frac = v - Math.floor(v);
+  return frac < 0 ? frac + 1 : frac;
+}
 
-const NEGATIVE_COLORS = [
-  '#ff5d8f',
-  '#ff7ac6',
-  '#f28bff',
-  '#c58bff',
-  '#9f96ff',
-  '#8798ff',
-  '#6aa4ff',
-  '#73abff',
-  '#51c8ff',
-  '#4ee4d0',
-  '#56d8b2',
-  '#6be59c',
-];
+function hexToRgb(hex) {
+  const raw = typeof hex === 'string' ? hex.trim() : '';
+  const h = raw.startsWith('#') ? raw.slice(1) : raw;
+  if (h.length !== 6) return null;
+  const int = Number.parseInt(h, 16);
+  if (!Number.isFinite(int)) return null;
+  return [
+    ((int >> 16) & 0xff) / 255,
+    ((int >> 8) & 0xff) / 255,
+    (int & 0xff) / 255,
+  ];
+}
+
+function rgbToHue(r, g, b) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  if (delta <= 1e-12) return 0;
+
+  let h;
+  if (max === r) h = ((g - b) / delta) % 6;
+  else if (max === g) h = (b - r) / delta + 2;
+  else h = (r - g) / delta + 4;
+
+  return wrapHue01(h / 6);
+}
+
+export function hueFromHex(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return undefined;
+  return rgbToHue(rgb[0], rgb[1], rgb[2]);
+}
+
+export function normalizeColorHue(value, fallback = undefined) {
+  const wrapped = wrapHue01(value);
+  if (wrapped === undefined) return fallback;
+  return wrapped;
+}
 
 function makeChildDefaults() {
   const children = {};
-  POSITIVE_CHILDREN.forEach((child, idx) => {
+  POSITIVE_CHILDREN.forEach((child) => {
     children[child.key] = {
       ...DEFAULT_STYLE,
       enabled: true,
-      color: POSITIVE_COLORS[idx] || '#ffffff',
     };
   });
-  NEGATIVE_CHILDREN.forEach((child, idx) => {
+  NEGATIVE_CHILDREN.forEach((child) => {
     children[child.key] = {
       ...DEFAULT_STYLE,
       enabled: true,
-      color: NEGATIVE_COLORS[idx] || '#ffffff',
     };
   });
   return children;
@@ -121,6 +137,8 @@ function makeChildVariantDefaults() {
 }
 
 function cloneStyle(style) {
+  let colorHue = normalizeColorHue(style.colorHue, undefined);
+  if (colorHue === undefined) colorHue = hueFromHex(style.color);
   return {
     enabled: style.enabled !== false,
     pointSize: Number.isFinite(style.pointSize) ? style.pointSize : 1,
@@ -129,12 +147,17 @@ function cloneStyle(style) {
     lineOpacity: Number.isFinite(style.lineOpacity) ? style.lineOpacity : 1,
     pointBloom: Number.isFinite(style.pointBloom) ? style.pointBloom : 1,
     lineBloom: Number.isFinite(style.lineBloom) ? style.lineBloom : 1,
+    colorHue,
     color: typeof style.color === 'string' ? style.color : undefined,
   };
 }
 
 function mergeStyle(base, incoming = {}) {
-  const merged = { ...base, ...(incoming || {}) };
+  const incomingStyle = incoming && typeof incoming === 'object' ? incoming : {};
+  const merged = { ...base, ...incomingStyle };
+  if (!Number.isFinite(incomingStyle.colorHue) && typeof incomingStyle.color === 'string') {
+    merged.colorHue = hueFromHex(incomingStyle.color);
+  }
   return cloneStyle(merged);
 }
 
@@ -165,6 +188,39 @@ function normalizeChildVariants(defaults, incomingTree, legacyTransforms = null)
   return variants;
 }
 
+function normalizeIncomingChildrenTree(rawChildren) {
+  const normalized = {};
+  if (!rawChildren || typeof rawChildren !== 'object') return normalized;
+
+  for (const [rawKey, style] of Object.entries(rawChildren)) {
+    const canonical = canonicalizeFunctionKey(rawKey) || rawKey;
+    if (!canonical) continue;
+    const previous = normalized[canonical] || {};
+    normalized[canonical] = { ...previous, ...(style && typeof style === 'object' ? style : {}) };
+  }
+
+  return normalized;
+}
+
+function normalizeIncomingChildVariantsTree(rawVariants) {
+  const normalized = {};
+  if (!rawVariants || typeof rawVariants !== 'object') return normalized;
+
+  for (const [rawKey, maybeVariants] of Object.entries(rawVariants)) {
+    const canonical = canonicalizeFunctionKey(rawKey) || rawKey;
+    if (!canonical) continue;
+    if (!normalized[canonical]) normalized[canonical] = {};
+    if (!maybeVariants || typeof maybeVariants !== 'object') continue;
+    for (const [variantKey, style] of Object.entries(maybeVariants)) {
+      if (!style || typeof style !== 'object') continue;
+      const previous = normalized[canonical][variantKey] || {};
+      normalized[canonical][variantKey] = { ...previous, ...style };
+    }
+  }
+
+  return normalized;
+}
+
 export function defaultExpressionModel() {
   const children = makeChildDefaults();
   const transforms = normalizeTransforms();
@@ -187,7 +243,8 @@ export function normalizeExpressionModel(raw = null) {
   const source = raw && typeof raw === 'object' ? raw : {};
 
   const sourceTransforms = normalizeTransforms(source.transforms);
-  const incomingChildVariants = source.childVariants || source.variants || null;
+  const incomingChildVariants = normalizeIncomingChildVariantsTree(source.childVariants || source.variants || null);
+  const incomingChildren = normalizeIncomingChildrenTree(source.children);
 
   const model = {
     parent: mergeStyle(defaults.parent, source.parent),
@@ -201,10 +258,7 @@ export function normalizeExpressionModel(raw = null) {
   };
 
   for (const [childKey, childDefault] of Object.entries(defaults.children)) {
-    model.children[childKey] = mergeStyle(childDefault, source.children?.[childKey]);
-    if (typeof model.children[childKey].color !== 'string') {
-      model.children[childKey].color = childDefault.color;
-    }
+    model.children[childKey] = mergeStyle(childDefault, incomingChildren?.[childKey]);
   }
 
   return model;
@@ -316,7 +370,11 @@ export function setFunctionSubtreeEnabled(model, functionKey, enabled) {
 export function setFunctionNodeEnabledWithAncestors(model, exponentKey, functionKey, enabled) {
   const next = !!enabled;
   if (next && model.sets?.[exponentKey]) model.sets[exponentKey].enabled = true;
-  setFunctionSubtreeEnabled(model, functionKey, next);
+  if (next) {
+    setFunctionSubtreeEnabled(model, functionKey, true);
+    return;
+  }
+  setFunctionSubtreeEnabled(model, functionKey, false);
 }
 
 export function setVariantNodeEnabledWithAncestors(model, exponentKey, functionKey, variantKey, enabled) {

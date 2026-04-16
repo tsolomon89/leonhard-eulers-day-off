@@ -240,6 +240,54 @@ test('resolve with easing applies easing to local progress', () => {
   assert.ok(approx(store.T, 2.5), `Expected T ≈ 2.5, got ${store.T}`);
 });
 
+test('resolve applies expression enabled tracks as instant scene values', () => {
+  const store = {
+    expression: {
+      children: {
+        positiveExponent: { enabled: 1 },
+      },
+    },
+  };
+  const engine = createLinkEngine();
+  const anim = makeAnimationMock();
+  const sm = createSceneManager({ linkEngine: engine, animation: anim, getState: () => store });
+
+  const tl = createTimeline();
+  tl.scenes[0].duration = 10;
+  tl.scenes[0].easing = 'linear';
+  addTrack(tl.scenes[0], 'expression.children.positiveExponent.enabled', 1, 0);
+  sm.setTimeline(tl);
+
+  sm.startPlayback();
+  anim.progress = 0.3;
+  sm.resolve();
+
+  assert.equal(store.expression.children.positiveExponent.enabled, 0);
+});
+
+test('resolve applies cinematic enabled tracks as instant scene values', () => {
+  const store = {
+    cinematic: {
+      atlasLines: { enabled: 1 },
+    },
+  };
+  const engine = createLinkEngine();
+  const anim = makeAnimationMock();
+  const sm = createSceneManager({ linkEngine: engine, animation: anim, getState: () => store });
+
+  const tl = createTimeline();
+  tl.scenes[0].duration = 10;
+  tl.scenes[0].easing = 'linear';
+  addTrack(tl.scenes[0], 'cinematic.atlasLines.enabled', 1, 0);
+  sm.setTimeline(tl);
+
+  sm.startPlayback();
+  anim.progress = 0.35;
+  sm.resolve();
+
+  assert.equal(store.cinematic.atlasLines.enabled, 0);
+});
+
 // ═════════════════════════════════════════════════════════════
 // Playback info
 // ═════════════════════════════════════════════════════════════

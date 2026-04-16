@@ -104,32 +104,24 @@ export function applyTraversalCommit(state, key, value) {
   );
 }
 
-export function applyZRangeCommit(state, key, value) {
+export function applyNDepthCommit(state, key, value) {
   return applyBoundedTripletCommit(
     state,
     {
-      keys: ['Z_min', 'Z_max'],
+      keys: ['n_negDepth', 'n_posDepth'],
       coerce: (raw) => Math.floor(Number(raw)),
-      normalize: (next, editedKey) => {
-        let Z_min = Number.isFinite(next.Z_min) ? Math.floor(next.Z_min) : 0;
-        let Z_max = Number.isFinite(next.Z_max) ? Math.floor(next.Z_max) : 710;
-
-        Z_min = clamp(Z_min, -50000, 0);
-        Z_max = clamp(Z_max, 0, 50000);
-
-        // JSON-literal linkage: Z_min in <=0, Z_max >= 0,
-        // with n=[Z_min+1...Z_max-1], so enforce Z_max - Z_min >= 2.
-        if ((Z_max - Z_min) < 2) {
-          if (editedKey === 'Z_min') {
-            Z_max = clamp(Z_min + 2, 0, 50000);
-            if ((Z_max - Z_min) < 2) Z_min = clamp(Z_max - 2, -50000, 0);
-          } else {
-            Z_min = clamp(Z_max - 2, -50000, 0);
-            if ((Z_max - Z_min) < 2) Z_max = clamp(Z_min + 2, 0, 50000);
-          }
-        }
-
-        return { Z_min, Z_max };
+      normalize: (next) => {
+        const n_negDepth = clamp(
+          Number.isFinite(next.n_negDepth) ? Math.floor(next.n_negDepth) : 355,
+          0,
+          50000,
+        );
+        const n_posDepth = clamp(
+          Number.isFinite(next.n_posDepth) ? Math.floor(next.n_posDepth) : 355,
+          0,
+          50000,
+        );
+        return { n_negDepth, n_posDepth };
       },
     },
     key,

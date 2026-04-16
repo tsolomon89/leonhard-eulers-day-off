@@ -60,6 +60,8 @@ export function seedEndpoint(value, min, max, step) {
 const CORE_LINKABLE_FIELDS = new Set([
   'T',
   'b',
+  'n_negDepth',
+  'n_posDepth',
   'l_base',
   'l_func',
   'q_scale',
@@ -72,29 +74,28 @@ const CORE_LINKABLE_FIELDS = new Set([
   'visualHelpers.orbitOpacity',
 ]);
 
-const INSTANT_LINK_PATHS = new Set([
+const BOOLEAN_LINK_PATHS = new Set([
   'kStepsInAlignmentsBool',
   'q_bool',
   'q_correction',
 ]);
 
-export function isInstantLinkPath(path) {
-  return INSTANT_LINK_PATHS.has(path);
+export function isBooleanLinkPath(path) {
+  if (typeof path === 'string' && path.startsWith('expression.') && path.endsWith('.enabled')) return true;
+  if (typeof path === 'string' && path.startsWith('cinematic.') && path.endsWith('.enabled')) return true;
+  return BOOLEAN_LINK_PATHS.has(path);
 }
 
 const EXCLUDED_LINK_FIELDS = new Set([
   'T_lowerBound',
   'T_upperBound',
-  'Z',
-  'Z_min',
-  'Z_max',
 ]);
 
 export function isLinkEligiblePath(path) {
   if (typeof path !== 'string' || path.length === 0) return false;
   if (EXCLUDED_LINK_FIELDS.has(path)) return false;
   if (CORE_LINKABLE_FIELDS.has(path)) return true;
-  if (INSTANT_LINK_PATHS.has(path)) return true;
+  if (BOOLEAN_LINK_PATHS.has(path)) return true;
   if (path.startsWith('camera.')) return true;
   if (path.startsWith('expression.')) return true;
   if (path.startsWith('cinematic.')) return true;

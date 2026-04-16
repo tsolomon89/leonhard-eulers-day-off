@@ -14,6 +14,7 @@ const DEFAULT_CINEMATIC_FX = Object.freeze({
 
 const EXPENSIVE_SUBSYSTEMS = new Set(['bloom', 'stars', 'fog']);
 const LIGHT_THEME_POLICY = Object.freeze({
+  disableStars: true,
   fogDensityMul: 0.5,
   toneExposureMul: 0.92,
 });
@@ -169,6 +170,7 @@ export function resolveEffectiveCinematicFx(rawFx, options = {}) {
   const fogEnabled = effectiveSubsystemEnabled(masterEnabled, fx.fog.enabled, renderMode, 'fog');
   const toneEnabled = effectiveSubsystemEnabled(masterEnabled, fx.tone.enabled, renderMode, 'tone');
 
+  const starsThemeEnabled = theme === 'light' ? !LIGHT_THEME_POLICY.disableStars : true;
   const fogDensityMul = theme === 'light' ? LIGHT_THEME_POLICY.fogDensityMul : 1;
   const toneExposureMul = theme === 'light' ? LIGHT_THEME_POLICY.toneExposureMul : 1;
 
@@ -202,11 +204,11 @@ export function resolveEffectiveCinematicFx(rawFx, options = {}) {
       opacity: ghostEnabled ? clamp(scaled(fx.ghostTraces.opacity), 0, 1) : 0,
     },
     stars: {
-      enabled: starsEnabled,
-      opacity: starsEnabled ? clamp(scaled(fx.stars.opacity), 0, 1) : 0,
-      rotX: starsEnabled ? scaled(fx.stars.rotX) : 0,
-      rotY: starsEnabled ? scaled(fx.stars.rotY) : 0,
-      drift: starsEnabled ? scaled(fx.stars.drift) : 0,
+      enabled: starsEnabled && starsThemeEnabled,
+      opacity: (starsEnabled && starsThemeEnabled) ? clamp(scaled(fx.stars.opacity), 0, 1) : 0,
+      rotX: (starsEnabled && starsThemeEnabled) ? scaled(fx.stars.rotX) : 0,
+      rotY: (starsEnabled && starsThemeEnabled) ? scaled(fx.stars.rotY) : 0,
+      drift: (starsEnabled && starsThemeEnabled) ? scaled(fx.stars.drift) : 0,
     },
     bloom: {
       enabled: bloomEnabled,

@@ -24,35 +24,42 @@ export const VARIANT_DEFINITIONS = Object.freeze([
   { key: 'log_tan', label: 'log(tan(f))', legacyTransformKey: 'log_tan' },
 ]);
 
-const POSITIVE_FUNCTIONS = [
-  { key: 'positiveImaginary', functionFamily: 'base', label: 'base' },
-  { key: 'positiveImaginaryReciprocal', functionFamily: 'base_inverse', label: 'base^-1' },
-  { key: 'positiveImaginaryVectorA', functionFamily: 'vector_a', label: 'vector A' },
-  { key: 'positiveImaginaryVectorReciprocal', functionFamily: 'vector_a_inverse', label: 'vector A^-1' },
-  { key: 'positiveImaginaryVectorB', functionFamily: 'vector_b', label: 'vector B' },
-  { key: 'positiveImaginaryVectorBReciprocal', functionFamily: 'vector_b_inverse', label: 'vector B^-1' },
-  { key: 'positiveImaginaryCircleA', functionFamily: 'circle_a', label: 'Circle A' },
-  { key: 'positiveImaginaryCircleAReciprocal', functionFamily: 'circle_a_inverse', label: 'Circle A^-1' },
-  { key: 'positiveImaginaryCircleB', functionFamily: 'circle_b', label: 'Circle B' },
-  { key: 'positiveImaginaryCircleBReciprocal', functionFamily: 'circle_b_inverse', label: 'Circle B^-1' },
-  { key: 'positiveImaginaryCircleC', functionFamily: 'circle_c', label: 'Circle C' },
-  { key: 'positiveImaginaryCircleCReciprocal', functionFamily: 'circle_c_inverse', label: 'Circle C^-1' },
-];
+const FUNCTION_BASE_FAMILIES = Object.freeze([
+  { key: 'base', suffix: '', functionFamily: 'base', label: 'base' },
+  { key: 'vectorA', suffix: 'VectorA', functionFamily: 'vector_a', label: 'vector A' },
+  { key: 'vectorB', suffix: 'VectorB', functionFamily: 'vector_b', label: 'vector B' },
+  { key: 'vectorC', suffix: 'VectorC', functionFamily: 'vector_c', label: 'vector C' },
+  { key: 'circleA', suffix: 'CircleA', functionFamily: 'circle_a', label: 'Circle A' },
+  { key: 'circleB', suffix: 'CircleB', functionFamily: 'circle_b', label: 'Circle B' },
+  { key: 'circleC', suffix: 'CircleC', functionFamily: 'circle_c', label: 'Circle C' },
+]);
 
-const NEGATIVE_FUNCTIONS = [
-  { key: 'negativeImaginary', functionFamily: 'base', label: 'base' },
-  { key: 'negativeImaginaryReciprocal', functionFamily: 'base_inverse', label: 'base^-1' },
-  { key: 'negativeImaginaryVectorA', functionFamily: 'vector_a', label: 'vector A' },
-  { key: 'negativeImaginaryVectorReciprocal', functionFamily: 'vector_a_inverse', label: 'vector A^-1' },
-  { key: 'negativeImaginaryVectorB', functionFamily: 'vector_b', label: 'vector B' },
-  { key: 'negativeImaginaryVectorBReciprocal', functionFamily: 'vector_b_inverse', label: 'vector B^-1' },
-  { key: 'negativeImaginaryCircleA', functionFamily: 'circle_a', label: 'Circle A' },
-  { key: 'negativeImaginaryCircleAReciprocal', functionFamily: 'circle_a_inverse', label: 'Circle A^-1' },
-  { key: 'negativeImaginaryCircleB', functionFamily: 'circle_b', label: 'Circle B' },
-  { key: 'negativeImaginaryCircleBReciprocal', functionFamily: 'circle_b_inverse', label: 'Circle B^-1' },
-  { key: 'negativeImaginaryCircleC', functionFamily: 'circle_c', label: 'Circle C' },
-  { key: 'negativeImaginaryCircleCReciprocal', functionFamily: 'circle_c_inverse', label: 'Circle C^-1' },
-];
+function buildFunctionNodesForExponent(prefix) {
+  const nodes = [];
+  for (const family of FUNCTION_BASE_FAMILIES) {
+    const baseKey = `${prefix}${family.suffix}`;
+    nodes.push({
+      key: baseKey,
+      functionFamily: family.functionFamily,
+      familyKey: family.key,
+      reciprocal: false,
+      reciprocalOf: null,
+      label: family.label,
+    });
+    nodes.push({
+      key: `${baseKey}Reciprocal`,
+      functionFamily: `${family.functionFamily}_inverse`,
+      familyKey: family.key,
+      reciprocal: true,
+      reciprocalOf: baseKey,
+      label: `${family.label}^-1`,
+    });
+  }
+  return nodes;
+}
+
+const POSITIVE_FUNCTIONS = buildFunctionNodesForExponent('positiveExponent');
+const NEGATIVE_FUNCTIONS = buildFunctionNodesForExponent('negativeExponent');
 
 export const FUNCTION_NODES = Object.freeze([
   ...POSITIVE_FUNCTIONS.map((node) => ({
@@ -73,16 +80,66 @@ export const FUNCTION_NODES = Object.freeze([
   })),
 ]);
 
+const LEGACY_FUNCTION_KEY_ALIASES = Object.freeze({
+  positiveImaginary: 'positiveExponent',
+  positiveImaginaryReciprocal: 'positiveExponentReciprocal',
+  positiveImaginaryVectorA: 'positiveExponentVectorA',
+  positiveImaginaryVectorReciprocal: 'positiveExponentVectorB',
+  positiveImaginaryVectorB: 'positiveExponentVectorC',
+  positiveImaginaryVectorBReciprocal: 'positiveExponentVectorCReciprocal',
+  positiveImaginaryCircleA: 'positiveExponentCircleA',
+  positiveImaginaryCircleAReciprocal: 'positiveExponentCircleAReciprocal',
+  positiveImaginaryCircleB: 'positiveExponentCircleB',
+  positiveImaginaryCircleBReciprocal: 'positiveExponentCircleBReciprocal',
+  positiveImaginaryCircleC: 'positiveExponentCircleC',
+  positiveImaginaryCircleCReciprocal: 'positiveExponentCircleCReciprocal',
+  negativeImaginary: 'negativeExponent',
+  negativeImaginaryReciprocal: 'negativeExponentReciprocal',
+  negativeImaginaryVectorA: 'negativeExponentVectorA',
+  negativeImaginaryVectorReciprocal: 'negativeExponentVectorB',
+  negativeImaginaryVectorB: 'negativeExponentVectorC',
+  negativeImaginaryVectorBReciprocal: 'negativeExponentVectorCReciprocal',
+  negativeImaginaryCircleA: 'negativeExponentCircleA',
+  negativeImaginaryCircleAReciprocal: 'negativeExponentCircleAReciprocal',
+  negativeImaginaryCircleB: 'negativeExponentCircleB',
+  negativeImaginaryCircleBReciprocal: 'negativeExponentCircleBReciprocal',
+  negativeImaginaryCircleC: 'negativeExponentCircleC',
+  negativeImaginaryCircleCReciprocal: 'negativeExponentCircleCReciprocal',
+  negtaitiveExponentCircleC: 'negativeExponentCircleC',
+  negtaitiveExponentCircleCReciprocal: 'negativeExponentCircleCReciprocal',
+});
+
+export const FUNCTION_KEY_ALIASES = LEGACY_FUNCTION_KEY_ALIASES;
+
 const FUNCTION_NODE_BY_KEY = new Map(FUNCTION_NODES.map((node) => [node.key, node]));
 const VARIANT_BY_KEY = new Map(VARIANT_DEFINITIONS.map((variant) => [variant.key, variant]));
 
-function isDesmosVariantCovered(functionKey, variantKey) {
-  if (/VectorBReciprocal$|CircleAReciprocal$/.test(functionKey)) return false;
-  if (variantKey === 'base') return true;
-  if (variantKey === 'log') return false;
+export function canonicalizeFunctionKey(functionKey) {
+  if (typeof functionKey !== 'string' || functionKey.length === 0) return null;
+  if (FUNCTION_NODE_BY_KEY.has(functionKey)) return functionKey;
+  const aliased = FUNCTION_KEY_ALIASES[functionKey];
+  if (typeof aliased === 'string' && FUNCTION_NODE_BY_KEY.has(aliased)) return aliased;
+  return null;
+}
+
+export function canonicalizeExpressionPath(path) {
+  if (typeof path !== 'string' || path.length === 0) return path;
+  const parts = path.split('.');
+  if (parts.length < 3) return path;
+  if (parts[0] !== 'expression') return path;
+  if (parts[1] !== 'children' && parts[1] !== 'childVariants' && parts[1] !== 'variants') return path;
+  const canonical = canonicalizeFunctionKey(parts[2]);
+  if (!canonical || canonical === parts[2]) return path;
+  parts[2] = canonical;
+  return parts.join('.');
+}
+
+function isDesmosVariantCovered(_functionKey, variantKey) {
   if (!VARIANT_BY_KEY.has(variantKey)) return false;
-  if (/CircleA$|CircleB$/.test(functionKey)) return false;
-  return true;
+  return variantKey === 'base'
+    || variantKey === 'sin'
+    || variantKey === 'cos'
+    || variantKey === 'tan';
 }
 
 function resolveCoverageStatus(implemented, inDesmos) {
@@ -123,7 +180,9 @@ const PLOTTABLE_BY_ID = new Map(FUNCTION_PLOTTABLES.map((node) => [node.id, node
 const PLOTTABLE_BY_KEY = new Map(FUNCTION_PLOTTABLES.map((node) => [`${node.functionKey}:${node.variantKey}`, node]));
 
 export function getFunctionNode(functionKey) {
-  return FUNCTION_NODE_BY_KEY.get(functionKey) || null;
+  const canonical = canonicalizeFunctionKey(functionKey);
+  if (!canonical) return null;
+  return FUNCTION_NODE_BY_KEY.get(canonical) || null;
 }
 
 export function getVariantDefinition(variantKey) {
@@ -135,7 +194,9 @@ export function getFunctionNodesByExponent(exponentKey) {
 }
 
 export function getPlottable(functionKey, variantKey) {
-  return PLOTTABLE_BY_KEY.get(`${functionKey}:${variantKey}`) || null;
+  const canonical = canonicalizeFunctionKey(functionKey);
+  if (!canonical) return null;
+  return PLOTTABLE_BY_KEY.get(`${canonical}:${variantKey}`) || null;
 }
 
 export function getPlottableById(id) {

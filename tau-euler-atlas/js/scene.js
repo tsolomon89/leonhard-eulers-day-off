@@ -29,6 +29,7 @@ let activeCamera;
 let bloomPass, renderPass, outputPass;
 let pointCloud = null;
 let pointCloudMat = null;   // persistent material — never disposed
+let pointCloudUniforms = null;
 let strandLines = [];       // object pool — entries hidden, not disposed
 let atlasLines  = [];       // object pool — independent layer for atlas expression curves
 let gridGroup = null;
@@ -177,6 +178,47 @@ function makeSimpleTexture() {
 
 const cinematicTexture = makeParticleTexture();
 const perfTexture = makeSimpleTexture();
+
+function makePointCloudMaterial(texture) {
+  pointCloudUniforms = {
+    uMap: { value: texture },
+    uOpacity: { value: 1.0 },
+    uBaseSize: { value: 0.03 },
+  };
+  return new THREE.ShaderMaterial({
+    uniforms: pointCloudUniforms,
+    vertexShader: `
+      attribute float size;
+      varying vec3 vColor;
+      uniform float uBaseSize;
+      void main() {
+        vColor = color;
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        float perspective = 1.0;
+        if (projectionMatrix[2][3] == -1.0) {
+          perspective = 300.0 / max(1.0, -mvPosition.z);
+        }
+        gl_PointSize = max(1.0, size * uBaseSize * perspective);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uMap;
+      uniform float uOpacity;
+      varying vec3 vColor;
+      void main() {
+        vec4 texel = texture2D(uMap, gl_PointCoord);
+        vec4 outColor = vec4(vColor, uOpacity) * texel;
+        if (outColor.a <= 0.001) discard;
+        gl_FragColor = outColor;
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    vertexColors: true,
+  });
+}
 
 // ── Star particle system ──────────────────────────────────────
 
@@ -579,17 +621,8 @@ export function updatePointCloud(data, ptSize, ptOpacity) {
   const baseSize = isCinematic() ? 0.06 : 0.03;
 
   if (!pointCloud) {
-    // First-time allocation — material and mesh persist for the session
-    pointCloudMat = new THREE.PointsMaterial({
-      size: Math.max(0.005, ptSize * baseSize),
-      map: tex,
-      vertexColors: true,
-      transparent: true,
-      opacity: Math.max(0.01, ptOpacity),
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      sizeAttenuation: true,
-    });
+    // First-time allocation — material and mesh persist for the session.
+    pointCloudMat = makePointCloudMaterial(tex);
     const geo = new THREE.BufferGeometry();
     pointCloud = new THREE.Points(geo, pointCloudMat);
     scene.add(pointCloud);
@@ -598,13 +631,15 @@ export function updatePointCloud(data, ptSize, ptOpacity) {
   // Swap buffer data without disposing geometry
   pointCloud.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   pointCloud.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  pointCloud.geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
   pointCloud.geometry.computeBoundingSphere();
 
-  // Mutate persistent material properties
-  pointCloudMat.size = Math.max(0.005, ptSize * baseSize);
-  pointCloudMat.map = tex;
-  pointCloudMat.opacity = Math.max(0.01, ptOpacity);
-  pointCloudMat.blending = THREE.AdditiveBlending;
+  // Mutate persistent shader uniforms.
+  if (pointCloudUniforms) {
+    pointCloudUniforms.uBaseSize.value = Math.max(0.005, ptSize * baseSize);
+    pointCloudUniforms.uMap.value = tex;
+    pointCloudUniforms.uOpacity.value = Math.max(0.01, ptOpacity);
+  }
   pointCloudMat.needsUpdate = true;
 
   pointCloud.visible = true;

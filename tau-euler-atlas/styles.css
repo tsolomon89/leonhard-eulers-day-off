@@ -1229,6 +1229,47 @@ body[data-render="performance"] .cinematic-only {
   border-color: var(--accent-green);
 }
 
+/* Play mode button — active when looping */
+.tl-play-mode-btn {
+  flex: 1;
+  text-align: center;
+  font-size: 10px;
+  white-space: nowrap;
+  transition: var(--trans);
+}
+
+.tl-play-mode-btn.loop-active {
+  background: rgba(137, 196, 244, 0.14);
+  border-color: rgba(137, 196, 244, 0.45);
+  color: #89c4f4;
+  box-shadow: 0 0 6px rgba(137, 196, 244, 0.15);
+}
+
+/* Loop count label + input */
+.tl-loop-count-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.tl-loop-count-input {
+  width: 42px;
+  padding: 3px 5px;
+  font-size: 10px;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.tl-loop-count-input::-webkit-inner-spin-button,
+.tl-loop-count-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .timeline-stats {
   margin-top: auto;
   font-family: var(--mono);

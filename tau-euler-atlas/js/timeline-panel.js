@@ -18,7 +18,7 @@ import {
   getInheritedBases,
   readPath,
 } from './scene-data.js';
-import { isInstantLinkPath } from './linked-params.js';
+import { isBooleanLinkPath } from './linked-params.js';
 
 /**
  * When a scene's endValue changes, walk forward and update
@@ -50,6 +50,16 @@ function renumberScenes(timeline) {
 }
 
 let _panelEl = null;
+
+const LOOP_MODES = ['none', 'wrap', 'bounce'];
+
+function _playModeLabel(mode) {
+  switch (mode) {
+    case 'wrap':   return '🔁 Loop: Start';
+    case 'bounce': return '🔂 Loop: Reverse';
+    default:       return '▶ Play Once';
+  }
+}
 
 export function initTimelinePanel() {
   _panelEl = document.getElementById('timeline-panel');
@@ -119,6 +129,15 @@ export function renderTimelinePanel() {
           <button id="tl-export" class="timeline-btn">Export JSON</button>
           <button id="tl-import" class="timeline-btn">Import JSON</button>
           <input type="file" id="tl-import-file" accept=".json" style="display:none;" />
+        </div>
+        <div class="timeline-tools" style="margin-top: 4px;">
+          <button id="tl-play-mode" class="timeline-btn tl-play-mode-btn ${timeline.loop !== 'none' ? 'loop-active' : ''}">${_playModeLabel(timeline.loop)}</button>
+          ${timeline.loop !== 'none' ? `
+            <label class="tl-loop-count-label">
+              <span>Loops</span>
+              <input id="tl-loop-count" type="number" class="scene-input tl-loop-count-input" min="0" step="1" value="${timeline.loopCount || 0}" title="0 = infinite" />
+            </label>
+          ` : ''}
         </div>
         <div class="timeline-stats" style="margin-top: auto; font-size: 11px; color: var(--text-dim);">
           Total Duration: ${totalDuration(timeline).toFixed(1)}s<br/>
@@ -195,6 +214,24 @@ export function renderTimelinePanel() {
     };
     reader.readAsText(file);
   });
+
+  // Play mode toggle (cycles: none → wrap → bounce → none)
+  document.getElementById('tl-play-mode').addEventListener('click', () => {
+    const curIdx = LOOP_MODES.indexOf(timeline.loop);
+    timeline.loop = LOOP_MODES[(curIdx + 1) % LOOP_MODES.length];
+    autoSaveTimeline();
+    renderTimelinePanel();
+  });
+
+  // Loop count input (only exists when loop !== 'none')
+  const loopCountInput = document.getElementById('tl-loop-count');
+  if (loopCountInput) {
+    loopCountInput.addEventListener('change', () => {
+      const val = parseInt(loopCountInput.value, 10);
+      timeline.loopCount = Number.isFinite(val) && val >= 0 ? val : 0;
+      autoSaveTimeline();
+    });
+  }
 
   // Render RHS only if not fully collapsed, or just render it anyway so it's ready.
   renderSceneStrip(sm, timeline);
@@ -371,10 +408,7 @@ function renderSceneEditor(sm, timeline) {
     else grouped['other'].push(link);
   });
 
-  // Boolean dependency: q-params are only relevant when kStepsInAlignmentsBool is ON
-  const DEPENDS_ON_K_BOOL = new Set(['q_bool', 'q_correction', 'q_scale', 'q_tauScale']);
-  const kBoolLink = scene.links.find(l => l.path === 'kStepsInAlignmentsBool');
-  const kBoolState = kBoolLink ? Number(kBoolLink.endValue) > 0 : Number(liveState.kStepsInAlignmentsBool) > 0;
+
 
   const trackColumns = document.createElement('div');
   trackColumns.className = 'track-columns';
@@ -399,11 +433,7 @@ function renderSceneEditor(sm, timeline) {
       const row = document.createElement('div');
       row.className = 'track-row-compact';
 
-      // Disable q-dependent tracks when k-alignment is off
-      if (DEPENDS_ON_K_BOOL.has(link.path) && !kBoolState) {
-        row.classList.add('track-row-disabled');
-        row.title = 'Requires k alignment bool = ON';
-      }
+
 
       // Short display name: last segment of dotted path
       const shortName = link.path.includes('.') ? link.path.split('.').pop() : link.path;
@@ -422,7 +452,7 @@ function renderSceneEditor(sm, timeline) {
       // Compute inherited base
       const inherited = inheritedBases.get(link.path);
       const baseDisplay = Number.isFinite(inherited) ? inherited : link.baseValue;
-      const isInstant = isInstantLinkPath(link.path);
+      const isInstant = isBooleanLinkPath(link.path);
 
       if (isSceneZero) {
         // Scene 0: both base and end are editable
@@ -499,36 +529,6 @@ function renderSceneEditor(sm, timeline) {
           renderTimelinePanel();
         });
         valsSpan.appendChild(endInput);
-
-        const fadeWrap = document.createElement('span');
-        fadeWrap.style.marginLeft = '4px';
-        fadeWrap.style.display = 'inline-flex';
-        fadeWrap.style.alignItems = 'center';
-        fadeWrap.style.gap = '2px';
-
-        const fadeLabel = document.createElement('span');
-        fadeLabel.textContent = 'Fade:';
-        fadeLabel.style.fontSize = '9px';
-        fadeLabel.style.color = 'var(--text-dim)';
-
-        const fadeInput = document.createElement('input');
-        fadeInput.type = 'number';
-        fadeInput.className = 'track-end-input';
-        fadeInput.style.width = '38px';
-        fadeInput.min = '0';
-        fadeInput.max = '1';
-        fadeInput.step = '0.05';
-        fadeInput.title = 'Fade transition ratio (0 to 1). 0 = default.';
-        fadeInput.value = Number(link.transitionFactor || 0).toFixed(2);
-        fadeInput.addEventListener('change', () => {
-          link.transitionFactor = Math.max(0, Math.min(1, parseFloat(fadeInput.value) || 0));
-          autoSaveTimeline();
-          renderTimelinePanel();
-        });
-        
-        fadeWrap.appendChild(fadeLabel);
-        fadeWrap.appendChild(fadeInput);
-        valsSpan.appendChild(fadeWrap);
       }
 
       row.appendChild(valsSpan);

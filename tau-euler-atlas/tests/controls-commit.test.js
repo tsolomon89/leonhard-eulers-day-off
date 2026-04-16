@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 
 import {
   applyBoundedTripletCommit,
+  applyNDepthCommit,
   applyTraversalCommit,
-  applyZRangeCommit,
   computeTraversalTBounds,
   parseNumericInput,
   resolveCommittedValue,
@@ -42,23 +42,23 @@ test('typed T_lowerBound/T_upperBound preserve order and keep T inside window', 
   assert.equal(s.T, 1);
 });
 
-test('Z_min/Z_max edits preserve invariants: Z_min<=0, Z_max>=0, Z_max-Z_min>=2', () => {
-  const s = { Z_min: -10, Z_max: 10 };
+test('n_negDepth/n_posDepth edits clamp independently without cross-coupling', () => {
+  const s = { n_negDepth: 10, n_posDepth: 20 };
 
-  const minOut = applyZRangeCommit(s, 'Z_min', 12);
-  assert.equal(minOut.status, 'normalized');
-  assert.equal(s.Z_min, 0); // clamped
-  assert.equal(s.Z_max, 10);
+  const negOut = applyNDepthCommit(s, 'n_negDepth', -5);
+  assert.equal(negOut.status, 'normalized');
+  assert.equal(s.n_negDepth, 0);
+  assert.equal(s.n_posDepth, 20);
 
-  const minNegOut = applyZRangeCommit(s, 'Z_min', -100);
-  assert.equal(minNegOut.status, 'applied');
-  assert.equal(s.Z_min, -100);
-  assert.equal(s.Z_max, 10);
+  const posOut = applyNDepthCommit(s, 'n_posDepth', 99999);
+  assert.equal(posOut.status, 'normalized');
+  assert.equal(s.n_negDepth, 0);
+  assert.equal(s.n_posDepth, 50000);
 
-  const maxOut = applyZRangeCommit(s, 'Z_max', -5);
-  assert.equal(maxOut.status, 'normalized');
-  assert.equal(s.Z_min, -100);
-  assert.equal(s.Z_max, 0);
+  const negApplied = applyNDepthCommit(s, 'n_negDepth', 1234);
+  assert.equal(negApplied.status, 'applied');
+  assert.equal(s.n_negDepth, 1234);
+  assert.equal(s.n_posDepth, 50000);
 });
 
 test('generic bounded triplet helper is reusable across grouped ranges', () => {

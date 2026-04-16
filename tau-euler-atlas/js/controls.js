@@ -3,8 +3,9 @@ import {
   computeProofPayloadFromState,
   generateAllPoints,
   generateAlphaTrace,
-  generateAtlasPaths,
+  generateAtlasPathsWithDiagnostics,
   generateTauTrace,
+  getActiveExpressionCombos,
   setPointBudget,
 } from './generators.js';
 import {
@@ -19,29 +20,19 @@ import {
   setFunctionNodeEnabledWithAncestors,
   setExponentSubtreeEnabled,
   setVariantNodeEnabledWithAncestors,
+  normalizeColorHue,
 } from './expression-model.js';
 import {
   EXPONENT_FAMILIES,
   VARIANT_DEFINITIONS,
   getFunctionNodesByExponent,
   registryCoverageSummary,
+  canonicalizeExpressionPath,
 } from './function-registry.js';
 import * as sceneApi from './scene.js';
 import { animation } from './animation.js';
 import {
-  PlaybackPrecomputeBuffer,
-  PRECOMPUTE_FPS,
-  resolvePrecomputeBufferFrames,
-  computePrefillMinDepth,
-  computeBufferProgress,
-  clampBufferTargetByMemory,
-  computeAdaptiveBuildBudget,
-  sanitizeBufferPhase,
-  DEFAULT_BUFFER_MAX_BYTES,
-} from './playback-buffer.js';
-import {
-  applyTraversalCommit,
-  applyZRangeCommit,
+  applyNDepthCommit,
   computeTraversalTBounds,
   normalizeInputText,
   parseNumericInput,
@@ -107,8 +98,6 @@ const setFogDensity = sceneApi.setFogDensity;
 const setStarVisibility = sceneApi.setStarVisibility;
 const setStarOpacity = sceneApi.setStarOpacity;
 const setStarMotion = sceneApi.setStarMotion;
-const setHeavyEffectsSuspended = sceneApi.setHeavyEffectsSuspended;
-const getCurrentFps = sceneApi.getCurrentFps;
 const resetCamera = sceneApi.resetCamera;
 const captureScreenshot = sceneApi.captureScreenshot;
 const setExternalUpdate = sceneApi.setExternalUpdate;
@@ -126,21 +115,10 @@ export const state = {
   T: 2,
   T_lowerBound: 1.99999,
   T_upperBound: 2,
-  timeMode: 'step',
-  stepLoopMode: 'clamp',
   b: 36000000,
-  syncTStepToS: true,
-  precomputeBufferUnit: 'frames',
-  precomputeBufferValue: 24,
-  precomputeBufferFrames: 24,
-  bufferEnabled: false,
-  bufferPhase: 'idle',
-  bufferProgress: 0,
-  bufferTargetFrames: 24,
-  bufferNotice: '',
 
-  Z_min: 0,
-  Z_max: 710,
+  n_negDepth: 355,
+  n_posDepth: 355,
   pathBudget: 500,
 
   l_base: 10,
@@ -200,6 +178,7 @@ export const state = {
 };
 
 const functionControlUiState = {
+  selectedScope: 'exponent',
   selectedExponent: EXPONENT_FAMILIES[0].key,
   selectedFunction: null,
   selectedVariant: null,
@@ -269,9 +248,6 @@ let controlsContainer = null;
 let cameraContainer = null;
 let proofsContainer = null;
 let _lastFrameMs = performance.now();
-let _stepBounceDir = 1;
-let _bufferGenerationToken = 0;
-const MAX_BUFFER_BYTES = DEFAULT_BUFFER_MAX_BYTES;
 let _timelineHiddenByAutoHide = false;
 
 function hideTimelineForAutoHide() {
@@ -302,7 +278,6 @@ const sliderUiSyncFns = [];
 const sliderBoundsSyncFns = [];
 const cameraSliderUiSyncFns = [];
 const cameraSliderBoundsSyncFns = [];
-const playbackBuffer = new PlaybackPrecomputeBuffer();
 let lastMathSignature = '';
 let lastProofSignature = '';
 let _expressionModelGen = 0;  // bumped when expressionModel mutates
@@ -352,6 +327,19 @@ export function autoSaveTimeline() {
   if (tl) saveTimelineToLS(tl);
 }
 
+/**
+ * Check whether a parameter path is tracked in the Scene Director timeline.
+ * When tracked, accordion slider bounds are fully decoupled from the
+ * Scene Director’s authored values.
+ */
+function isPathTrackedInTimeline(path) {
+  if (!path || !sceneManager) return false;
+  const timeline = sceneManager.getTimeline();
+  if (!timeline || timeline.scenes.length === 0) return false;
+  const canonicalPath = canonicalizeExpressionPath(String(path));
+  return timeline.scenes[0].links.some((l) => l.path === canonicalPath);
+}
+
 
 
 function decimalsForStep(step) {
@@ -395,14 +383,16 @@ export function getSceneManager() { return sceneManager; }
 export { linkEngine };
 
 function getTSliderStep() {
-  if (!state.syncTStepToS) return 0.00001;
   const s = Math.abs(Number.isFinite(state.s) ? state.s : 0.00001);
   return clamp(s, 0.000001, 0.1);
 }
 
 function setText(id, text) {
   const el = document.getElementById(id);
-  if (el) el.textContent = text;
+  if (el) {
+    const sText = String(text);
+    if (el.textContent !== sText) el.textContent = sText;
+  }
 }
 
 function getCameraField(path) {
@@ -515,7 +505,7 @@ function computeMathSignature(derived, budget) {
   return [
     budget, renderMode, theme, styleBloomGain,
     derived.T_lowerBound, derived.T_upperBound,
-    derived.Z, derived.Z_min, derived.Z_max,
+    derived.n_negDepth, derived.n_posDepth, derived.n,
     derived.formulaMode, derived.pathBudget,
     derived.l_base, derived.l_func,
     derived.kStepsInAlignmentsBool,
@@ -523,8 +513,6 @@ function computeMathSignature(derived, budget) {
     derived.q_bool, derived.q_correction,
     derived.k2, derived.k3,
     derived.alpha, derived.P, derived.b,
-    derived.stepLoopMode, derived.syncTStepToS,
-    derived.precomputeBufferFrames,
     _expressionModelGen,
     ptsVis, lnVis, ghVis,
     !!state.visualHelpers?.referenceRings,
@@ -547,7 +535,23 @@ function buildRenderPayload(derived, budget, signature, fx) {
   const shouldComputeGhosts = expressionEnabled && ghostsVisible;
   setPointBudget(budget);
   const points = shouldComputePoints ? generateAllPoints(renderParams) : emptyPointCloudData();
-  const atlasPaths = shouldComputeLines ? generateAtlasPaths(renderParams) : [];
+  const atlasBuild = shouldComputeLines
+    ? generateAtlasPathsWithDiagnostics(renderParams)
+    : {
+      paths: [],
+      diagnostics: {
+        budgetRequested: Math.max(1, Math.floor(Number.isFinite(renderParams.pathBudget) ? renderParams.pathBudget : 500)),
+        segmentsGenerated: 0,
+        segmentsEmitted: 0,
+        budgetHit: false,
+        comboCount: 0,
+        combosWithSegments: 0,
+        combosEmitted: 0,
+        clippedPointCount: 0,
+        clippedCombos: [],
+      },
+    };
+  const atlasPaths = atlasBuild.paths;
 
   const alphaNotTau = Math.abs(derived.alpha - TAU) > 0.001;
   const tauTrace = shouldComputeGhosts ? generateTauTrace(256, derived.k) : null;
@@ -560,102 +564,31 @@ function buildRenderPayload(derived, budget, signature, fx) {
     derived,
     points,
     atlasPaths,
+    atlasPathDiagnostics: atlasBuild.diagnostics,
     tauTrace,
     alphaTrace,
     showAlpha: shouldComputeGhosts && alphaNotTau,
-    bounceDir: _stepBounceDir,
   };
-}
-
-function getRequestedBufferFrames(derived = state) {
-  return Math.max(1, Math.floor(
-    Number.isFinite(derived.precomputeBufferFrames)
-      ? derived.precomputeBufferFrames
-      : (Number.isFinite(derived.precomputeBufferValue) ? derived.precomputeBufferValue : 24),
-  ));
-}
-
-function applyBufferTargetWithMemoryGuard(derived = state) {
-  const requested = getRequestedBufferFrames(derived);
-  const guarded = clampBufferTargetByMemory(requested, playbackBuffer.lastPayloadBytes, MAX_BUFFER_BYTES);
-  state.bufferTargetFrames = guarded.targetFrames;
-  playbackBuffer.setTargetFrames(guarded.targetFrames);
-  state.bufferNotice = guarded.reduced
-    ? `memory cap ${guarded.targetFrames}/${requested}`
-    : '';
-  return guarded.targetFrames;
-}
-
-function setBufferPhase(phase) {
-  const next = sanitizeBufferPhase(phase);
-  state.bufferPhase = next;
-  if (next === 'idle') state.bufferProgress = 0;
-  if (next === 'background') state.bufferProgress = 1;
-  setHeavyEffectsSuspended(state.bufferEnabled && next === 'prefill');
-}
-
-function beginHardPrefill(derived, signature, reason = 'prefill', resetStats = false) {
-  _bufferGenerationToken += 1;
-  applyBufferTargetWithMemoryGuard(derived);
-  playbackBuffer.reseed({
-    T: derived.T,
-    bounceDir: _stepBounceDir,
-    signature,
-    resetStats,
-  });
-  setBufferPhase('prefill');
-  state.bufferProgress = 0;
-  state.bufferNotice = reason ? `${reason}${state.bufferNotice ? ` | ${state.bufferNotice}` : ''}` : state.bufferNotice;
-  updateBufferStatus();
-  return _bufferGenerationToken;
-}
-
-function updateBufferStatus() {
-  const target = Math.max(1, Math.floor(Number.isFinite(state.bufferTargetFrames) ? state.bufferTargetFrames : 1));
-  const phase = sanitizeBufferPhase(state.bufferPhase);
-  const depth = playbackBuffer.depth;
-  const mode = state.bufferEnabled ? 'ON' : 'OFF';
-  const pct = state.bufferEnabled
-    ? Math.round(clamp(state.bufferProgress, 0, 1) * 100)
-    : 0;
-  const body = state.bufferEnabled
-    ? `${mode} ${phase} ${depth}/${target} ${pct}% h:${playbackBuffer.hits} m:${playbackBuffer.misses}`
-    : `${mode} live`;
-  const text = state.bufferNotice ? `${body} | ${state.bufferNotice}` : body;
-  setText('buffer-status-panel', text);
-  setText('buffer-status-display', text);
-  setText('buffer-mode-display', mode);
-  setText('buffer-mode-display-hud', mode);
-
-  const overlay = document.getElementById('buffer-overlay');
-  if (overlay) {
-    const active = state.bufferEnabled && phase === 'prefill';
-    overlay.classList.toggle('active', active);
-    overlay.setAttribute('aria-hidden', active ? 'false' : 'true');
-    const hint = active ? ' Â· quality mode active' : '';
-    setText('buffer-overlay-detail', `depth ${depth}/${target} Â· ${pct}%${hint}`);
-  }
 }
 
 function applyRenderPayload(payload, fx) {
   Object.assign(state, payload.derived);
   normalizeVisualHelpers();
 
-  const suspendHeavy = state.bufferEnabled && state.bufferPhase === 'prefill';
-  setBloomEnabled(!suspendHeavy && fx.bloom.enabled);
-  setBloomStrength(suspendHeavy ? 0 : fx.bloom.strength);
-  setBloomRadius(suspendHeavy ? 0 : fx.bloom.radius);
+  setBloomEnabled(fx.bloom.enabled);
+  setBloomStrength(fx.bloom.strength);
+  setBloomRadius(fx.bloom.radius);
   setBloomThreshold(fx.bloom.threshold);
   setToneEnabled(fx.tone.enabled);
   setToneExposure(fx.tone.exposure);
-  setFogEnabled(!suspendHeavy && fx.fog.enabled);
-  setFogDensity(suspendHeavy ? 0 : fx.fog.density);
-  setStarVisibility(!suspendHeavy && fx.stars.enabled);
-  setStarOpacity(suspendHeavy ? 0 : fx.stars.opacity);
+  setFogEnabled(fx.fog.enabled);
+  setFogDensity(fx.fog.density);
+  setStarVisibility(fx.stars.enabled);
+  setStarOpacity(fx.stars.opacity);
   setStarMotion(
-    suspendHeavy ? 0 : fx.stars.rotX,
-    suspendHeavy ? 0 : fx.stars.rotY,
-    suspendHeavy ? 0 : fx.stars.drift,
+    fx.stars.rotX,
+    fx.stars.rotY,
+    fx.stars.drift,
   );
 
   const pointsEnabled = fx.points.enabled && fx.points.opacity > 0.001 && state.expressionModel.parent.enabled;
@@ -686,7 +619,16 @@ function applyRenderPayload(payload, fx) {
   const lineEnabled = fx.atlasLines.enabled && fx.atlasLines.opacity > 0.001 && state.expressionModel.parent.enabled;
   if (lineEnabled) {
     updateAtlasPaths(payload.atlasPaths, fx.atlasLines.width, fx.atlasLines.opacity);
-    setText('atlas-paths-display', `${payload.atlasPaths.length} / ${state.pathBudget}`);
+    const diag = payload.atlasPathDiagnostics;
+    if (diag && typeof diag === 'object') {
+      const budgetHit = diag.budgetHit ? ' | budget-hit' : '';
+      setText(
+        'atlas-paths-display',
+        `${diag.segmentsEmitted}/${diag.budgetRequested} seg | combos ${diag.combosEmitted}/${diag.comboCount} | gen ${diag.segmentsGenerated} | clip ${diag.clippedPointCount}${budgetHit}`,
+      );
+    } else {
+      setText('atlas-paths-display', `${payload.atlasPaths.length} / ${state.pathBudget}`);
+    }
 
     if (payload.atlasPaths.length > 0) {
       const labels = new Set();
@@ -714,6 +656,10 @@ function applyRenderPayload(payload, fx) {
   }
   applyVisualHelpers();
   setText('formula-display', state.formulaMode === 'euler' ? 'Euler' : 'Tau');
+  setText(
+    'n-domain-display',
+    `[-${state.n_negDepth} ... -1, 0, 1 ... ${state.n_posDepth}] (${state.n} samples)`,
+  );
 }
 
 function formatProofNumber(v, digits = 6) {
@@ -725,8 +671,9 @@ function computeProofSignature(derived) {
     open: !!derived.proofPanelOpen,
     formulaMode: derived.formulaMode,
     T: derived.T,
-    Z_min: derived.Z_min,
-    Z_max: derived.Z_max,
+    n_negDepth: derived.n_negDepth,
+    n_posDepth: derived.n_posDepth,
+    n: derived.n,
     q_scale: derived.q_scale,
     q_tauScale: derived.q_tauScale,
     q_bool: derived.q_bool,
@@ -787,51 +734,6 @@ function updateProofPayload(force = false) {
   renderProofResults(payload);
 }
 
-function reseedPlaybackBuffer(derived, signature, resetStats = false) {
-  applyBufferTargetWithMemoryGuard(derived);
-  playbackBuffer.reseed({
-    T: derived.T,
-    bounceDir: _stepBounceDir,
-    signature,
-    resetStats,
-  });
-}
-
-function fillPlaybackBuffer(derived, signature, budget, maxBuild, fx, generationToken = _bufferGenerationToken) {
-  applyBufferTargetWithMemoryGuard(derived);
-  return playbackBuffer.fill({
-    signature,
-    generation: generationToken,
-    maxBuild,
-    onPayloadBuilt: (_, bytes) => {
-      if (!Number.isFinite(bytes) || bytes <= 0) return;
-      const guarded = clampBufferTargetByMemory(state.bufferTargetFrames, bytes, MAX_BUFFER_BYTES);
-      if (guarded.reduced) {
-        state.bufferTargetFrames = guarded.targetFrames;
-        playbackBuffer.setTargetFrames(guarded.targetFrames);
-        state.bufferNotice = `memory cap ${guarded.targetFrames}`;
-      }
-    },
-    buildNext: ({ T, bounceDir }) => {
-      // Automatic step traversal is disabled.
-      return { payload: null, nextT: T, bounceDir };
-    },
-  });
-}
-
-function syncSignatureAndBufferState(derived, signature, reason = 'math') {
-  if (signature === lastMathSignature) return;
-  lastMathSignature = signature;
-  if (state.bufferEnabled) {
-    beginHardPrefill(derived, signature, `${reason} prefill`, true);
-    return;
-  }
-  setBufferPhase('idle');
-  state.bufferNotice = '';
-  playbackBuffer.invalidate(signature, true);
-  reseedPlaybackBuffer(derived, signature, true);
-}
-
 export function regenerate(isHeavy = false) {
   _expressionModelGen++;
   clearTimeout(regenerateTimeout);
@@ -844,42 +746,15 @@ export function regenerate(isHeavy = false) {
     const fx = getEffectiveFx();
     const budget = computePointBudget();
     const signature = computeMathSignature(derived, budget);
-    syncSignatureAndBufferState(derived, signature, 'regenerate');
-    if (!state.bufferEnabled) {
-      setBufferPhase('idle');
-      state.bufferTargetFrames = derived.precomputeBufferFrames;
-      state.bufferNotice = '';
-      playbackBuffer.setTargetFrames(derived.precomputeBufferFrames);
-    } else {
-      applyBufferTargetWithMemoryGuard(derived);
-    }
-
-    if (state.bufferEnabled && state.bufferPhase === 'prefill') {
-      updateProofPayload();
-      updateBufferStatus();
-      return;
-    }
+    lastMathSignature = signature;
 
     let payload = pendingRenderPayload;
     pendingRenderPayload = null;
     if (!payload || payload.signature !== signature || Math.abs(payload.derived.T - derived.T) > 1e-12) {
       payload = buildRenderPayload(derived, budget, signature, fx);
-      payload.bounceDir = _stepBounceDir;
     }
     applyRenderPayload(payload, fx);
     updateProofPayload();
-    updateBufferStatus();
-
-    if (state.bufferEnabled && !animation.playing && state.bufferPhase !== 'prefill') {
-      const bgBudget = computeAdaptiveBuildBudget({
-        phase: 'background',
-        fps: getCurrentFps(),
-        depth: playbackBuffer.depth,
-        target: state.bufferTargetFrames,
-      });
-      fillPlaybackBuffer(derived, signature, budget, bgBudget, fx);
-      updateBufferStatus();
-    }
   }, delay);
 }
 class UIBuilder {
@@ -1036,6 +911,8 @@ class UIBuilder {
       linkGetter = null,
       linkSetter = null,
       syncGroup = 'default',
+      allowUndefined = false,
+      undefinedValue = null,
     } = options;
     const row = document.createElement('div');
     row.className = 'slider-row';
@@ -1043,7 +920,7 @@ class UIBuilder {
     lbl.className = 'slider-label';
     lbl.textContent = label;
 
-    const path = typeof linkPath === 'string' ? linkPath : null;
+    const path = typeof linkPath === 'string' ? canonicalizeExpressionPath(linkPath) : null;
     const linkable = !!path && isLinkEligiblePath(path);
 
     let activeBounds = { min, max, step };
@@ -1054,19 +931,9 @@ class UIBuilder {
       let nextMax = Number.isFinite(next.max) ? next.max : activeBounds.max;
       const nextStep = Number.isFinite(next.step) ? next.step : activeBounds.step;
 
-      // During playback, widen bounds to cover the scene track's full range
-      if (path && typeof sceneManager !== 'undefined' && sceneManager && sceneManager.isPlaying()) {
-        const timeline = sceneManager.getTimeline();
-        if (timeline) {
-          for (const scene of timeline.scenes) {
-            const link = scene.links.find(l => l.path === path);
-            if (link) {
-              nextMin = Math.min(nextMin, link.baseValue, link.endValue);
-              nextMax = Math.max(nextMax, link.baseValue, link.endValue);
-            }
-          }
-        }
-      }
+      // Scene Director values are fully decoupled from accordion slider bounds.
+      // No bounds widening is performed here — scene track values are unclamped
+      // raw numbers that bypass slider bounds entirely during playback.
 
       const orderedMin = Math.min(nextMin, nextMax);
       const orderedMax = Math.max(nextMin, nextMax);
@@ -1085,10 +952,17 @@ class UIBuilder {
       else obj[key] = v;
     };
 
-    if (!Number.isFinite(getBoundValueRaw())) setBoundValueRaw(activeBounds.min);
+    if (!Number.isFinite(getBoundValueRaw()) && !allowUndefined) setBoundValueRaw(activeBounds.min);
     const getLiveValue = () => {
       const raw = typeof linkGetter === 'function' ? Number(linkGetter()) : getBoundValueRaw();
-      return Number.isFinite(raw) ? raw : getBoundValueRaw();
+      if (Number.isFinite(raw)) return raw;
+      if (allowUndefined) {
+        const fallback = typeof undefinedValue === 'function'
+          ? Number(undefinedValue())
+          : Number(undefinedValue);
+        if (Number.isFinite(fallback)) return fallback;
+      }
+      return getBoundValueRaw();
     };
     const setLiveValue = (v) => {
       if (typeof linkSetter === 'function') linkSetter(v);
@@ -1111,6 +985,7 @@ class UIBuilder {
     const getBaseValue = () => {
       if (!linkable) return getBoundValueRaw();
       const rec = getLinkedRecord();
+      if (isPathTrackedInTimeline(path)) return getLiveValue();
       return Number.isFinite(rec?.baseValue) ? Number(rec.baseValue) : getLiveValue();
     };
 
@@ -1212,16 +1087,20 @@ class UIBuilder {
     const syncBounds = () => {
       const next = getCurrentBounds();
       activeBounds = next;
-      inputBase.min = String(next.min);
-      inputBase.max = String(next.max);
-      inputBase.step = String(next.step);
+      const minStr = String(next.min);
+      const maxStr = String(next.max);
+      const stepStr = String(next.step);
+      
+      if (inputBase.min !== minStr) inputBase.min = minStr;
+      if (inputBase.max !== maxStr) inputBase.max = maxStr;
+      if (inputBase.step !== stepStr) inputBase.step = stepStr;
 
       // Update inline bounds chips (skip if user is editing)
-      if (boundsMinInput && document.activeElement !== boundsMinInput) {
-        boundsMinInput.value = String(next.min);
+      if (boundsMinInput && document.activeElement !== boundsMinInput && boundsMinInput.value !== minStr) {
+        boundsMinInput.value = minStr;
       }
-      if (boundsMaxInput && document.activeElement !== boundsMaxInput) {
-        boundsMaxInput.value = String(next.max);
+      if (boundsMaxInput && document.activeElement !== boundsMaxInput && boundsMaxInput.value !== maxStr) {
+        boundsMaxInput.value = maxStr;
       }
     };
     if (syncGroup === 'camera') cameraSliderBoundsSyncFns.push(syncBounds);
@@ -1241,12 +1120,17 @@ class UIBuilder {
       // Check scene model tracking state (not link engine)
       const timeline = sceneManager.getTimeline();
       const isTracked = timeline && timeline.scenes.length > 0 &&
-        timeline.scenes[0].links.some(l => l.path === path);
-      linkBtn.classList.toggle('active', isTracked);
-      linkBtn.setAttribute('aria-label', isTracked ? 'Remove from scenes' : 'Add to all scenes');
-      linkBtn.title = isTracked ? 'Tracked in scenes' : 'Add to scenes';
-      linkBtn.innerHTML = isTracked ? ICON_LINK : ICON_UNLINK;
-      if (boundsBtn) boundsBtn.classList.toggle('active', boundsOpen);
+        timeline.scenes[0].links.some((l) => l.path === path);
+      const currentlyActive = linkBtn.classList.contains('active');
+      if (currentlyActive !== !!isTracked) {
+        linkBtn.classList.toggle('active', isTracked);
+        linkBtn.setAttribute('aria-label', isTracked ? 'Remove from scenes' : 'Add to all scenes');
+        linkBtn.title = isTracked ? 'Tracked in scenes' : 'Add to scenes';
+        linkBtn.innerHTML = isTracked ? ICON_LINK : ICON_UNLINK;
+      }
+      if (boundsBtn && boundsBtn.classList.contains('active') !== boundsOpen) {
+        boundsBtn.classList.toggle('active', boundsOpen);
+      }
     };
 
     const syncUI = () => {
@@ -1254,18 +1138,28 @@ class UIBuilder {
       const lo = Math.min(activeBounds.min, activeBounds.max);
       const hi = Math.max(activeBounds.min, activeBounds.max);
       const rec = getLinkedRecord();
-      if (rec && !rec.isLinked) {
+      // When tracked in Scene Director, don't sync link base from slider —
+      // the Scene Director is the source of truth for that parameter.
+      if (rec && !rec.isLinked && !isPathTrackedInTimeline(path)) {
         linkEngine.updateBaseFromLive(path);
       }
-      const base = clamp(getBaseValue(), lo, hi);
-      const strBase = String(base);
+      const tracked = isPathTrackedInTimeline(path);
+      const rawBase = getBaseValue();
+      const base = tracked ? rawBase : clamp(rawBase, lo, hi);
+      const clampedForInput = clamp(base, lo, hi);
+      const strBase = String(clampedForInput);
       if (inputBase.value !== strBase) inputBase.value = strBase;
-      if (!valueDisplay.classList.contains('editing')) valueDisplay.textContent = format(base);
+      const formatted = format(base);
+      if (!valueDisplay.classList.contains('editing') && valueDisplay.textContent !== formatted) {
+        valueDisplay.textContent = formatted;
+      }
 
       // Bounds visibility
       if (boundsMinInput) boundsMinInput.classList.toggle('hidden', !boundsOpen);
       if (boundsMaxInput) boundsMaxInput.classList.toggle('hidden', !boundsOpen);
-      valueDisplay.classList.toggle('bounds-active', boundsOpen);
+      if (valueDisplay.classList.contains('bounds-active') !== boundsOpen) {
+        valueDisplay.classList.toggle('bounds-active', boundsOpen);
+      }
 
       syncLinkUI();
     };
@@ -1441,7 +1335,9 @@ class UIBuilder {
     lbl.className = 'mode-label';
     lbl.textContent = label;
 
-    const path = options.linkPath;
+    const path = typeof options.linkPath === 'string'
+      ? canonicalizeExpressionPath(options.linkPath)
+      : options.linkPath;
     const linkable = !!path;
     let linkBtn = null;
     if (linkable) {
@@ -1489,14 +1385,14 @@ class UIBuilder {
       linkBtn.addEventListener('click', () => {
         const timeline = sceneManager.getTimeline();
         if (!timeline || timeline.scenes.length === 0) return;
-        const isTracked = timeline.scenes[0].links.some(l => l.path === path);
+        const isTracked = timeline.scenes[0].links.some((l) => l.path === path);
         if (isTracked) removeTrackFromAllScenes(timeline, path);
         else {
           const resolvedVal = typeof options.linkValue === 'function' ? options.linkValue(getter()) : getter();
           addTrackToAllScenes(timeline, path, resolvedVal);
         }
 
-        const nowTracked = timeline.scenes[0].links.some(l => l.path === path);
+        const nowTracked = timeline.scenes[0].links.some((l) => l.path === path);
         linkBtn.classList.toggle('active', nowTracked);
         linkBtn.innerHTML = nowTracked ? ICON_LINK : ICON_UNLINK;
         autoSaveTimeline();
@@ -1506,7 +1402,7 @@ class UIBuilder {
       const syncUI = () => {
         const timeline = sceneManager.getTimeline();
         if (!timeline || timeline.scenes.length === 0) return;
-        const nowTracked = timeline.scenes[0].links.some(l => l.path === path);
+        const nowTracked = timeline.scenes[0].links.some((l) => l.path === path);
         linkBtn.classList.toggle('active', nowTracked);
         linkBtn.innerHTML = nowTracked ? ICON_LINK : ICON_UNLINK;
         if (nowTracked) activeLinkedPaths.add(path);
@@ -1545,7 +1441,9 @@ class UIBuilder {
       btn.className = `mode-btn ctrl-interactive${t.obj[t.key] ? ' active-green' : ''}`;
       btn.textContent = t.label;
 
-      const path = t.linkPath;
+      const path = typeof t.linkPath === 'string'
+        ? canonicalizeExpressionPath(t.linkPath)
+        : t.linkPath;
       const linkable = !!path;
       let linkBtn = null;
       if (linkable) {
@@ -1570,11 +1468,11 @@ class UIBuilder {
         linkBtn.addEventListener('click', () => {
           const timeline = sceneManager.getTimeline();
           if (!timeline || timeline.scenes.length === 0) return;
-          const isTracked = timeline.scenes[0].links.some(l => l.path === path);
+          const isTracked = timeline.scenes[0].links.some((l) => l.path === path);
           if (isTracked) removeTrackFromAllScenes(timeline, path);
           else addTrackToAllScenes(timeline, path, t.obj[t.key] ? 1 : 0);
 
-          const nowTracked = timeline.scenes[0].links.some(l => l.path === path);
+          const nowTracked = timeline.scenes[0].links.some((l) => l.path === path);
           linkBtn.classList.toggle('active', nowTracked);
           linkBtn.innerHTML = nowTracked ? ICON_LINK : ICON_UNLINK;
           autoSaveTimeline();
@@ -1584,7 +1482,7 @@ class UIBuilder {
         const syncUI = () => {
           const timeline = sceneManager.getTimeline();
           if (!timeline || timeline.scenes.length === 0) return;
-          const nowTracked = timeline.scenes[0].links.some(l => l.path === path);
+          const nowTracked = timeline.scenes[0].links.some((l) => l.path === path);
           linkBtn.classList.toggle('active', nowTracked);
           linkBtn.innerHTML = nowTracked ? ICON_LINK : ICON_UNLINK;
           if (nowTracked) activeLinkedPaths.add(path);
@@ -1626,6 +1524,11 @@ function bindModeButtons(container, prefix, options, currentValue, onSet) {
 }
 
 function ensureFunctionControlSelection() {
+  const validScopes = new Set(['global', 'exponent', 'function', 'variant']);
+  if (!validScopes.has(functionControlUiState.selectedScope)) {
+    functionControlUiState.selectedScope = 'exponent';
+  }
+
   const exponentKeys = EXPONENT_FAMILIES.map((family) => family.key);
   if (!exponentKeys.includes(functionControlUiState.selectedExponent)) {
     functionControlUiState.selectedExponent = exponentKeys[0];
@@ -1642,6 +1545,13 @@ function ensureFunctionControlSelection() {
 
   if (!functionControlUiState.selectedFunction) {
     functionControlUiState.selectedVariant = null;
+    if (functionControlUiState.selectedScope === 'variant') {
+      functionControlUiState.selectedScope = 'exponent';
+    }
+  }
+
+  if (!functionControlUiState.selectedVariant && functionControlUiState.selectedScope === 'variant') {
+    functionControlUiState.selectedScope = functionControlUiState.selectedFunction ? 'function' : 'exponent';
   }
 }
 
@@ -1652,12 +1562,14 @@ function resolveNodeVisibilityState(localEnabled, ancestorEnabled) {
 }
 
 function resolveExponentVisibilityState(exponentKey) {
-  return resolveExponentTriState(state.expressionModel, exponentKey);
+  const localState = resolveExponentTriState(state.expressionModel, exponentKey);
+  if (!state.expressionModel.parent.enabled) return localState === 'disabled' ? 'disabled' : 'inherited';
+  return localState;
 }
 
 function resolveFunctionVisibilityState(functionKey, ancestorEnabled) {
   const localState = resolveFunctionTriState(state.expressionModel, functionKey);
-  if (!ancestorEnabled && localState === 'enabled') return 'inherited';
+  if (!ancestorEnabled) return localState === 'disabled' ? 'disabled' : 'inherited';
   return localState;
 }
 
@@ -1674,11 +1586,86 @@ function visibilityIconForState(stateKey) {
   return ICON_EYE_OFF;
 }
 
+function captureFunctionToggleTelemetry(exponentKey, functionKey) {
+  const lineCombos = getActiveExpressionCombos({
+    ...state,
+    expressionModel: state.expressionModel,
+  }).filter((combo) => combo.style?.lineOpacity > 0.0001 && combo.style?.lineWidth > 0.0001);
+
+  const triStates = {};
+  for (const node of getFunctionNodesByExponent(exponentKey)) {
+    triStates[node.key] = resolveFunctionTriState(state.expressionModel, node.key);
+  }
+
+  return {
+    exponentKey,
+    functionKey,
+    setEnabled: !!state.expressionModel.sets?.[exponentKey]?.enabled,
+    targetActiveLines: lineCombos.filter((combo) => combo.childKey === functionKey).length,
+    exponentActiveLines: lineCombos.filter((combo) => combo.setKey === exponentKey).length,
+    triStates,
+  };
+}
+
+function emitFunctionToggleTelemetry(before, nextEnabled, source = 'unknown') {
+  if (!before) return;
+  const after = captureFunctionToggleTelemetry(before.exponentKey, before.functionKey);
+  const siblingStateChanges = [];
+  for (const [functionKey, beforeState] of Object.entries(before.triStates)) {
+    if (functionKey === before.functionKey) continue;
+    if (after.triStates[functionKey] !== beforeState) siblingStateChanges.push(functionKey);
+  }
+
+  if (siblingStateChanges.length > 0) {
+    console.warn('[function-toggle]', {
+      source,
+      exponentKey: before.exponentKey,
+      functionKey: before.functionKey,
+      issue: 'sibling-tristate-mutation',
+      siblingStateChanges,
+    });
+  }
+
+  if (nextEnabled === false && after.targetActiveLines !== 0) {
+    console.warn('[function-toggle]', {
+      source,
+      exponentKey: before.exponentKey,
+      functionKey: before.functionKey,
+      issue: 'target-still-active-after-disable',
+      targetActiveLines: after.targetActiveLines,
+    });
+  }
+
+  if (nextEnabled === true && after.targetActiveLines === 0) {
+    console.warn('[function-toggle]', {
+      source,
+      exponentKey: before.exponentKey,
+      functionKey: before.functionKey,
+      issue: 'target-remains-inactive-after-enable',
+      beforeTargetActiveLines: before.targetActiveLines,
+      afterTargetActiveLines: after.targetActiveLines,
+    });
+  }
+
+  console.debug('[function-toggle]', {
+    source,
+    exponentKey: before.exponentKey,
+    functionKey: before.functionKey,
+    nextEnabled,
+    setEnabledBefore: before.setEnabled,
+    setEnabledAfter: after.setEnabled,
+    targetActiveLinesBefore: before.targetActiveLines,
+    targetActiveLinesAfter: after.targetActiveLines,
+    exponentActiveLinesBefore: before.exponentActiveLines,
+    exponentActiveLinesAfter: after.exponentActiveLines,
+  });
+}
+
 function buildUnifiedFunctionControlSection(b) {
   ensureFunctionControlSelection();
 
   b.section('Function Control', false)
-    .info('One hierarchy: + exponent / - exponent -> function -> variant.')
+    .info('One hierarchy: global -> + exponent / - exponent -> function -> variant.')
     .html('<div id="function-control-root"></div>');
 
   const root = controlsContainer.querySelector('#function-control-root');
@@ -1726,9 +1713,17 @@ function buildUnifiedFunctionControlSection(b) {
   };
 
   const parentEnabled = !!state.expressionModel.parent.enabled;
+  const selectedScope = functionControlUiState.selectedScope;
   const selectedExponent = functionControlUiState.selectedExponent;
   const selectedFunction = functionControlUiState.selectedFunction;
   const selectedVariant = functionControlUiState.selectedVariant;
+  const selectedScopeLabel = selectedScope === 'global'
+    ? 'global'
+    : selectedScope === 'function'
+      ? 'function'
+      : selectedScope === 'variant'
+        ? 'variant'
+        : 'exponent';
   const selectedExponentLabel = EXPONENT_FAMILIES.find((family) => family.key === selectedExponent)?.label || selectedExponent;
   const selectedFunctionNode = selectedFunction
     ? getFunctionNodesByExponent(selectedExponent).find((node) => node.key === selectedFunction) || null
@@ -1752,6 +1747,27 @@ function buildUnifiedFunctionControlSection(b) {
     root.appendChild(row);
   };
 
+  appendGroupLabel('0) global', 'root scope');
+  const globalRow = document.createElement('div');
+  globalRow.className = 'exponent-grid';
+  globalRow.appendChild(createNode({
+    label: 'global',
+    isActive: selectedScope === 'global',
+    visibilityState: resolveNodeVisibilityState(!!state.expressionModel.parent.enabled, true),
+    onSelect: () => {
+      functionControlUiState.selectedScope = 'global';
+      functionControlUiState.selectedFunction = null;
+      functionControlUiState.selectedVariant = null;
+      buildControls();
+    },
+    onToggle: () => {
+      state.expressionModel.parent.enabled = !state.expressionModel.parent.enabled;
+      regenerate();
+      buildControls();
+    },
+  }));
+  root.appendChild(globalRow);
+
   appendGroupLabel('1) exponent family', 'select level');
   const exponentRow = document.createElement('div');
   exponentRow.className = 'exponent-grid';
@@ -1762,6 +1778,7 @@ function buildUnifiedFunctionControlSection(b) {
       isActive: selectedExponent === family.key,
       visibilityState: visState,
       onSelect: () => {
+        functionControlUiState.selectedScope = 'exponent';
         functionControlUiState.selectedExponent = family.key;
         functionControlUiState.selectedFunction = null;
         functionControlUiState.selectedVariant = null;
@@ -1792,6 +1809,7 @@ function buildUnifiedFunctionControlSection(b) {
       isActive: selectedFunction === fnNode.key,
       visibilityState: visState,
       onSelect: () => {
+        functionControlUiState.selectedScope = 'function';
         functionControlUiState.selectedFunction = fnNode.key;
         functionControlUiState.selectedVariant = null;
         buildControls();
@@ -1799,12 +1817,14 @@ function buildUnifiedFunctionControlSection(b) {
       onToggle: () => {
         const current = resolveFunctionTriState(state.expressionModel, fnNode.key);
         const nextEnabled = current === 'enabled' ? false : true; // mixed→on, disabled→on, enabled→off
+        const telemetryBefore = captureFunctionToggleTelemetry(selectedExponent, fnNode.key);
         setFunctionNodeEnabledWithAncestors(
           state.expressionModel,
           selectedExponent,
           fnNode.key,
           nextEnabled,
         );
+        emitFunctionToggleTelemetry(telemetryBefore, nextEnabled, 'tree-function-icon');
         regenerate();
         buildControls();
       },
@@ -1833,6 +1853,7 @@ function buildUnifiedFunctionControlSection(b) {
       blockedReason: 'select a function first',
       onSelect: () => {
         if (!hasSelectedFunction) return;
+        functionControlUiState.selectedScope = 'variant';
         functionControlUiState.selectedVariant = variant.key;
         buildControls();
       },
@@ -1855,7 +1876,7 @@ function buildUnifiedFunctionControlSection(b) {
 
   const pathRow = document.createElement('div');
   pathRow.className = 'function-path-row';
-  pathRow.textContent = `path: ${selectedExponentLabel} -> ${selectedFunctionLabel} -> ${selectedVariantLabel}`;
+  pathRow.textContent = `path: ${selectedScopeLabel} -> ${selectedExponentLabel} -> ${selectedFunctionLabel} -> ${selectedVariantLabel}`;
   root.appendChild(pathRow);
 
   const stylePanel = document.createElement('div');
@@ -1863,40 +1884,80 @@ function buildUnifiedFunctionControlSection(b) {
   root.appendChild(stylePanel);
   const sb = new UIBuilder(stylePanel);
 
+  const resolveScopedHue = (mode) => {
+    const model = state.expressionModel;
+    const parentHue = normalizeColorHue(model.parent?.colorHue, 0.62);
+    if (mode === 'global') return parentHue;
+    if (mode === 'function') {
+      const childHue = normalizeColorHue(model.children?.[selectedFunction]?.colorHue, undefined);
+      return Number.isFinite(childHue) ? childHue : parentHue;
+    }
+    if (mode === 'variant') {
+      const variantHue = normalizeColorHue(model.childVariants?.[selectedFunction]?.[selectedVariant]?.colorHue, undefined);
+      if (Number.isFinite(variantHue)) return variantHue;
+      const childHue = normalizeColorHue(model.children?.[selectedFunction]?.colorHue, undefined);
+      return Number.isFinite(childHue) ? childHue : parentHue;
+    }
+    return parentHue;
+  };
+
   const resolveScopeTarget = () => {
-    if (selectedFunction && selectedVariant) {
-      const variant = VARIANT_DEFINITIONS.find((node) => node.key === selectedVariant);
-      const style = state.expressionModel.childVariants[selectedFunction][selectedVariant];
+    if (selectedScope === 'global') {
       return {
-        label: `${variant?.label || selectedVariant}`,
-        style,
-        path: `expression.childVariants.${selectedFunction}.${selectedVariant}`,
-        visibilityState: resolveNodeVisibilityState(!!style.enabled, variantAncestorEnabled),
-        allowColor: false,
+        mode: 'global',
+        label: 'global',
+        style: state.expressionModel.parent,
+        path: 'expression.parent',
+        visibilityState: resolveNodeVisibilityState(!!state.expressionModel.parent.enabled, true),
+        allowHue: true,
+        allowHueOverride: false,
+        resolveHue: () => resolveScopedHue('global'),
         maxScale: 4,
       };
     }
 
-    if (selectedFunction) {
+    if (selectedScope === 'variant' && selectedFunction && selectedVariant) {
+      const variant = VARIANT_DEFINITIONS.find((node) => node.key === selectedVariant);
+      const style = state.expressionModel.childVariants[selectedFunction][selectedVariant];
+      return {
+        mode: 'variant',
+        label: `${variant?.label || selectedVariant}`,
+        style,
+        path: `expression.childVariants.${selectedFunction}.${selectedVariant}`,
+        visibilityState: resolveNodeVisibilityState(!!style.enabled, variantAncestorEnabled),
+        allowHue: true,
+        allowHueOverride: true,
+        resolveHue: () => resolveScopedHue('variant'),
+        maxScale: 4,
+      };
+    }
+
+    if (selectedScope === 'function' && selectedFunction) {
       const fnNode = functionNodes.find((node) => node.key === selectedFunction);
       const style = state.expressionModel.children[selectedFunction];
       return {
+        mode: 'function',
         label: fnNode?.label || selectedFunction,
         style,
         path: `expression.children.${selectedFunction}`,
         visibilityState: resolveFunctionVisibilityState(selectedFunction, functionAncestorEnabled),
-        allowColor: true,
+        allowHue: true,
+        allowHueOverride: true,
+        resolveHue: () => resolveScopedHue('function'),
         maxScale: 4,
       };
     }
 
     const style = state.expressionModel.sets[selectedExponent];
     return {
+      mode: 'exponent',
       label: `${EXPONENT_FAMILIES.find((family) => family.key === selectedExponent)?.label || selectedExponent}`,
       style,
       path: `expression.sets.${selectedExponent}`,
       visibilityState: resolveExponentVisibilityState(selectedExponent),
-      allowColor: false,
+      allowHue: false,
+      allowHueOverride: false,
+      resolveHue: () => resolveScopedHue('global'),
       maxScale: 4,
     };
   };
@@ -1904,15 +1965,31 @@ function buildUnifiedFunctionControlSection(b) {
   const scopeTarget = resolveScopeTarget();
   sb.info(`<strong>${scopeTarget.label}</strong>`);
   sb.html(`<div class=\"ctrl-info\">visibility: ${visibilityStateLabel(scopeTarget.visibilityState)}</div>`);
-  sb.toggle('visible', scopeTarget.style, 'enabled', () => buildControls())
-    .slider('point size', scopeTarget.style, 'pointSize', 0, scopeTarget.maxScale, 0.05, { linkPath: `${scopeTarget.path}.pointSize` })
+  sb.toggleRow('visible', [{
+    label: 'visible',
+    obj: scopeTarget.style,
+    key: 'enabled',
+    onChange: () => buildControls(),
+    linkPath: `${scopeTarget.path}.enabled`,
+  }]);
+  sb.slider('point size', scopeTarget.style, 'pointSize', 0, scopeTarget.maxScale, 0.05, { linkPath: `${scopeTarget.path}.pointSize` })
     .slider('point opacity', scopeTarget.style, 'pointOpacity', 0, 1, 0.01, { linkPath: `${scopeTarget.path}.pointOpacity` })
     .slider('line size', scopeTarget.style, 'lineWidth', 0, scopeTarget.maxScale, 0.05, { linkPath: `${scopeTarget.path}.lineWidth` })
     .slider('line opacity', scopeTarget.style, 'lineOpacity', 0, 1, 0.01, { linkPath: `${scopeTarget.path}.lineOpacity` })
     .slider('point bloom', scopeTarget.style, 'pointBloom', 0, 4, 0.05, { linkPath: `${scopeTarget.path}.pointBloom` })
     .slider('line bloom', scopeTarget.style, 'lineBloom', 0, 4, 0.05, { linkPath: `${scopeTarget.path}.lineBloom` });
 
-  if (scopeTarget.allowColor) sb.color('color', scopeTarget.style, 'color');
+  if (scopeTarget.allowHue) {
+    if (scopeTarget.allowHueOverride && !Number.isFinite(scopeTarget.style.colorHue)) {
+      sb.html('<div class="ctrl-info">hue source: inherited</div>');
+    }
+    sb.slider('hue', scopeTarget.style, 'colorHue', 0, 1, 0.001, {
+      fmt: (v) => v.toFixed(3),
+      linkPath: `${scopeTarget.path}.colorHue`,
+      allowUndefined: scopeTarget.allowHueOverride,
+      undefinedValue: scopeTarget.resolveHue,
+    });
+  }
 }
 
 function buildCameraPanel() {
@@ -2226,7 +2303,7 @@ function buildProofPanel() {
       <div><strong>The Axiom</strong></div>
       <div>f = k1 * exp(i*tau^k) with mirrored - exponent branch</div>
       <div>Variants: (f), sin(f), cos(f), tan(f), log(f), log(sin/cos/tan)</div>
-      <div>n-domain: [Z_min+1 ... Z_max-1] with 710-block color boundaries</div>
+      <div>n-domain: [-n_negDepth ... -1, 0, 1 ... n_posDepth] with 710-block color boundaries</div>
     </div>
   `);
   b.slider('proof offset P', state, 'P', 1, 200, 1, { fmt: (v) => v.toFixed(0) });
@@ -2318,16 +2395,20 @@ function buildControls() {
 
   const b = new UIBuilder(controlsContainer);
 
+  b.section('Studio Config', true)
+    .info('Save the current effects, toggles, and camera view to persist between reloads.')
+    .html('<div class="preset-row" style="margin-top:6px; margin-bottom:8px;"><button class="preset-btn ctrl-interactive" id="btn-save-setup">Save Setup</button><button class="preset-btn ctrl-interactive" id="btn-reset-setup">Clear Setup</button></div>');
+
   b.section('Mode')
     .toggle('Master enabled', state.cinematicFx.master, 'enabled', () => { applyVisualHelpers(); regenerate(); })
     .slider('Master intensity', state.cinematicFx.master, 'intensity', 0, 2, 0.01, { fmt: (v) => v.toFixed(2), linkPath: 'cinematic.master.intensity' })
     .toggleRow('Graphs', [
-      { label: 'Points', obj: state.cinematicFx.points, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.points.opacity' },
-      { label: 'Lines', obj: state.cinematicFx.atlasLines, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.atlasLines.opacity' },
+      { label: 'Points', obj: state.cinematicFx.points, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.points.enabled' },
+      { label: 'Lines', obj: state.cinematicFx.atlasLines, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.atlasLines.enabled' },
     ])
     .toggleRow('Guides', [
       { label: 'Grid', obj: state.visualHelpers, key: 'grid', onChange: () => applyVisualHelpers(), linkPath: 'visualHelpers.gridOpacity' },
-      { label: 'Ghost', obj: state.cinematicFx.ghostTraces, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.ghostTraces.opacity' },
+      { label: 'Ghost', obj: state.cinematicFx.ghostTraces, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.ghostTraces.enabled' },
       { label: 'Reference', obj: state.visualHelpers, key: 'referenceRings', onChange: () => applyVisualHelpers(), linkPath: 'visualHelpers.referenceOpacity' },
       { label: 'Orbit', obj: state.visualHelpers, key: 'orbitRing', onChange: () => applyVisualHelpers(), linkPath: 'visualHelpers.orbitOpacity' },
     ])
@@ -2339,10 +2420,10 @@ function buildControls() {
     .modeToggle('View', getViewMode, setViewMode, '3d', '2d', '3D', '2D')
     .modeToggle('Render', getRenderMode, setRenderMode, 'cinematic', 'performance', 'Cinematic', 'Performance')
     .toggleRow('Effects', [
-      { label: 'Stars', obj: state.cinematicFx.stars, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.stars.opacity' },
-      { label: 'Bloom', obj: state.cinematicFx.bloom, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.bloom.strength' },
-      { label: 'Fog', obj: state.cinematicFx.fog, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.fog.density' },
-      { label: 'Tone', obj: state.cinematicFx.tone, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.tone.exposure' },
+      { label: 'Stars', obj: state.cinematicFx.stars, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.stars.enabled' },
+      { label: 'Bloom', obj: state.cinematicFx.bloom, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.bloom.enabled' },
+      { label: 'Fog', obj: state.cinematicFx.fog, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.fog.enabled' },
+      { label: 'Tone', obj: state.cinematicFx.tone, key: 'enabled', onChange: () => regenerate(), linkPath: 'cinematic.tone.enabled' },
     ], { cssClass: 'cinematic-only' })
     .childSection('Advanced FX', true, { cssClass: 'cinematic-only' })
     .slider('star rot Y', state.cinematicFx.stars, 'rotY', 0, 0.002, 0.0001, { fmt: (v) => v.toFixed(4), linkPath: 'cinematic.stars.rotY' })
@@ -2354,132 +2435,30 @@ function buildControls() {
 
 
   b.section('Traversal', true)
-    .info('JSON-literal k: k={bool=0:T, bool>0:kAligned}. Playback is binary (play/pause) and uses deterministic stepping.')
+    .info('Scene Director drives playback. T and b remain live scalar controls for authoring and timeline tracks.')
     .slider('T', state, 'T', state.T_lowerBound, state.T_upperBound, getTSliderStep(), {
       fmt: (v) => v.toFixed(5),
       dynamicBounds: () => computeTraversalTBounds(state, getTSliderStep()),
       linkPath: 'T',
     })
-    .html(`<div class="mode-row">
-      <span class="slider-label">step loop</span>
-      <button class="mode-pill ctrl-interactive" id="steploop-clamp">clamp</button>
-      <button class="mode-pill ctrl-interactive" id="steploop-bounce">bounce</button>
-    </div>`)
-    .slider('b', state, 'b', 1, 100000000, 1, { fmt: (v) => v.toFixed(0), linkPath: 'b' })
-    .html(`<div class="mode-row">
-      <span class="slider-label">buffer mode</span>
-      <button class="mode-pill ctrl-interactive" id="buffermode-off">off</button>
-      <button class="mode-pill ctrl-interactive" id="buffermode-on">on</button>
-    </div>`)
-    .slider('buffer', state, 'precomputeBufferValue', 1, 600, 1, {
-      fmt: (v) => state.precomputeBufferUnit === 'seconds' ? `${v.toFixed(2)}s` : `${Math.floor(v)}f`,
-      commitMode: 'exact',
-      dynamicBounds: () => (
-        state.precomputeBufferUnit === 'seconds'
-          ? { min: 0.1, max: 10, step: 0.05 }
-          : { min: 1, max: 600, step: 1 }
-      ),
-      onCommit: (v) => {
-        const next = state.precomputeBufferUnit === 'seconds'
-          ? clamp(v, 0.1, 10)
-          : clamp(Math.floor(v), 1, 600);
-        state.precomputeBufferValue = next;
-        state.precomputeBufferFrames = resolvePrecomputeBufferFrames(state.precomputeBufferUnit, next);
-        state.bufferTargetFrames = state.precomputeBufferFrames;
-        const derived = deriveState();
-        const signature = computeMathSignature(derived, computePointBudget());
-        if (state.bufferEnabled) beginHardPrefill(derived, signature, 'buffer target', false);
-        else playbackBuffer.invalidate(signature, true);
-        return {
-          value: next,
-          status: Math.abs(next - v) > 1e-12 ? 'normalized' : 'applied',
-        };
-      },
-    })
-    .html(`<div class="mode-row">
-      <span class="slider-label">buffer unit</span>
-      <button class="mode-pill ctrl-interactive" id="bufferunit-frames">frames</button>
-      <button class="mode-pill ctrl-interactive" id="bufferunit-seconds">seconds</button>
-    </div>`)
-    .html(`<div class="mode-row">
-      <span class="slider-label">T step source</span>
-      <button class="mode-pill ctrl-interactive" id="tstep-sync-on">sync s</button>
-      <button class="mode-pill ctrl-interactive" id="tstep-sync-off">fixed</button>
-    </div>`)
-    .html('<div class="hud-row" style="margin-top:6px"><span class="hud-key">Buffer</span><span class="hud-val" id="buffer-mode-display">OFF</span></div>')
-    .html('<div class="hud-row"><span class="hud-key">Buffer cache</span><span class="hud-val" id="buffer-status-panel">-</span></div>');
-  bindModeButtons(
-    controlsContainer,
-    'steploop',
-    [{ value: 'clamp' }, { value: 'bounce' }],
-    () => state.stepLoopMode,
-    (v) => {
-      state.stepLoopMode = v;
-      if (v === 'clamp') _stepBounceDir = 1;
-    },
-  );
-  bindModeButtons(
-    controlsContainer,
-    'buffermode',
-    [{ value: 'off' }, { value: 'on' }],
-    () => (state.bufferEnabled ? 'on' : 'off'),
-    (v) => {
-      state.bufferEnabled = v === 'on';
-      const derived = deriveState();
-      const signature = computeMathSignature(derived, computePointBudget());
-      if (state.bufferEnabled) {
-        beginHardPrefill(derived, signature, 'toggle on', true);
-      } else {
-        setBufferPhase('idle');
-        state.bufferProgress = 0;
-        state.bufferNotice = '';
-        playbackBuffer.invalidate(signature, true);
-        reseedPlaybackBuffer(derived, signature, true);
-      }
-      updateBufferStatus();
-    },
-  );
-  bindModeButtons(
-    controlsContainer,
-    'tstep-sync',
-    [{ value: 'on' }, { value: 'off' }],
-    () => (state.syncTStepToS ? 'on' : 'off'),
-    (v) => { state.syncTStepToS = v === 'on'; },
-  );
-  bindModeButtons(
-    controlsContainer,
-    'bufferunit',
-    [{ value: 'frames' }, { value: 'seconds' }],
-    () => state.precomputeBufferUnit,
-    (v) => {
-      state.precomputeBufferUnit = v === 'seconds' ? 'seconds' : 'frames';
-      if (state.precomputeBufferUnit === 'seconds') {
-        state.precomputeBufferValue = clamp(state.precomputeBufferValue, 0.1, 10);
-      } else {
-        state.precomputeBufferValue = clamp(Math.floor(state.precomputeBufferValue), 1, 600);
-      }
-      state.precomputeBufferFrames = resolvePrecomputeBufferFrames(state.precomputeBufferUnit, state.precomputeBufferValue);
-      state.bufferTargetFrames = state.precomputeBufferFrames;
-      const derived = deriveState();
-      const signature = computeMathSignature(derived, computePointBudget());
-      if (state.bufferEnabled) beginHardPrefill(derived, signature, 'buffer unit', false);
-      else playbackBuffer.invalidate(signature, true);
-    },
-  );
+    .slider('b', state, 'b', 1, 100000000, 1, { fmt: (v) => v.toFixed(0), linkPath: 'b' });
 
   b.section('n Domain', true)
-    .info('Canonical n = [Z_min+1 ... Z_max-1], with fixed 710 boundary coloring.')
-    .slider('Z_min', state, 'Z_min', -50000, 0, 1, {
+    .info('Canonical n = [-n_negDepth ... -1, 0, 1 ... n_posDepth], with fixed 710 boundary coloring.')
+    .slider('negative depth', state, 'n_negDepth', 0, 50000, 1, {
       fmt: (v) => v.toFixed(0),
       heavy: true,
-      onCommit: (v) => applyZRangeCommit(state, 'Z_min', v),
+      onCommit: (v) => applyNDepthCommit(state, 'n_negDepth', v),
+      linkPath: 'n_negDepth',
     })
-    .slider('Z_max', state, 'Z_max', 0, 50000, 1, {
+    .slider('positive depth', state, 'n_posDepth', 0, 50000, 1, {
       fmt: (v) => v.toFixed(0),
       heavy: true,
-      onCommit: (v) => applyZRangeCommit(state, 'Z_max', v),
+      onCommit: (v) => applyNDepthCommit(state, 'n_posDepth', v),
+      linkPath: 'n_posDepth',
     })
-    .slider('path budget', state, 'pathBudget', 10, 2000, 10, { fmt: (v) => v.toFixed(0), heavy: true });
+    .html('<div class="hud-row" style="margin-top:6px"><span class="hud-key">active n-domain</span><span class="hud-val" id="n-domain-display">-</span></div>')
+    .slider('path budget', state, 'pathBudget', 10, 50000, 10, { fmt: (v) => v.toFixed(0), heavy: true });
 
   b.section('Scaling', true)
     .slider('l_base', state, 'l_base', 0.01, 20, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'l_base' })
@@ -2491,30 +2470,27 @@ function buildControls() {
       { linkPath: 'kStepsInAlignmentsBool' }
     );
 
-  // Q-parameters are only visible if kStepsInAlignmentsBool === 1
-  if (state.kStepsInAlignmentsBool === 1) {
-    b.childSection('q-Scaling', false)
-      .slider('q_scale (strands)', state, 'q_scale', 0, 50, 0.001, {
-        fmt: (v) => v.toFixed(6),
-        linkPath: 'q_scale',
-        dynamicBounds: () => ({ min: 0, max: 50, step: state.q_scale_s || 0.001 }),
-      })
-      .slider('q_scale_b', state, 'q_scale_b', 1, 100000000, 1, { fmt: (v) => v.toFixed(0) })
-      .slider('q_tauScale', state, 'q_tauScale', -10, 10, 1, { fmt: (v) => v.toFixed(0), linkPath: 'q_tauScale' })
-      .modeToggle('q_bool', 
-        () => Number(state.q_bool), 
-        (v) => { state.q_bool = v; }, 
-        0, 1, '0', '1', 
-        { linkPath: 'q_bool' }
-      )
-      .modeToggle('q_correction', 
-        () => Number(state.q_correction), 
-        (v) => { state.q_correction = v; }, 
-        0, 1, '0', '1', 
-        { linkPath: 'q_correction' }
-      );
-    b.endChild();
-  }
+  b.childSection('q-Scaling', false)
+    .slider('q_scale (strands)', state, 'q_scale', 0, 50, 0.001, {
+      fmt: (v) => v.toFixed(6),
+      linkPath: 'q_scale',
+      dynamicBounds: () => ({ min: 0, max: 50, step: state.q_scale_s || 0.001 }),
+    })
+    .slider('q_scale_b', state, 'q_scale_b', 1, 100000000, 1, { fmt: (v) => v.toFixed(0) })
+    .slider('q_tauScale', state, 'q_tauScale', -10, 10, 1, { fmt: (v) => v.toFixed(0), linkPath: 'q_tauScale' })
+    .modeToggle('q_bool', 
+      () => Number(state.q_bool), 
+      (v) => { state.q_bool = v; }, 
+      0, 1, '0', '1', 
+      { linkPath: 'q_bool' }
+    )
+    .modeToggle('q_correction', 
+      () => Number(state.q_correction), 
+      (v) => { state.q_correction = v; }, 
+      0, 1, '0', '1', 
+      { linkPath: 'q_correction' }
+    );
+  b.endChild();
 
   b.slider('k2', state, 'k2', 0, 10, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'k2' })
    .slider('k3', state, 'k3', 0.01, 10, 0.01, { fmt: (v) => v.toFixed(3), linkPath: 'k3' });
@@ -2528,6 +2504,30 @@ function buildControls() {
   const shotBtn = document.getElementById('btn-screenshot');
   if (resetBtn) resetBtn.addEventListener('click', () => resetCamera());
   if (shotBtn) shotBtn.addEventListener('click', () => captureScreenshot());
+
+  const saveSetupBtn = document.getElementById('btn-save-setup');
+  const resetSetupBtn = document.getElementById('btn-reset-setup');
+  if (saveSetupBtn) {
+    saveSetupBtn.addEventListener('click', () => {
+      saveStudioConfig();
+      saveSetupBtn.textContent = 'Saved!';
+      saveSetupBtn.classList.add('active-green');
+      setTimeout(() => { 
+        if (saveSetupBtn) {
+          saveSetupBtn.textContent = 'Save Setup';
+          saveSetupBtn.classList.remove('active-green');
+        }
+      }, 1500);
+    });
+  }
+  if (resetSetupBtn) {
+    resetSetupBtn.addEventListener('click', () => {
+      clearStudioConfig();
+      resetSetupBtn.textContent = 'Cleared!';
+      setTimeout(() => { if (resetSetupBtn) resetSetupBtn.textContent = 'Clear Setup'; }, 1500);
+    });
+  }
+
   buildAudioPanel();
   buildProofPanel();
   linkEngine.prune((path) => {
@@ -2577,13 +2577,6 @@ function buildTransportBar() {
     }
     animation.toggle();
     deriveState();
-    const signature = computeMathSignature(state, computePointBudget());
-    if (!state.bufferEnabled) {
-      reseedPlaybackBuffer(state, signature);
-    } else if (!wasPlaying && animation.playing) {
-      beginHardPrefill(state, signature, 'play start', false);
-    }
-    updateBufferStatus();
     updateTransportUI();
     syncSliderReadOnlyState();
   });
@@ -2602,14 +2595,7 @@ function buildTransportBar() {
       buildTransportBar();
       restoreTimelineForAutoHide();
     }
-    _stepBounceDir = 1;
     deriveState();
-    const signature = computeMathSignature(state, computePointBudget());
-    setBufferPhase('idle');
-    state.bufferProgress = 0;
-    state.bufferNotice = '';
-    reseedPlaybackBuffer(state, signature, true);
-    updateBufferStatus();
     regenerate(true);
     updateTransportUI();
     syncSliderReadOnlyState();
@@ -2623,19 +2609,12 @@ function buildTransportBar() {
   scrub.min = 0;
   scrub.max = 1000;
   scrub.step = 1;
-  scrub.value = `${animation.progress * 1000}`;
+  scrub.value = `${animation.getResolvedProgress() * 1000}`;
   scrub.addEventListener('input', () => {
     const value = parseFloat(scrub.value);
     const p = Number.isNaN(value) ? 0 : clamp(value / 1000, 0, 1);
     animation.seek(p);
     deriveState();
-    const signature = computeMathSignature(state, computePointBudget());
-    if (state.bufferEnabled) {
-      beginHardPrefill(state, signature, 'scrub seek', true);
-    } else {
-      reseedPlaybackBuffer(state, signature, true);
-    }
-    updateBufferStatus();
     regenerate();
   });
 
@@ -2673,7 +2652,7 @@ function buildTransportBar() {
 
 function updateTransportUI() {
   const tScrub = document.querySelector('.transport-scrub');
-  if (tScrub) tScrub.value = `${animation.progress * 1000}`;
+  if (tScrub) tScrub.value = `${animation.getResolvedProgress() * 1000}`;
 
   const playBtn = document.querySelector('.transport-btn-mini[data-role="playpause"]');
   if (playBtn) {
@@ -2701,16 +2680,8 @@ function syncSliderReadOnlyState() {
   });
 }
 
-function consumeBufferedPayload(derived, signature, budget, fx, stepsToConsume) {
-  let latest = null;
-  const steps = Math.max(1, Math.floor(Number.isFinite(stepsToConsume) ? stepsToConsume : 1));
-  // Buffer consumption for step-based animation removed.
-  return null;
-}
-
 function animationFrame() {
   const now = performance.now();
-  const dtSeconds = Math.max(0, (now - _lastFrameMs) / 1000);
   _lastFrameMs = now;
 
   const changed = animation.update();
@@ -2726,38 +2697,16 @@ function animationFrame() {
   const fx = getEffectiveFx();
   const budget = computePointBudget();
   const signature = computeMathSignature(derived, budget);
-  syncSignatureAndBufferState(derived, signature, 'frame');
-
-  if (state.bufferEnabled) {
-    if (state.bufferPhase === 'prefill') {
-      // Still pre-filling — skip render, just update buffer status
-      updateBufferStatus();
-      return;
-    }
-    applyBufferTargetWithMemoryGuard(derived);
-  }
+  lastMathSignature = signature;
 
   // Build and apply the render payload
   let payload = pendingRenderPayload;
   pendingRenderPayload = null;
   if (!payload || payload.signature !== signature || Math.abs(payload.derived.T - derived.T) > 1e-12) {
     payload = buildRenderPayload(derived, budget, signature, fx);
-    payload.bounceDir = _stepBounceDir;
   }
   applyRenderPayload(payload, fx);
   updateProofPayload();
-
-  // Background buffer fill when idle
-  if (state.bufferEnabled && !animation.playing && state.bufferPhase !== 'prefill') {
-    const bgBudget = computeAdaptiveBuildBudget({
-      phase: 'background',
-      fps: getCurrentFps(),
-      depth: playbackBuffer.depth,
-      target: state.bufferTargetFrames,
-    });
-    fillPlaybackBuffer(derived, signature, budget, bgBudget, fx);
-  }
-  updateBufferStatus();
 }
 
 function setupKeyboard() {
@@ -2781,13 +2730,6 @@ function setupKeyboard() {
           }
           animation.toggle();
           deriveState();
-          const signature = computeMathSignature(state, computePointBudget());
-          if (!state.bufferEnabled) {
-            reseedPlaybackBuffer(state, signature);
-          } else if (!wasPlaying && animation.playing) {
-            beginHardPrefill(state, signature, 'play start', false);
-          }
-          updateBufferStatus();
           updateTransportUI();
           syncSliderReadOnlyState();
         }
@@ -2806,13 +2748,7 @@ function setupKeyboard() {
           buildTransportBar();
           restoreTimelineForAutoHide();
         }
-        _stepBounceDir = 1;
         deriveState();
-        setBufferPhase('idle');
-        state.bufferProgress = 0;
-        state.bufferNotice = '';
-        reseedPlaybackBuffer(state, computeMathSignature(state, computePointBudget()), true);
-        updateBufferStatus();
         regenerate(true);
         updateTransportUI();
         syncSliderReadOnlyState();
@@ -2825,7 +2761,99 @@ function setupKeyboard() {
   });
 }
 
+const CONFIG_LS_KEY = 'tau-atlas-setup-config';
+
+export function saveStudioConfig() {
+  const payload = {
+    theme: getTheme(),
+    themeBlend: state.themeBlend,
+    renderMode: getRenderMode(),
+    viewMode: getViewMode(),
+    collapsed: isCollapsed(),
+    cameraPanel: state.cameraPanel,
+    cameraPanelOpen: state.cameraPanelOpen,
+    hudPanelOpen: state.hudPanelOpen,
+    proofPanelOpen: state.proofPanelOpen,
+    autoHidePanels: state.autoHidePanels,
+    visualHelpers: state.visualHelpers,
+    cinematicFx: state.cinematicFx,
+    expressionModel: state.expressionModel
+  };
+
+  try {
+    localStorage.setItem(CONFIG_LS_KEY, JSON.stringify(payload));
+    console.log('[controls] Saved studio config');
+  } catch (e) {
+    console.warn('[controls] Failed to save config to localStorage:', e);
+  }
+}
+
+export function clearStudioConfig() {
+  try {
+    localStorage.removeItem(CONFIG_LS_KEY);
+    console.log('[controls] Cleared studio config');
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
+  } catch (e) {
+    console.warn('[controls] Failed to clear config from localStorage:', e);
+  }
+}
+
+export function loadStudioConfig() {
+  try {
+    const raw = localStorage.getItem(CONFIG_LS_KEY);
+    if (!raw) return false;
+    const config = JSON.parse(raw);
+    
+    if (typeof config.hudPanelOpen === 'boolean') state.hudPanelOpen = config.hudPanelOpen;
+    if (typeof config.proofPanelOpen === 'boolean') state.proofPanelOpen = config.proofPanelOpen;
+    if (typeof config.cameraPanelOpen === 'boolean') state.cameraPanelOpen = config.cameraPanelOpen;
+    if (typeof config.autoHidePanels === 'boolean') state.autoHidePanels = config.autoHidePanels;
+    if (typeof config.collapsed === 'boolean') setCollapsed(config.collapsed);
+    
+    if (typeof config.themeBlend === 'number') {
+      state.themeBlend = config.themeBlend;
+      setTheme(state.themeBlend);
+    } else if (typeof config.theme === 'string') {
+      setTheme(config.theme);
+    }
+    if (typeof config.renderMode === 'string') setRenderMode(config.renderMode);
+    if (typeof config.viewMode === 'string') setViewMode(config.viewMode);
+
+    if (config.visualHelpers) state.visualHelpers = { ...state.visualHelpers, ...config.visualHelpers };
+    if (config.cinematicFx) {
+      for (const [key, val] of Object.entries(config.cinematicFx)) {
+        if (typeof val === 'object' && state.cinematicFx[key]) {
+          state.cinematicFx[key] = { ...state.cinematicFx[key], ...val };
+        } else {
+          state.cinematicFx[key] = val;
+        }
+      }
+    }
+    if (config.cameraPanel) {
+      for (const [key, val] of Object.entries(config.cameraPanel)) {
+        if (typeof val === 'object' && state.cameraPanel[key]) {
+          state.cameraPanel[key] = { ...state.cameraPanel[key], ...val };
+        } else {
+          state.cameraPanel[key] = val;
+        }
+      }
+    }
+    if (config.expressionModel) {
+      state.expressionModel = normalizeExpressionModel(config.expressionModel);
+    }
+    
+    console.log('[controls] Loaded studio config from localStorage');
+    return true;
+  } catch (e) {
+    console.warn('[controls] Failed to load config from localStorage:', e);
+    return false;
+  }
+}
+
 export function initControls() {
+  loadStudioConfig();
   initCameraPanelBridge();
   initHudPanel();
   buildControls();

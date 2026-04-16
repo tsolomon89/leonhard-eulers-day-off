@@ -8,6 +8,76 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { EASING_FUNCTIONS, EASING_KEYS } from './easing.js';
+import { canonicalizeExpressionPath } from './function-registry.js';
+
+const RETIRED_TRAVERSAL_STATE_KEYS = Object.freeze([
+  'stepRate',
+  'timeMode',
+  'stepLoopMode',
+  'syncTStepToS',
+  'tRegion',
+  'precomputeBufferUnit',
+  'precomputeBufferValue',
+  'precomputeBufferFrames',
+  'bufferEnabled',
+  'bufferPhase',
+  'bufferProgress',
+  'bufferTargetFrames',
+  'bufferNotice',
+]);
+
+const RETIRED_N_DOMAIN_STATE_KEYS = Object.freeze([
+  'Z',
+  'Z_min',
+  'Z_max',
+]);
+
+const RETIRED_N_DOMAIN_LINK_PATHS = new Set([
+  'Z',
+  'Z_min',
+  'Z_max',
+]);
+
+function isRetiredNDomainPath(path) {
+  if (typeof path !== 'string' || path.length === 0) return false;
+  return RETIRED_N_DOMAIN_LINK_PATHS.has(canonicalizeExpressionPath(path));
+}
+
+function sanitizeInitialStateSnapshot(initialState) {
+  if (!initialState || typeof initialState !== 'object') return null;
+  const sanitized = JSON.parse(JSON.stringify(initialState));
+  for (const key of RETIRED_TRAVERSAL_STATE_KEYS) {
+    delete sanitized[key];
+  }
+  for (const key of RETIRED_N_DOMAIN_STATE_KEYS) {
+    delete sanitized[key];
+  }
+  return sanitized;
+}
+
+const LEGACY_TOGGLE_LINK_PATH_ALIASES = Object.freeze({
+  'cinematic.points.opacity': 'cinematic.points.enabled',
+  'cinematic.atlasLines.opacity': 'cinematic.atlasLines.enabled',
+  'cinematic.ghostTraces.opacity': 'cinematic.ghostTraces.enabled',
+  'cinematic.stars.opacity': 'cinematic.stars.enabled',
+  'cinematic.bloom.strength': 'cinematic.bloom.enabled',
+  'cinematic.fog.density': 'cinematic.fog.enabled',
+  'cinematic.tone.exposure': 'cinematic.tone.enabled',
+});
+
+function isBinaryLike(value) {
+  if (!Number.isFinite(value)) return false;
+  const v = Number(value);
+  return Math.abs(v) <= 1e-6 || Math.abs(v - 1) <= 1e-6;
+}
+
+function resolveMigratedLinkPath(path, baseValue, endValue) {
+  if (typeof path !== 'string' || path.length === 0) return path;
+  const mapped = LEGACY_TOGGLE_LINK_PATH_ALIASES[path];
+  if (!mapped) return path;
+  if (!isBinaryLike(baseValue) || !isBinaryLike(endValue)) return path;
+  return mapped;
+}
 
 // ── Defaults ─────────────────────────────────────────────────
 
@@ -38,8 +108,10 @@ function generateId() {
  * @returns {SceneLink}
  */
 export function createSceneLink(path, baseValue, endValue, opts = {}) {
+  const migratedPath = resolveMigratedLinkPath(path, baseValue, endValue);
+  const normalizedPath = canonicalizeExpressionPath(String(migratedPath));
   return {
-    path: String(path),
+    path: normalizedPath,
     baseValue: Number.isFinite(baseValue) ? baseValue : 0,
     endValue: Number.isFinite(endValue) ? endValue : 0,
     transitionFactor: opts.transitionFactor ?? 0,
@@ -86,7 +158,8 @@ export function createScene(opts = {}) {
 export function createTimeline() {
   return {
     scenes: [createScene({ name: 'Scene 1' })],
-    loop: false,
+    loop: 'none',       // 'none' | 'wrap' | 'bounce'
+    loopCount: 0,       // 0 = infinite, N > 0 = stop after N loops
     activeSceneIndex: 0,
   };
 }
@@ -199,7 +272,9 @@ export function getActiveScene(timeline) {
  * @returns {SceneLink}
  */
 export function addTrack(scene, path, baseValue, endValue, opts = {}) {
-  const existing = scene.links.find(l => l.path === path);
+  const normalizedPath = canonicalizeExpressionPath(String(path));
+  if (isRetiredNDomainPath(normalizedPath)) return null;
+  const existing = scene.links.find(l => l.path === normalizedPath);
   if (existing) {
     existing.baseValue = Number.isFinite(baseValue) ? baseValue : existing.baseValue;
     existing.endValue = Number.isFinite(endValue) ? endValue : existing.endValue;
@@ -207,7 +282,7 @@ export function addTrack(scene, path, baseValue, endValue, opts = {}) {
     if (opts.type !== undefined) existing.type = opts.type;
     return existing;
   }
-  const link = createSceneLink(path, baseValue, endValue, opts);
+  const link = createSceneLink(normalizedPath, baseValue, endValue, opts);
   scene.links.push(link);
   return link;
 }
@@ -220,7 +295,8 @@ export function addTrack(scene, path, baseValue, endValue, opts = {}) {
  * @returns {boolean} true if removed
  */
 export function removeTrack(scene, path) {
-  const idx = scene.links.findIndex(l => l.path === path);
+  const normalizedPath = canonicalizeExpressionPath(String(path));
+  const idx = scene.links.findIndex(l => l.path === normalizedPath);
   if (idx < 0) return false;
   scene.links.splice(idx, 1);
   return true;
@@ -234,7 +310,8 @@ export function removeTrack(scene, path) {
  * @returns {SceneLink|null}
  */
 export function getTrack(scene, path) {
-  return scene.links.find(l => l.path === path) || null;
+  const normalizedPath = canonicalizeExpressionPath(String(path));
+  return scene.links.find(l => l.path === normalizedPath) || null;
 }
 
 /**
@@ -247,17 +324,19 @@ export function getTrack(scene, path) {
  * @param {Object} [opts] - additional link options
  */
 export function addTrackToAllScenes(timeline, path, defaultValue, opts = {}) {
+  const normalizedPath = canonicalizeExpressionPath(String(path));
+  if (isRetiredNDomainPath(normalizedPath)) return;
   for (let i = 0; i < timeline.scenes.length; i++) {
     const scene = timeline.scenes[i];
-    const existing = scene.links.find(l => l.path === path);
+    const existing = scene.links.find(l => l.path === normalizedPath);
     if (existing) continue;
 
     if (i === 0) {
-      scene.links.push(createSceneLink(path, defaultValue, defaultValue, opts));
+      scene.links.push(createSceneLink(normalizedPath, defaultValue, defaultValue, opts));
     } else {
-      const prevLink = timeline.scenes[i - 1].links.find(l => l.path === path);
+      const prevLink = timeline.scenes[i - 1].links.find(l => l.path === normalizedPath);
       const base = prevLink ? prevLink.endValue : defaultValue;
-      scene.links.push(createSceneLink(path, base, base, opts));
+      scene.links.push(createSceneLink(normalizedPath, base, base, opts));
     }
   }
 }
@@ -269,8 +348,9 @@ export function addTrackToAllScenes(timeline, path, defaultValue, opts = {}) {
  * @param {string} path
  */
 export function removeTrackFromAllScenes(timeline, path) {
+  const normalizedPath = canonicalizeExpressionPath(String(path));
   for (const scene of timeline.scenes) {
-    removeTrack(scene, path);
+    removeTrack(scene, normalizedPath);
   }
 }
 
@@ -348,7 +428,8 @@ export function resolveTimePosition(timeline, absoluteTime) {
  * @returns {*}
  */
 export function readPath(state, path) {
-  const parts = path.split('.');
+  const canonicalPath = canonicalizeExpressionPath(String(path));
+  const parts = canonicalPath.split('.');
   let cursor = state;
   for (const part of parts) {
     if (cursor == null || typeof cursor !== 'object') return undefined;
@@ -366,7 +447,8 @@ export function readPath(state, path) {
  * @param {*} value
  */
 export function writePath(state, path, value) {
-  const parts = path.split('.');
+  const canonicalPath = canonicalizeExpressionPath(String(path));
+  const parts = canonicalPath.split('.');
   let cursor = state;
   for (let i = 0; i < parts.length - 1; i++) {
     if (cursor[parts[i]] == null || typeof cursor[parts[i]] !== 'object') {
@@ -392,13 +474,9 @@ export function buildSceneSnapshots(timeline, initialState) {
   let currentSnapshot = JSON.parse(JSON.stringify(initialState));
   timeline.scenes[0].snapshot = currentSnapshot;
 
-  // Force Scene 0's link bases from initial state
-  for (const link of timeline.scenes[0].links) {
-    const currentValue = readPath(currentSnapshot, link.path);
-    if (Number.isFinite(currentValue)) {
-      link.baseValue = currentValue;
-    }
-  }
+  // Scene 0 uses its user-authored base values.
+  // The snapshot is stored for resolve() context and stopPlayback revert,
+  // but does NOT overwrite the authored link.baseValue fields.
 
   // Build subsequent scenes
   for (let i = 1; i < timeline.scenes.length; i++) {
@@ -494,13 +572,15 @@ export function computeTerminalState(timeline) {
  */
 export function captureCurrentState(scene, liveState, paths) {
   for (const path of paths) {
+    const normalizedPath = canonicalizeExpressionPath(String(path));
+    if (isRetiredNDomainPath(normalizedPath)) continue;
     const value = readPath(liveState, path);
     if (!Number.isFinite(value)) continue;
-    const existing = scene.links.find(l => l.path === path);
+    const existing = scene.links.find(l => l.path === normalizedPath);
     if (existing) {
       existing.endValue = value;
     } else {
-      scene.links.push(createSceneLink(path, value, value));
+      scene.links.push(createSceneLink(normalizedPath, value, value));
     }
   }
 }
@@ -518,8 +598,9 @@ export function captureCurrentState(scene, liveState, paths) {
 export function serializeTimeline(timeline, initialState = null) {
   return {
     version: 1,
-    initialState: initialState ? JSON.parse(JSON.stringify(initialState)) : null,
+    initialState: sanitizeInitialStateSnapshot(initialState),
     loop: timeline.loop,
+    loopCount: timeline.loopCount || 0,
     activeSceneIndex: timeline.activeSceneIndex,
     scenes: timeline.scenes.map(scene => ({
       id: scene.id,
@@ -546,16 +627,27 @@ export function deserializeTimeline(data) {
     return { timeline: createTimeline(), initialState: null };
   }
 
+  // Backwards-compat: old timelines stored loop as boolean
+  let loopMode = 'none';
+  if (typeof data.loop === 'boolean') {
+    loopMode = data.loop ? 'wrap' : 'none';
+  } else if (typeof data.loop === 'string' && ['none', 'wrap', 'bounce'].includes(data.loop)) {
+    loopMode = data.loop;
+  }
+
   const timeline = {
     scenes: data.scenes.map(s => createScene({
       name: s.name,
       duration: s.duration,
       easing: s.easing,
-      links: Array.isArray(s.links) ? s.links.map(l => createSceneLink(
-        l.path, l.baseValue, l.endValue
-      )) : [],
+      links: Array.isArray(s.links)
+        ? s.links
+          .filter((l) => !isRetiredNDomainPath(l?.path))
+          .map((l) => createSceneLink(l.path, l.baseValue, l.endValue))
+        : [],
     })),
-    loop: data.loop === true,
+    loop: loopMode,
+    loopCount: Number.isFinite(data.loopCount) && data.loopCount >= 0 ? data.loopCount : 0,
     activeSceneIndex: 0,
   };
 
@@ -571,7 +663,7 @@ export function deserializeTimeline(data) {
     timeline.activeSceneIndex = data.activeSceneIndex;
   }
 
-  const initialState = data.initialState ? JSON.parse(JSON.stringify(data.initialState)) : null;
+  const initialState = sanitizeInitialStateSnapshot(data.initialState);
 
   return { timeline, initialState };
 }

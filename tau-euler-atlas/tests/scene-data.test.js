@@ -82,6 +82,20 @@ test('createSceneLink defaults missing opts', () => {
   assert.equal(l.type, 'numeric');
 });
 
+test('createSceneLink auto-migrates legacy cinematic toggle paths when binary', () => {
+  const l = createSceneLink('cinematic.atlasLines.opacity', 1, 0);
+  assert.equal(l.path, 'cinematic.atlasLines.enabled');
+  assert.equal(l.baseValue, 1);
+  assert.equal(l.endValue, 0);
+});
+
+test('createSceneLink preserves legacy cinematic numeric paths when non-binary', () => {
+  const l = createSceneLink('cinematic.bloom.strength', 0.35, 0.8);
+  assert.equal(l.path, 'cinematic.bloom.strength');
+  assert.equal(l.baseValue, 0.35);
+  assert.equal(l.endValue, 0.8);
+});
+
 // ═════════════════════════════════════════════════════════════
 // Timeline creation
 // ═════════════════════════════════════════════════════════════
@@ -421,6 +435,91 @@ test('serializeTimeline + deserializeTimeline roundtrip', () => {
   assert.equal(getTrack(restored.scenes[1], 'camera.position.z').endValue, 0);
   assert.equal(initialState.T, 0);
   assert.equal(initialState.b, 100);
+});
+
+test('deserializeTimeline migrates binary legacy cinematic toggle links to enabled paths', () => {
+  const payload = {
+    version: 1,
+    loop: false,
+    activeSceneIndex: 0,
+    scenes: [{
+      id: 'scene_1',
+      name: 'Scene 1',
+      duration: 10,
+      easing: 'linear',
+      links: [
+        { path: 'cinematic.atlasLines.opacity', baseValue: 1, endValue: 0 },
+        { path: 'cinematic.bloom.strength', baseValue: 0.4, endValue: 0.9 },
+      ],
+    }],
+  };
+
+  const { timeline } = deserializeTimeline(payload);
+  assert.equal(getTrack(timeline.scenes[0], 'cinematic.atlasLines.enabled')?.endValue, 0);
+  assert.equal(getTrack(timeline.scenes[0], 'cinematic.atlasLines.opacity'), null);
+  assert.equal(getTrack(timeline.scenes[0], 'cinematic.bloom.strength')?.endValue, 0.9);
+});
+
+test('deserializeTimeline drops retired legacy n-domain tracks', () => {
+  const payload = {
+    version: 1,
+    loop: false,
+    activeSceneIndex: 0,
+    scenes: [{
+      id: 'scene_1',
+      name: 'Scene 1',
+      duration: 10,
+      easing: 'linear',
+      links: [
+        { path: 'Z_min', baseValue: -3, endValue: 0 },
+        { path: 'Z_max', baseValue: 3, endValue: 8 },
+        { path: 'n_negDepth', baseValue: 2, endValue: 4 },
+      ],
+    }],
+  };
+
+  const { timeline } = deserializeTimeline(payload);
+  assert.equal(getTrack(timeline.scenes[0], 'Z_min'), null);
+  assert.equal(getTrack(timeline.scenes[0], 'Z_max'), null);
+  assert.equal(getTrack(timeline.scenes[0], 'n_negDepth')?.endValue, 4);
+});
+
+test('serialize/deserialize strips retired traversal state keys from initialState', () => {
+  const tl = createTimeline();
+  const initial = {
+    T: 2,
+    b: 36000000,
+    Z_min: -10,
+    Z_max: 20,
+    timeMode: 'step',
+    stepLoopMode: 'bounce',
+    syncTStepToS: false,
+    precomputeBufferUnit: 'seconds',
+    precomputeBufferValue: 0.5,
+    precomputeBufferFrames: 30,
+    bufferEnabled: true,
+    bufferPhase: 'prefill',
+    bufferProgress: 0.5,
+    bufferTargetFrames: 30,
+    bufferNotice: 'legacy',
+  };
+
+  const serialized = serializeTimeline(tl, initial);
+  assert.equal(serialized.initialState.timeMode, undefined);
+  assert.equal(serialized.initialState.stepLoopMode, undefined);
+  assert.equal(serialized.initialState.bufferEnabled, undefined);
+  assert.equal(serialized.initialState.Z_min, undefined);
+  assert.equal(serialized.initialState.Z_max, undefined);
+
+  const { initialState } = deserializeTimeline(serialized);
+  assert.equal(initialState.T, 2);
+  assert.equal(initialState.b, 36000000);
+  assert.equal(initialState.Z_min, undefined);
+  assert.equal(initialState.Z_max, undefined);
+  assert.equal(initialState.timeMode, undefined);
+  assert.equal(initialState.stepLoopMode, undefined);
+  assert.equal(initialState.bufferEnabled, undefined);
+  assert.equal(initialState.bufferPhase, undefined);
 });
 
 test('deserializeTimeline handles empty/bad data gracefully', () => {

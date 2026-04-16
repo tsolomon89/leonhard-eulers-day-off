@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   ensureLinkedParam,
+  isBooleanLinkPath,
   isLinkEligiblePath,
   resolveLinkedValue,
   sanitizeDirection,
@@ -55,6 +56,8 @@ test('seedEndpoint picks bounded +20% offset and snaps to step', () => {
 
 test('link coverage includes style/core and excludes bounded triplets', () => {
   assert.equal(isLinkEligiblePath('T'), true);
+  assert.equal(isLinkEligiblePath('n_negDepth'), true);
+  assert.equal(isLinkEligiblePath('n_posDepth'), true);
   assert.equal(isLinkEligiblePath('k2'), true);
   assert.equal(isLinkEligiblePath('camera.position.x'), true);
   assert.equal(isLinkEligiblePath('expression.parent.pointSize'), true);
@@ -62,9 +65,6 @@ test('link coverage includes style/core and excludes bounded triplets', () => {
 
   assert.equal(isLinkEligiblePath('T_start'), false);
   assert.equal(isLinkEligiblePath('T_stop'), false);
-  assert.equal(isLinkEligiblePath('Z'), false);
-  assert.equal(isLinkEligiblePath('Z_min'), false);
-  assert.equal(isLinkEligiblePath('Z_max'), false);
   assert.equal(isLinkEligiblePath('pathBudget'), false);
 });
 
@@ -73,4 +73,15 @@ test('sanitizeDirection returns only forward/backward values', () => {
   assert.equal(sanitizeDirection(-1), -1);
   assert.equal(sanitizeDirection(0), 1);
   assert.equal(sanitizeDirection(99), 1);
+});
+
+test('expression visibility paths are treated as boolean tracks', () => {
+  assert.equal(isBooleanLinkPath('expression.parent.enabled'), true);
+  assert.equal(isBooleanLinkPath('expression.sets.positive.enabled'), true);
+  assert.equal(isBooleanLinkPath('expression.children.positiveExponent.enabled'), true);
+  assert.equal(isBooleanLinkPath('expression.childVariants.positiveExponent.sin.enabled'), true);
+  assert.equal(isBooleanLinkPath('cinematic.atlasLines.enabled'), true);
+  assert.equal(isBooleanLinkPath('cinematic.bloom.enabled'), true);
+  assert.equal(isBooleanLinkPath('expression.children.positiveExponent.pointSize'), false);
+  assert.equal(isBooleanLinkPath('cinematic.atlasLines.opacity'), false);
 });

@@ -1,1429 +1,1970 @@
 {
-  "generatedAt": "2026-04-05T08:00:13.907Z",
+  "generatedAt": "2026-04-14T09:37:34.109Z",
   "counts": {
-    "desmosCombos": 116,
-    "implementedCombos": 160,
-    "covered": 116,
+    "desmosCombos": 112,
+    "implementedCombos": 224,
+    "covered": 112,
     "desmosOnly": 0,
-    "appOnly": 44,
-    "missingImplementation": 0
+    "appOnly": 112,
+    "missingImplementation": 0,
+    "warnings": 5
   },
   "byVariant": {
-    "base": 20,
-    "sin": 16,
-    "log_sin": 16,
-    "cos": 16,
-    "log_cos": 16,
-    "tan": 16,
-    "log_tan": 16
+    "base": 28,
+    "sin": 28,
+    "cos": 28,
+    "tan": 28
   },
   "covered": [
     {
-      "comboId": "positiveImaginary::base",
-      "functionKey": "positiveImaginary",
+      "comboId": "positiveExponent::base",
+      "functionKey": "positiveExponent",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{positiveImaginary}=k_{1}\\tau^{i\\ \\frac{\\tau^{k}}{\\ln\\tau}}"
+      "sourceLatex": "f_{positiveExponent}=k_{1}\\tau^{i\\ \\frac{\\tau^{k}}{\\ln\\tau}}"
     },
     {
-      "comboId": "positiveImaginaryReciprocal::base",
-      "functionKey": "positiveImaginaryReciprocal",
+      "comboId": "positiveExponentVectorA::base",
+      "functionKey": "positiveExponentVectorA",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{positiveImaginaryReciprocal}=f_{positiveImaginary}^{-1}"
+      "sourceLatex": "f_{positiveExponentVectorA}=Jf_{positiveExponent}"
     },
     {
-      "comboId": "positiveImaginaryVectorA::base",
-      "functionKey": "positiveImaginaryVectorA",
+      "comboId": "positiveExponentVectorB::base",
+      "functionKey": "positiveExponentVectorB",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{positiveImaginaryVectorA}=Jf_{positiveImaginary}"
+      "sourceLatex": "f_{positiveExponentVectorB}=J^{-1}f_{positiveExponent}"
     },
     {
-      "comboId": "positiveImaginaryVectorReciprocal::base",
-      "functionKey": "positiveImaginaryVectorReciprocal",
+      "comboId": "positiveExponentVectorC::base",
+      "functionKey": "positiveExponentVectorC",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{positiveImaginaryVectorReciprocal}=J^{-1}f_{positiveImaginary}"
+      "sourceLatex": "f_{positiveExponentVectorC}=nf_{positiveExponent}"
     },
     {
-      "comboId": "positiveImaginaryVectorB::base",
-      "functionKey": "positiveImaginaryVectorB",
+      "comboId": "positiveExponentCircleA::base",
+      "functionKey": "positiveExponentCircleA",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{positiveImaginaryVectorB}=nf_{positiveImaginary}"
+      "sourceLatex": "f_{positiveExponentCircleA}=\\tau^{i\\frac{k\\tau^{n}}{\\ln\\left(\\tau\\right)}}"
     },
     {
-      "comboId": "positiveImaginaryCircleA::base",
-      "functionKey": "positiveImaginaryCircleA",
+      "comboId": "positiveExponentCircleB::base",
+      "functionKey": "positiveExponentCircleB",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{positiveImaginaryCircleA}=\\tau^{i\\frac{\\tau^{n}}{\\ln\\left(\\tau\\right)}}"
+      "sourceLatex": "f_{positiveExponentCircleB}=k_{1}\\tau^{i\\frac{\\frac{\\tau}{n}^{k}}{\\ln\\tau}}"
     },
     {
-      "comboId": "positiveImaginaryCircleB::base",
-      "functionKey": "positiveImaginaryCircleB",
+      "comboId": "positiveExponentCircleC::base",
+      "functionKey": "positiveExponentCircleC",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{positiveImaginaryCircleB}=k_{1}\\tau^{i\\frac{\\frac{\\tau}{n}^{k}}{\\ln\\tau}}"
+      "sourceLatex": "f_{positiveExponentCircleC}=k_{1}\\tau^{i\\frac{\\frac{\\tau}{kn}}{\\ln\\tau}}"
     },
     {
-      "comboId": "positiveImaginaryCircleC::base",
-      "functionKey": "positiveImaginaryCircleC",
+      "comboId": "positiveExponentReciprocal::base",
+      "functionKey": "positiveExponentReciprocal",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{positiveImaginaryCircleC}=-f_{positiveImaginaryCircleB}"
+      "sourceLatex": "f_{positiveExponentReciprocal}=f_{positiveExponent}^{-1}"
     },
     {
-      "comboId": "positiveImaginaryCircleBReciprocal::base",
-      "functionKey": "positiveImaginaryCircleBReciprocal",
+      "comboId": "positiveExponentVectorAReciprocal::base",
+      "functionKey": "positiveExponentVectorAReciprocal",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{positiveImaginaryCircleBReciprocal}=f_{positiveImaginaryCircleB}^{-1}"
+      "sourceLatex": "f_{positiveExponentVectorAReciprocal}=f_{positiveExponentVectorA}^{-1}"
     },
     {
-      "comboId": "positiveImaginaryCircleCReciprocal::base",
-      "functionKey": "positiveImaginaryCircleCReciprocal",
+      "comboId": "positiveExponentVectorBReciprocal::base",
+      "functionKey": "positiveExponentVectorBReciprocal",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{positiveImaginaryCircleCReciprocal}=f_{positiveImaginaryCircleC}^{-1}"
+      "sourceLatex": "f_{positiveExponentVectorBReciprocal}=f_{positiveExponentVectorB}^{-1}"
     },
     {
-      "comboId": "negativeImaginary::base",
-      "functionKey": "negativeImaginary",
+      "comboId": "positiveExponentVectorCReciprocal::base",
+      "functionKey": "positiveExponentVectorCReciprocal",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{negativeImaginary}=k_{1}\\tau^{-i\\ \\frac{\\tau^{k}}{\\ln\\tau}}"
+      "sourceLatex": "f_{positiveExponentVectorCReciprocal}=f_{positiveExponentVectorC}^{-1}"
     },
     {
-      "comboId": "negativeImaginaryReciprocal::base",
-      "functionKey": "negativeImaginaryReciprocal",
+      "comboId": "positiveExponentCircleAReciprocal::base",
+      "functionKey": "positiveExponentCircleAReciprocal",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{negativeImaginaryReciprocal}=f_{positiveImaginary}^{-1}"
+      "sourceLatex": "f_{positiveExponentCircleAReciprocal}=f_{positiveExponentCircleA}^{-1}"
     },
     {
-      "comboId": "negativeImaginaryVectorA::base",
-      "functionKey": "negativeImaginaryVectorA",
+      "comboId": "positiveExponentCircleBReciprocal::base",
+      "functionKey": "positiveExponentCircleBReciprocal",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{negativeImaginaryVectorA}=Jf_{positiveImaginary}"
+      "sourceLatex": "f_{positiveExponentCircleBReciprocal}=f_{positiveExponentCircleB}^{-1}"
     },
     {
-      "comboId": "negativeImaginaryVectorReciprocal::base",
-      "functionKey": "negativeImaginaryVectorReciprocal",
+      "comboId": "positiveExponentCircleCReciprocal::base",
+      "functionKey": "positiveExponentCircleCReciprocal",
       "variantKey": "base",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "f_{negativeImaginaryVectorReciprocal}=J^{-1}f_{positiveImaginary}"
+      "sourceLatex": "f_{positiveExponentCircleCReciprocal}=f_{positiveExponentCircleC}^{-1}"
     },
     {
-      "comboId": "negativeImaginaryVectorB::base",
-      "functionKey": "negativeImaginaryVectorB",
-      "variantKey": "base",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "f_{negativeImaginaryVectorB}=nf_{positiveImaginary}"
-    },
-    {
-      "comboId": "negativeImaginaryCircleA::base",
-      "functionKey": "negativeImaginaryCircleA",
-      "variantKey": "base",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "f_{negativeImaginaryCircleA}=\\tau^{-i\\frac{\\tau^{n}}{\\ln\\left(\\tau\\right)}}"
-    },
-    {
-      "comboId": "negativeImaginaryCircleB::base",
-      "functionKey": "negativeImaginaryCircleB",
-      "variantKey": "base",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "f_{negativeImaginaryCircleB}=k_{1}\\tau^{-i\\frac{\\frac{\\tau}{n}^{k}}{\\ln\\tau}}"
-    },
-    {
-      "comboId": "negativeImaginaryCircleC::base",
-      "functionKey": "negativeImaginaryCircleC",
-      "variantKey": "base",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "f_{negativeImaginaryCircleC}=-f_{negativeImaginaryCircleB}"
-    },
-    {
-      "comboId": "negativeImaginaryCircleBReciprocal::base",
-      "functionKey": "negativeImaginaryCircleBReciprocal",
-      "variantKey": "base",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "f_{negativeImaginaryCircleBReciprocal}=f_{positiveImaginaryCircleB}^{-1}"
-    },
-    {
-      "comboId": "negativeImaginaryCircleCReciprocal::base",
-      "functionKey": "negativeImaginaryCircleCReciprocal",
-      "variantKey": "base",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "f_{negativeImaginaryCircleCReciprocal}=f_{positiveImaginaryCircleC}^{-1}"
-    },
-    {
-      "comboId": "positiveImaginary::sin",
-      "functionKey": "positiveImaginary",
+      "comboId": "positiveExponent::sin",
+      "functionKey": "positiveExponent",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{positiveImaginary}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponent}\\right)"
     },
     {
-      "comboId": "positiveImaginaryReciprocal::sin",
-      "functionKey": "positiveImaginaryReciprocal",
+      "comboId": "positiveExponentVectorA::sin",
+      "functionKey": "positiveExponentVectorA",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{positiveImaginaryReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentVectorA}\\right)"
     },
     {
-      "comboId": "positiveImaginaryVectorA::sin",
-      "functionKey": "positiveImaginaryVectorA",
+      "comboId": "positiveExponentVectorB::sin",
+      "functionKey": "positiveExponentVectorB",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(nf_{positiveImaginaryVectorA}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentVectorB}\\right)"
     },
     {
-      "comboId": "positiveImaginaryVectorReciprocal::sin",
-      "functionKey": "positiveImaginaryVectorReciprocal",
+      "comboId": "positiveExponentVectorC::sin",
+      "functionKey": "positiveExponentVectorC",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{positiveImaginaryVectorReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentVectorC}\\right)"
     },
     {
-      "comboId": "positiveImaginaryVectorB::sin",
-      "functionKey": "positiveImaginaryVectorB",
+      "comboId": "positiveExponentCircleA::sin",
+      "functionKey": "positiveExponentCircleA",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{positiveImaginaryVectorB}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentCircleA}\\right)"
     },
     {
-      "comboId": "positiveImaginaryCircleC::sin",
-      "functionKey": "positiveImaginaryCircleC",
+      "comboId": "positiveExponentCircleB::sin",
+      "functionKey": "positiveExponentCircleB",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{positiveImaginaryCircleC}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentCircleB}\\right)"
     },
     {
-      "comboId": "positiveImaginaryCircleBReciprocal::sin",
-      "functionKey": "positiveImaginaryCircleBReciprocal",
+      "comboId": "positiveExponentCircleC::sin",
+      "functionKey": "positiveExponentCircleC",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{positiveImaginaryCircleBReciprocal}\\right)"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentCircleC}\\right)"
     },
     {
-      "comboId": "positiveImaginaryCircleCReciprocal::sin",
-      "functionKey": "positiveImaginaryCircleCReciprocal",
+      "comboId": "positiveExponentReciprocal::sin",
+      "functionKey": "positiveExponentReciprocal",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{positiveImaginaryCircleCReciprocal}\\right)"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentReciprocal}\\right)"
     },
     {
-      "comboId": "positiveImaginary::log_sin",
-      "functionKey": "positiveImaginary",
-      "variantKey": "log_sin",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginary}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryReciprocal::log_sin",
-      "functionKey": "positiveImaginaryReciprocal",
-      "variantKey": "log_sin",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryReciprocal}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryVectorA::log_sin",
-      "functionKey": "positiveImaginaryVectorA",
-      "variantKey": "log_sin",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryVectorA}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryVectorReciprocal::log_sin",
-      "functionKey": "positiveImaginaryVectorReciprocal",
-      "variantKey": "log_sin",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryVectorReciprocal}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryVectorB::log_sin",
-      "functionKey": "positiveImaginaryVectorB",
-      "variantKey": "log_sin",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryVectorB}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryCircleC::log_sin",
-      "functionKey": "positiveImaginaryCircleC",
-      "variantKey": "log_sin",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryCircleC}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryCircleBReciprocal::log_sin",
-      "functionKey": "positiveImaginaryCircleBReciprocal",
-      "variantKey": "log_sin",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryCircleBReciprocal}\\right)\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryCircleCReciprocal::log_sin",
-      "functionKey": "positiveImaginaryCircleCReciprocal",
-      "variantKey": "log_sin",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{positiveImaginaryCircleCReciprocal}\\right)\\right)"
-    },
-    {
-      "comboId": "negativeImaginary::sin",
-      "functionKey": "negativeImaginary",
+      "comboId": "positiveExponentVectorAReciprocal::sin",
+      "functionKey": "positiveExponentVectorAReciprocal",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{negativeImaginary}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentVectorAReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryReciprocal::sin",
-      "functionKey": "negativeImaginaryReciprocal",
+      "comboId": "positiveExponentVectorBReciprocal::sin",
+      "functionKey": "positiveExponentVectorBReciprocal",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{negativeImaginaryReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentVectorBReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorA::sin",
-      "functionKey": "negativeImaginaryVectorA",
+      "comboId": "positiveExponentVectorCReciprocal::sin",
+      "functionKey": "positiveExponentVectorCReciprocal",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{negativeImaginaryVectorA}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentVectorCReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorReciprocal::sin",
-      "functionKey": "negativeImaginaryVectorReciprocal",
+      "comboId": "positiveExponentCircleAReciprocal::sin",
+      "functionKey": "positiveExponentCircleAReciprocal",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{negativeImaginaryVectorReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentCircleAReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorB::sin",
-      "functionKey": "negativeImaginaryVectorB",
+      "comboId": "positiveExponentCircleBReciprocal::sin",
+      "functionKey": "positiveExponentCircleBReciprocal",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{negativeImaginaryVectorB}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentCircleBReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryCircleC::sin",
-      "functionKey": "negativeImaginaryCircleC",
+      "comboId": "positiveExponentCircleCReciprocal::sin",
+      "functionKey": "positiveExponentCircleCReciprocal",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{negativeImaginaryCircleC}\\right)k_{2}"
+      "sourceLatex": "\\sin\\left(f_{positiveExponentCircleCReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryCircleBReciprocal::sin",
-      "functionKey": "negativeImaginaryCircleBReciprocal",
+      "comboId": "positiveExponent::cos",
+      "functionKey": "positiveExponent",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponent}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorA::cos",
+      "functionKey": "positiveExponentVectorA",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentVectorA}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorB::cos",
+      "functionKey": "positiveExponentVectorB",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentVectorB}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorC::cos",
+      "functionKey": "positiveExponentVectorC",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentVectorC}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleA::cos",
+      "functionKey": "positiveExponentCircleA",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentCircleA}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleB::cos",
+      "functionKey": "positiveExponentCircleB",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentCircleB}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleC::cos",
+      "functionKey": "positiveExponentCircleC",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentCircleC}\\right)"
+    },
+    {
+      "comboId": "positiveExponentReciprocal::cos",
+      "functionKey": "positiveExponentReciprocal",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorAReciprocal::cos",
+      "functionKey": "positiveExponentVectorAReciprocal",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentVectorAReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorBReciprocal::cos",
+      "functionKey": "positiveExponentVectorBReciprocal",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentVectorBReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorCReciprocal::cos",
+      "functionKey": "positiveExponentVectorCReciprocal",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentVectorCReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleAReciprocal::cos",
+      "functionKey": "positiveExponentCircleAReciprocal",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentCircleAReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleBReciprocal::cos",
+      "functionKey": "positiveExponentCircleBReciprocal",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentCircleBReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleCReciprocal::cos",
+      "functionKey": "positiveExponentCircleCReciprocal",
+      "variantKey": "cos",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\cos\\left(f_{positiveExponentCircleCReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponent::tan",
+      "functionKey": "positiveExponent",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponent}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorA::tan",
+      "functionKey": "positiveExponentVectorA",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentVectorA}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorB::tan",
+      "functionKey": "positiveExponentVectorB",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentVectorB}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorC::tan",
+      "functionKey": "positiveExponentVectorC",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentVectorC}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleA::tan",
+      "functionKey": "positiveExponentCircleA",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentCircleA}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleB::tan",
+      "functionKey": "positiveExponentCircleB",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentCircleB}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleC::tan",
+      "functionKey": "positiveExponentCircleC",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentCircleC}\\right)"
+    },
+    {
+      "comboId": "positiveExponentReciprocal::tan",
+      "functionKey": "positiveExponentReciprocal",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorAReciprocal::tan",
+      "functionKey": "positiveExponentVectorAReciprocal",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentVectorAReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorBReciprocal::tan",
+      "functionKey": "positiveExponentVectorBReciprocal",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentVectorBReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentVectorCReciprocal::tan",
+      "functionKey": "positiveExponentVectorCReciprocal",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentVectorCReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleAReciprocal::tan",
+      "functionKey": "positiveExponentCircleAReciprocal",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentCircleAReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleBReciprocal::tan",
+      "functionKey": "positiveExponentCircleBReciprocal",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentCircleBReciprocal}\\right)"
+    },
+    {
+      "comboId": "positiveExponentCircleCReciprocal::tan",
+      "functionKey": "positiveExponentCircleCReciprocal",
+      "variantKey": "tan",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\tan\\left(f_{positiveExponentCircleCReciprocal}\\right)"
+    },
+    {
+      "comboId": "negativeExponent::base",
+      "functionKey": "negativeExponent",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponent}=k_{1}\\tau^{-i\\ \\frac{\\tau^{k}}{\\ln\\tau}}"
+    },
+    {
+      "comboId": "negativeExponentVectorA::base",
+      "functionKey": "negativeExponentVectorA",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponentVectorA}=Jf_{positiveExponent}"
+    },
+    {
+      "comboId": "negativeExponentVectorB::base",
+      "functionKey": "negativeExponentVectorB",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponentVectorB}=J^{-1}f_{positiveExponent}"
+    },
+    {
+      "comboId": "negativeExponentVectorC::base",
+      "functionKey": "negativeExponentVectorC",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponentVectorC}=nf_{positiveExponent}"
+    },
+    {
+      "comboId": "negativeExponentCircleA::base",
+      "functionKey": "negativeExponentCircleA",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponentCircleA}=\\tau^{-i\\frac{k\\tau^{n}}{\\ln\\left(\\tau\\right)}}"
+    },
+    {
+      "comboId": "negativeExponentCircleB::base",
+      "functionKey": "negativeExponentCircleB",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponentCircleB}=k_{1}\\tau^{-i\\frac{\\frac{\\tau}{n}^{k}}{\\ln\\tau}}"
+    },
+    {
+      "comboId": "negativeExponentCircleC::base",
+      "functionKey": "negativeExponentCircleC",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negtaitiveExponentCircleC}=k_{1}\\tau^{-i\\frac{\\frac{\\tau}{kn}}{\\ln\\tau}}"
+    },
+    {
+      "comboId": "negativeExponentReciprocal::base",
+      "functionKey": "negativeExponentReciprocal",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponentReciprocal}=f_{negativeExponent}^{-1}"
+    },
+    {
+      "comboId": "negativeExponentVectorAReciprocal::base",
+      "functionKey": "negativeExponentVectorAReciprocal",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponentVectorAReciprocal}=f_{negativeExponentVectorA}^{-1}"
+    },
+    {
+      "comboId": "negativeExponentVectorBReciprocal::base",
+      "functionKey": "negativeExponentVectorBReciprocal",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponentVectorBReciprocal}=f_{negativeExponentVectorB}^{-1}"
+    },
+    {
+      "comboId": "negativeExponentVectorCReciprocal::base",
+      "functionKey": "negativeExponentVectorCReciprocal",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponentVectorCReciprocal}=f_{negativeExponentVectorC}^{-1}"
+    },
+    {
+      "comboId": "negativeExponentCircleAReciprocal::base",
+      "functionKey": "negativeExponentCircleAReciprocal",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponentCircleAReciprocal}=f_{negativeExponentCircleA}^{-1}"
+    },
+    {
+      "comboId": "negativeExponentCircleBReciprocal::base",
+      "functionKey": "negativeExponentCircleBReciprocal",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negativeExponentCircleBReciprocal}=f_{negativeExponentCircleB}^{-1}"
+    },
+    {
+      "comboId": "negativeExponentCircleCReciprocal::base",
+      "functionKey": "negativeExponentCircleCReciprocal",
+      "variantKey": "base",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "f_{negtaitiveExponentCircleCReciprocal}=f_{negtaitiveExponentCircleC}^{-1}"
+    },
+    {
+      "comboId": "negativeExponent::sin",
+      "functionKey": "negativeExponent",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{negativeImaginaryCircleBReciprocal}\\right)"
+      "sourceLatex": "\\sin\\left(f_{negativeExponent}\\right)"
     },
     {
-      "comboId": "negativeImaginaryCircleCReciprocal::sin",
-      "functionKey": "negativeImaginaryCircleCReciprocal",
+      "comboId": "negativeExponentVectorA::sin",
+      "functionKey": "negativeExponentVectorA",
       "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\sin\\left(f_{negativeImaginaryCircleCReciprocal}\\right)"
+      "sourceLatex": "\\sin\\left(f_{negativeExponentVectorA}\\right)"
     },
     {
-      "comboId": "negativeImaginary::log_sin",
-      "functionKey": "negativeImaginary",
-      "variantKey": "log_sin",
+      "comboId": "negativeExponentVectorB::sin",
+      "functionKey": "negativeExponentVectorB",
+      "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginary}\\right)k_{2}\\right)"
+      "sourceLatex": "\\sin\\left(f_{negativeExponentVectorB}\\right)"
     },
     {
-      "comboId": "negativeImaginaryReciprocal::log_sin",
-      "functionKey": "negativeImaginaryReciprocal",
-      "variantKey": "log_sin",
+      "comboId": "negativeExponentVectorC::sin",
+      "functionKey": "negativeExponentVectorC",
+      "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryReciprocal}\\right)k_{2}\\right)"
+      "sourceLatex": "\\sin\\left(f_{negativeExponentVectorC}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorA::log_sin",
-      "functionKey": "negativeImaginaryVectorA",
-      "variantKey": "log_sin",
+      "comboId": "negativeExponentCircleA::sin",
+      "functionKey": "negativeExponentCircleA",
+      "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryVectorA}\\right)k_{2}\\right)"
+      "sourceLatex": "\\sin\\left(f_{negativeExponentCircleA}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorReciprocal::log_sin",
-      "functionKey": "negativeImaginaryVectorReciprocal",
-      "variantKey": "log_sin",
+      "comboId": "negativeExponentCircleB::sin",
+      "functionKey": "negativeExponentCircleB",
+      "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryVectorReciprocal}\\right)k_{2}\\right)"
+      "sourceLatex": "\\sin\\left(f_{negativeExponentCircleB}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorB::log_sin",
-      "functionKey": "negativeImaginaryVectorB",
-      "variantKey": "log_sin",
+      "comboId": "negativeExponentCircleC::sin",
+      "functionKey": "negativeExponentCircleC",
+      "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryVectorB}\\right)k_{2}\\right)"
+      "sourceLatex": "\\sin\\left(f_{negtaitiveExponentCircleC}\\right)"
     },
     {
-      "comboId": "negativeImaginaryCircleC::log_sin",
-      "functionKey": "negativeImaginaryCircleC",
-      "variantKey": "log_sin",
+      "comboId": "negativeExponentReciprocal::sin",
+      "functionKey": "negativeExponentReciprocal",
+      "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryCircleC}\\right)k_{2}\\right)"
+      "sourceLatex": "\\sin\\left(f_{negativeExponentReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryCircleBReciprocal::log_sin",
-      "functionKey": "negativeImaginaryCircleBReciprocal",
-      "variantKey": "log_sin",
+      "comboId": "negativeExponentVectorAReciprocal::sin",
+      "functionKey": "negativeExponentVectorAReciprocal",
+      "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryCircleBReciprocal}\\right)\\right)"
+      "sourceLatex": "\\sin\\left(f_{negativeExponentVectorAReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryCircleCReciprocal::log_sin",
-      "functionKey": "negativeImaginaryCircleCReciprocal",
-      "variantKey": "log_sin",
+      "comboId": "negativeExponentVectorBReciprocal::sin",
+      "functionKey": "negativeExponentVectorBReciprocal",
+      "variantKey": "sin",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\sin\\left(f_{negativeImaginaryCircleCReciprocal}\\right)\\right)"
+      "sourceLatex": "\\sin\\left(f_{negativeExponentVectorBReciprocal}\\right)"
     },
     {
-      "comboId": "positiveImaginary::cos",
-      "functionKey": "positiveImaginary",
+      "comboId": "negativeExponentVectorCReciprocal::sin",
+      "functionKey": "negativeExponentVectorCReciprocal",
+      "variantKey": "sin",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\sin\\left(f_{negativeExponentVectorCReciprocal}\\right)"
+    },
+    {
+      "comboId": "negativeExponentCircleAReciprocal::sin",
+      "functionKey": "negativeExponentCircleAReciprocal",
+      "variantKey": "sin",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\sin\\left(f_{negativeExponentCircleAReciprocal}\\right)"
+    },
+    {
+      "comboId": "negativeExponentCircleBReciprocal::sin",
+      "functionKey": "negativeExponentCircleBReciprocal",
+      "variantKey": "sin",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\sin\\left(f_{negativeExponentCircleBReciprocal}\\right)"
+    },
+    {
+      "comboId": "negativeExponentCircleCReciprocal::sin",
+      "functionKey": "negativeExponentCircleCReciprocal",
+      "variantKey": "sin",
+      "coverageStatus": "covered",
+      "implemented": true,
+      "inDesmos": true,
+      "sourceLatex": "\\sin\\left(f_{negtaitiveExponentCircleCReciprocal}\\right)"
+    },
+    {
+      "comboId": "negativeExponent::cos",
+      "functionKey": "negativeExponent",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{positiveImaginary}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negativeExponent}\\right)"
     },
     {
-      "comboId": "positiveImaginaryReciprocal::cos",
-      "functionKey": "positiveImaginaryReciprocal",
+      "comboId": "negativeExponentVectorA::cos",
+      "functionKey": "negativeExponentVectorA",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{positiveImaginaryReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negativeExponentVectorA}\\right)"
     },
     {
-      "comboId": "positiveImaginaryVectorA::cos",
-      "functionKey": "positiveImaginaryVectorA",
+      "comboId": "negativeExponentVectorB::cos",
+      "functionKey": "negativeExponentVectorB",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(nf_{positiveImaginaryVectorA}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negativeExponentVectorB}\\right)"
     },
     {
-      "comboId": "positiveImaginaryVectorReciprocal::cos",
-      "functionKey": "positiveImaginaryVectorReciprocal",
+      "comboId": "negativeExponentVectorC::cos",
+      "functionKey": "negativeExponentVectorC",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{positiveImaginaryVectorReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negativeExponentVectorC}\\right)"
     },
     {
-      "comboId": "positiveImaginaryVectorB::cos",
-      "functionKey": "positiveImaginaryVectorB",
+      "comboId": "negativeExponentCircleA::cos",
+      "functionKey": "negativeExponentCircleA",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{positiveImaginaryVectorB}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negativeExponentCircleA}\\right)"
     },
     {
-      "comboId": "positiveImaginaryCircleC::cos",
-      "functionKey": "positiveImaginaryCircleC",
+      "comboId": "negativeExponentCircleB::cos",
+      "functionKey": "negativeExponentCircleB",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{positiveImaginaryCircleC}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negativeExponentCircleB}\\right)"
     },
     {
-      "comboId": "positiveImaginaryCircleBReciprocal::cos",
-      "functionKey": "positiveImaginaryCircleBReciprocal",
+      "comboId": "negativeExponentCircleC::cos",
+      "functionKey": "negativeExponentCircleC",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{positiveImaginaryCircleBReciprocal}\\right)"
+      "sourceLatex": "\\cos\\left(f_{negtaitiveExponentCircleC}\\right)"
     },
     {
-      "comboId": "positiveImaginaryCircleCReciprocal::cos",
-      "functionKey": "positiveImaginaryCircleCReciprocal",
+      "comboId": "negativeExponentReciprocal::cos",
+      "functionKey": "negativeExponentReciprocal",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{positiveImaginaryCircleCReciprocal}\\right)"
+      "sourceLatex": "\\cos\\left(f_{negativeExponentReciprocal}\\right)"
     },
     {
-      "comboId": "positiveImaginary::log_cos",
-      "functionKey": "positiveImaginary",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{positiveImaginary}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryReciprocal::log_cos",
-      "functionKey": "positiveImaginaryReciprocal",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{positiveImaginaryReciprocal}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryVectorA::log_cos",
-      "functionKey": "positiveImaginaryVectorA",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{positiveImaginaryVectorA}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryVectorReciprocal::log_cos",
-      "functionKey": "positiveImaginaryVectorReciprocal",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{positiveImaginaryVectorReciprocal}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryVectorB::log_cos",
-      "functionKey": "positiveImaginaryVectorB",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{positiveImaginaryVectorB}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryCircleC::log_cos",
-      "functionKey": "positiveImaginaryCircleC",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{positiveImaginaryCircleC}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryCircleBReciprocal::log_cos",
-      "functionKey": "positiveImaginaryCircleBReciprocal",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{positiveImaginaryCircleBReciprocal}\\right)\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryCircleCReciprocal::log_cos",
-      "functionKey": "positiveImaginaryCircleCReciprocal",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{positiveImaginaryCircleCReciprocal}\\right)\\right)"
-    },
-    {
-      "comboId": "negativeImaginary::cos",
-      "functionKey": "negativeImaginary",
+      "comboId": "negativeExponentVectorAReciprocal::cos",
+      "functionKey": "negativeExponentVectorAReciprocal",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{negativeImaginary}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negativeExponentVectorAReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryReciprocal::cos",
-      "functionKey": "negativeImaginaryReciprocal",
+      "comboId": "negativeExponentVectorBReciprocal::cos",
+      "functionKey": "negativeExponentVectorBReciprocal",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{negativeImaginaryReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negativeExponentVectorBReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorA::cos",
-      "functionKey": "negativeImaginaryVectorA",
+      "comboId": "negativeExponentVectorCReciprocal::cos",
+      "functionKey": "negativeExponentVectorCReciprocal",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{negativeImaginaryVectorA}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negativeExponentVectorCReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorReciprocal::cos",
-      "functionKey": "negativeImaginaryVectorReciprocal",
+      "comboId": "negativeExponentCircleAReciprocal::cos",
+      "functionKey": "negativeExponentCircleAReciprocal",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{negativeImaginaryVectorReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negativeExponentCircleAReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorB::cos",
-      "functionKey": "negativeImaginaryVectorB",
+      "comboId": "negativeExponentCircleBReciprocal::cos",
+      "functionKey": "negativeExponentCircleBReciprocal",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{negativeImaginaryVectorB}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negativeExponentCircleBReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryCircleC::cos",
-      "functionKey": "negativeImaginaryCircleC",
+      "comboId": "negativeExponentCircleCReciprocal::cos",
+      "functionKey": "negativeExponentCircleCReciprocal",
       "variantKey": "cos",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{negativeImaginaryCircleC}\\right)k_{2}"
+      "sourceLatex": "\\cos\\left(f_{negtaitiveExponentCircleCReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryCircleBReciprocal::cos",
-      "functionKey": "negativeImaginaryCircleBReciprocal",
-      "variantKey": "cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{negativeImaginaryCircleBReciprocal}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryCircleCReciprocal::cos",
-      "functionKey": "negativeImaginaryCircleCReciprocal",
-      "variantKey": "cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\cos\\left(f_{negativeImaginaryCircleCReciprocal}\\right)"
-    },
-    {
-      "comboId": "negativeImaginary::log_cos",
-      "functionKey": "negativeImaginary",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{negativeImaginary}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryReciprocal::log_cos",
-      "functionKey": "negativeImaginaryReciprocal",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{negativeImaginaryReciprocal}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryVectorA::log_cos",
-      "functionKey": "negativeImaginaryVectorA",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{negativeImaginaryVectorA}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryVectorReciprocal::log_cos",
-      "functionKey": "negativeImaginaryVectorReciprocal",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{negativeImaginaryVectorReciprocal}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryVectorB::log_cos",
-      "functionKey": "negativeImaginaryVectorB",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{negativeImaginaryVectorB}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryCircleC::log_cos",
-      "functionKey": "negativeImaginaryCircleC",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{negativeImaginaryCircleC}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryCircleBReciprocal::log_cos",
-      "functionKey": "negativeImaginaryCircleBReciprocal",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{negativeImaginaryCircleBReciprocal}\\right)\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryCircleCReciprocal::log_cos",
-      "functionKey": "negativeImaginaryCircleCReciprocal",
-      "variantKey": "log_cos",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\cos\\left(f_{negativeImaginaryCircleCReciprocal}\\right)\\right)"
-    },
-    {
-      "comboId": "positiveImaginary::tan",
-      "functionKey": "positiveImaginary",
+      "comboId": "negativeExponent::tan",
+      "functionKey": "negativeExponent",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{positiveImaginary}\\right)k_{2}"
+      "sourceLatex": "\\tan\\left(f_{negativeExponent}\\right)"
     },
     {
-      "comboId": "positiveImaginaryReciprocal::tan",
-      "functionKey": "positiveImaginaryReciprocal",
+      "comboId": "negativeExponentVectorA::tan",
+      "functionKey": "negativeExponentVectorA",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{positiveImaginaryReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\tan\\left(f_{negativeExponentVectorA}\\right)"
     },
     {
-      "comboId": "positiveImaginaryVectorA::tan",
-      "functionKey": "positiveImaginaryVectorA",
+      "comboId": "negativeExponentVectorB::tan",
+      "functionKey": "negativeExponentVectorB",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(nf_{positiveImaginaryVectorA}\\right)k_{2}"
+      "sourceLatex": "\\tan\\left(f_{negativeExponentVectorB}\\right)"
     },
     {
-      "comboId": "positiveImaginaryVectorReciprocal::tan",
-      "functionKey": "positiveImaginaryVectorReciprocal",
+      "comboId": "negativeExponentVectorC::tan",
+      "functionKey": "negativeExponentVectorC",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{positiveImaginaryVectorReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\tan\\left(f_{negativeExponentVectorC}\\right)"
     },
     {
-      "comboId": "positiveImaginaryVectorB::tan",
-      "functionKey": "positiveImaginaryVectorB",
+      "comboId": "negativeExponentCircleA::tan",
+      "functionKey": "negativeExponentCircleA",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{positiveImaginaryVectorB}\\right)k_{2}"
+      "sourceLatex": "\\tan\\left(f_{negativeExponentCircleA}\\right)"
     },
     {
-      "comboId": "positiveImaginaryCircleC::tan",
-      "functionKey": "positiveImaginaryCircleC",
+      "comboId": "negativeExponentCircleB::tan",
+      "functionKey": "negativeExponentCircleB",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{positiveImaginaryCircleC}\\right)k_{2}"
+      "sourceLatex": "\\tan\\left(f_{negativeExponentCircleB}\\right)"
     },
     {
-      "comboId": "positiveImaginaryCircleBReciprocal::tan",
-      "functionKey": "positiveImaginaryCircleBReciprocal",
+      "comboId": "negativeExponentCircleC::tan",
+      "functionKey": "negativeExponentCircleC",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{positiveImaginaryCircleBReciprocal}\\right)"
+      "sourceLatex": "\\tan\\left(f_{negtaitiveExponentCircleC}\\right)"
     },
     {
-      "comboId": "positiveImaginaryCircleCReciprocal::tan",
-      "functionKey": "positiveImaginaryCircleCReciprocal",
+      "comboId": "negativeExponentReciprocal::tan",
+      "functionKey": "negativeExponentReciprocal",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{positiveImaginaryCircleCReciprocal}\\right)"
+      "sourceLatex": "\\tan\\left(f_{negativeExponentReciprocal}\\right)"
     },
     {
-      "comboId": "positiveImaginary::log_tan",
-      "functionKey": "positiveImaginary",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{positiveImaginary}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryReciprocal::log_tan",
-      "functionKey": "positiveImaginaryReciprocal",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{positiveImaginaryReciprocal}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryVectorA::log_tan",
-      "functionKey": "positiveImaginaryVectorA",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{positiveImaginaryVectorA}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryVectorReciprocal::log_tan",
-      "functionKey": "positiveImaginaryVectorReciprocal",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{positiveImaginaryVectorReciprocal}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryVectorB::log_tan",
-      "functionKey": "positiveImaginaryVectorB",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{positiveImaginaryVectorB}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryCircleC::log_tan",
-      "functionKey": "positiveImaginaryCircleC",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{positiveImaginaryCircleC}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryCircleBReciprocal::log_tan",
-      "functionKey": "positiveImaginaryCircleBReciprocal",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{positiveImaginaryCircleBReciprocal}\\right)\\right)"
-    },
-    {
-      "comboId": "positiveImaginaryCircleCReciprocal::log_tan",
-      "functionKey": "positiveImaginaryCircleCReciprocal",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{positiveImaginaryCircleCReciprocal}\\right)\\right)"
-    },
-    {
-      "comboId": "negativeImaginary::tan",
-      "functionKey": "negativeImaginary",
+      "comboId": "negativeExponentVectorAReciprocal::tan",
+      "functionKey": "negativeExponentVectorAReciprocal",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{negativeImaginary}\\right)k_{2}"
+      "sourceLatex": "\\tan\\left(f_{negativeExponentVectorAReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryReciprocal::tan",
-      "functionKey": "negativeImaginaryReciprocal",
+      "comboId": "negativeExponentVectorBReciprocal::tan",
+      "functionKey": "negativeExponentVectorBReciprocal",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{negativeImaginaryReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\tan\\left(f_{negativeExponentVectorBReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorA::tan",
-      "functionKey": "negativeImaginaryVectorA",
+      "comboId": "negativeExponentVectorCReciprocal::tan",
+      "functionKey": "negativeExponentVectorCReciprocal",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{negativeImaginaryVectorA}\\right)k_{2}"
+      "sourceLatex": "\\tan\\left(f_{negativeExponentVectorCReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorReciprocal::tan",
-      "functionKey": "negativeImaginaryVectorReciprocal",
+      "comboId": "negativeExponentCircleAReciprocal::tan",
+      "functionKey": "negativeExponentCircleAReciprocal",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{negativeImaginaryVectorReciprocal}\\right)k_{2}"
+      "sourceLatex": "\\tan\\left(f_{negativeExponentCircleAReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryVectorB::tan",
-      "functionKey": "negativeImaginaryVectorB",
+      "comboId": "negativeExponentCircleBReciprocal::tan",
+      "functionKey": "negativeExponentCircleBReciprocal",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{negativeImaginaryVectorB}\\right)k_{2}"
+      "sourceLatex": "\\tan\\left(f_{negativeExponentCircleBReciprocal}\\right)"
     },
     {
-      "comboId": "negativeImaginaryCircleC::tan",
-      "functionKey": "negativeImaginaryCircleC",
+      "comboId": "negativeExponentCircleCReciprocal::tan",
+      "functionKey": "negativeExponentCircleCReciprocal",
       "variantKey": "tan",
       "coverageStatus": "covered",
       "implemented": true,
       "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{negativeImaginaryCircleC}\\right)k_{2}"
-    },
-    {
-      "comboId": "negativeImaginaryCircleBReciprocal::tan",
-      "functionKey": "negativeImaginaryCircleBReciprocal",
-      "variantKey": "tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{negativeImaginaryCircleBReciprocal}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryCircleCReciprocal::tan",
-      "functionKey": "negativeImaginaryCircleCReciprocal",
-      "variantKey": "tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\tan\\left(f_{negativeImaginaryCircleCReciprocal}\\right)"
-    },
-    {
-      "comboId": "negativeImaginary::log_tan",
-      "functionKey": "negativeImaginary",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{negativeImaginary}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryReciprocal::log_tan",
-      "functionKey": "negativeImaginaryReciprocal",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{negativeImaginaryReciprocal}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryVectorA::log_tan",
-      "functionKey": "negativeImaginaryVectorA",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{negativeImaginaryVectorA}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryVectorReciprocal::log_tan",
-      "functionKey": "negativeImaginaryVectorReciprocal",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{negativeImaginaryVectorReciprocal}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryVectorB::log_tan",
-      "functionKey": "negativeImaginaryVectorB",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{negativeImaginaryVectorB}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryCircleC::log_tan",
-      "functionKey": "negativeImaginaryCircleC",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{negativeImaginaryCircleC}\\right)k_{2}\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryCircleBReciprocal::log_tan",
-      "functionKey": "negativeImaginaryCircleBReciprocal",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{negativeImaginaryCircleBReciprocal}\\right)\\right)"
-    },
-    {
-      "comboId": "negativeImaginaryCircleCReciprocal::log_tan",
-      "functionKey": "negativeImaginaryCircleCReciprocal",
-      "variantKey": "log_tan",
-      "coverageStatus": "covered",
-      "implemented": true,
-      "inDesmos": true,
-      "sourceLatex": "\\log_{l_{func}}\\left(\\tan\\left(f_{negativeImaginaryCircleCReciprocal}\\right)\\right)"
+      "sourceLatex": "\\tan\\left(f_{negtaitiveExponentCircleCReciprocal}\\right)"
     }
   ],
   "desmosOnly": [],
   "appOnly": [
     {
-      "comboId": "positiveImaginary::log",
-      "functionKey": "positiveImaginary",
+      "comboId": "positiveExponent::log",
+      "functionKey": "positiveExponent",
       "variantKey": "log",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "positiveImaginaryReciprocal::log",
-      "functionKey": "positiveImaginaryReciprocal",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryVectorA::log",
-      "functionKey": "positiveImaginaryVectorA",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryVectorReciprocal::log",
-      "functionKey": "positiveImaginaryVectorReciprocal",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryVectorB::log",
-      "functionKey": "positiveImaginaryVectorB",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryCircleA::sin",
-      "functionKey": "positiveImaginaryCircleA",
-      "variantKey": "sin",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryCircleA::cos",
-      "functionKey": "positiveImaginaryCircleA",
-      "variantKey": "cos",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryCircleA::tan",
-      "functionKey": "positiveImaginaryCircleA",
-      "variantKey": "tan",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryCircleA::log",
-      "functionKey": "positiveImaginaryCircleA",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryCircleA::log_sin",
-      "functionKey": "positiveImaginaryCircleA",
+      "comboId": "positiveExponent::log_sin",
+      "functionKey": "positiveExponent",
       "variantKey": "log_sin",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "positiveImaginaryCircleA::log_cos",
-      "functionKey": "positiveImaginaryCircleA",
+      "comboId": "positiveExponent::log_cos",
+      "functionKey": "positiveExponent",
       "variantKey": "log_cos",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "positiveImaginaryCircleA::log_tan",
-      "functionKey": "positiveImaginaryCircleA",
+      "comboId": "positiveExponent::log_tan",
+      "functionKey": "positiveExponent",
       "variantKey": "log_tan",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "positiveImaginaryCircleB::sin",
-      "functionKey": "positiveImaginaryCircleB",
-      "variantKey": "sin",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryCircleB::cos",
-      "functionKey": "positiveImaginaryCircleB",
-      "variantKey": "cos",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryCircleB::tan",
-      "functionKey": "positiveImaginaryCircleB",
-      "variantKey": "tan",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryCircleB::log",
-      "functionKey": "positiveImaginaryCircleB",
+      "comboId": "positiveExponentReciprocal::log",
+      "functionKey": "positiveExponentReciprocal",
       "variantKey": "log",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "positiveImaginaryCircleB::log_sin",
-      "functionKey": "positiveImaginaryCircleB",
+      "comboId": "positiveExponentReciprocal::log_sin",
+      "functionKey": "positiveExponentReciprocal",
       "variantKey": "log_sin",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "positiveImaginaryCircleB::log_cos",
-      "functionKey": "positiveImaginaryCircleB",
+      "comboId": "positiveExponentReciprocal::log_cos",
+      "functionKey": "positiveExponentReciprocal",
       "variantKey": "log_cos",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "positiveImaginaryCircleB::log_tan",
-      "functionKey": "positiveImaginaryCircleB",
+      "comboId": "positiveExponentReciprocal::log_tan",
+      "functionKey": "positiveExponentReciprocal",
       "variantKey": "log_tan",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "positiveImaginaryCircleC::log",
-      "functionKey": "positiveImaginaryCircleC",
+      "comboId": "positiveExponentVectorA::log",
+      "functionKey": "positiveExponentVectorA",
       "variantKey": "log",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "positiveImaginaryCircleBReciprocal::log",
-      "functionKey": "positiveImaginaryCircleBReciprocal",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "positiveImaginaryCircleCReciprocal::log",
-      "functionKey": "positiveImaginaryCircleCReciprocal",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginary::log",
-      "functionKey": "negativeImaginary",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryReciprocal::log",
-      "functionKey": "negativeImaginaryReciprocal",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryVectorA::log",
-      "functionKey": "negativeImaginaryVectorA",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryVectorReciprocal::log",
-      "functionKey": "negativeImaginaryVectorReciprocal",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryVectorB::log",
-      "functionKey": "negativeImaginaryVectorB",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryCircleA::sin",
-      "functionKey": "negativeImaginaryCircleA",
-      "variantKey": "sin",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryCircleA::cos",
-      "functionKey": "negativeImaginaryCircleA",
-      "variantKey": "cos",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryCircleA::tan",
-      "functionKey": "negativeImaginaryCircleA",
-      "variantKey": "tan",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryCircleA::log",
-      "functionKey": "negativeImaginaryCircleA",
-      "variantKey": "log",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryCircleA::log_sin",
-      "functionKey": "negativeImaginaryCircleA",
+      "comboId": "positiveExponentVectorA::log_sin",
+      "functionKey": "positiveExponentVectorA",
       "variantKey": "log_sin",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "negativeImaginaryCircleA::log_cos",
-      "functionKey": "negativeImaginaryCircleA",
+      "comboId": "positiveExponentVectorA::log_cos",
+      "functionKey": "positiveExponentVectorA",
       "variantKey": "log_cos",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "negativeImaginaryCircleA::log_tan",
-      "functionKey": "negativeImaginaryCircleA",
+      "comboId": "positiveExponentVectorA::log_tan",
+      "functionKey": "positiveExponentVectorA",
       "variantKey": "log_tan",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "negativeImaginaryCircleB::sin",
-      "functionKey": "negativeImaginaryCircleB",
-      "variantKey": "sin",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryCircleB::cos",
-      "functionKey": "negativeImaginaryCircleB",
-      "variantKey": "cos",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryCircleB::tan",
-      "functionKey": "negativeImaginaryCircleB",
-      "variantKey": "tan",
-      "coverageStatus": "app-only",
-      "implemented": true,
-      "inDesmos": false
-    },
-    {
-      "comboId": "negativeImaginaryCircleB::log",
-      "functionKey": "negativeImaginaryCircleB",
+      "comboId": "positiveExponentVectorAReciprocal::log",
+      "functionKey": "positiveExponentVectorAReciprocal",
       "variantKey": "log",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "negativeImaginaryCircleB::log_sin",
-      "functionKey": "negativeImaginaryCircleB",
+      "comboId": "positiveExponentVectorAReciprocal::log_sin",
+      "functionKey": "positiveExponentVectorAReciprocal",
       "variantKey": "log_sin",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "negativeImaginaryCircleB::log_cos",
-      "functionKey": "negativeImaginaryCircleB",
+      "comboId": "positiveExponentVectorAReciprocal::log_cos",
+      "functionKey": "positiveExponentVectorAReciprocal",
       "variantKey": "log_cos",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "negativeImaginaryCircleB::log_tan",
-      "functionKey": "negativeImaginaryCircleB",
+      "comboId": "positiveExponentVectorAReciprocal::log_tan",
+      "functionKey": "positiveExponentVectorAReciprocal",
       "variantKey": "log_tan",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "negativeImaginaryCircleC::log",
-      "functionKey": "negativeImaginaryCircleC",
+      "comboId": "positiveExponentVectorB::log",
+      "functionKey": "positiveExponentVectorB",
       "variantKey": "log",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "negativeImaginaryCircleBReciprocal::log",
-      "functionKey": "negativeImaginaryCircleBReciprocal",
+      "comboId": "positiveExponentVectorB::log_sin",
+      "functionKey": "positiveExponentVectorB",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorB::log_cos",
+      "functionKey": "positiveExponentVectorB",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorB::log_tan",
+      "functionKey": "positiveExponentVectorB",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorBReciprocal::log",
+      "functionKey": "positiveExponentVectorBReciprocal",
       "variantKey": "log",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     },
     {
-      "comboId": "negativeImaginaryCircleCReciprocal::log",
-      "functionKey": "negativeImaginaryCircleCReciprocal",
+      "comboId": "positiveExponentVectorBReciprocal::log_sin",
+      "functionKey": "positiveExponentVectorBReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorBReciprocal::log_cos",
+      "functionKey": "positiveExponentVectorBReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorBReciprocal::log_tan",
+      "functionKey": "positiveExponentVectorBReciprocal",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorC::log",
+      "functionKey": "positiveExponentVectorC",
       "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorC::log_sin",
+      "functionKey": "positiveExponentVectorC",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorC::log_cos",
+      "functionKey": "positiveExponentVectorC",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorC::log_tan",
+      "functionKey": "positiveExponentVectorC",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorCReciprocal::log",
+      "functionKey": "positiveExponentVectorCReciprocal",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorCReciprocal::log_sin",
+      "functionKey": "positiveExponentVectorCReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorCReciprocal::log_cos",
+      "functionKey": "positiveExponentVectorCReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentVectorCReciprocal::log_tan",
+      "functionKey": "positiveExponentVectorCReciprocal",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleA::log",
+      "functionKey": "positiveExponentCircleA",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleA::log_sin",
+      "functionKey": "positiveExponentCircleA",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleA::log_cos",
+      "functionKey": "positiveExponentCircleA",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleA::log_tan",
+      "functionKey": "positiveExponentCircleA",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleAReciprocal::log",
+      "functionKey": "positiveExponentCircleAReciprocal",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleAReciprocal::log_sin",
+      "functionKey": "positiveExponentCircleAReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleAReciprocal::log_cos",
+      "functionKey": "positiveExponentCircleAReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleAReciprocal::log_tan",
+      "functionKey": "positiveExponentCircleAReciprocal",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleB::log",
+      "functionKey": "positiveExponentCircleB",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleB::log_sin",
+      "functionKey": "positiveExponentCircleB",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleB::log_cos",
+      "functionKey": "positiveExponentCircleB",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleB::log_tan",
+      "functionKey": "positiveExponentCircleB",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleBReciprocal::log",
+      "functionKey": "positiveExponentCircleBReciprocal",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleBReciprocal::log_sin",
+      "functionKey": "positiveExponentCircleBReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleBReciprocal::log_cos",
+      "functionKey": "positiveExponentCircleBReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleBReciprocal::log_tan",
+      "functionKey": "positiveExponentCircleBReciprocal",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleC::log",
+      "functionKey": "positiveExponentCircleC",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleC::log_sin",
+      "functionKey": "positiveExponentCircleC",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleC::log_cos",
+      "functionKey": "positiveExponentCircleC",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleC::log_tan",
+      "functionKey": "positiveExponentCircleC",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleCReciprocal::log",
+      "functionKey": "positiveExponentCircleCReciprocal",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleCReciprocal::log_sin",
+      "functionKey": "positiveExponentCircleCReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleCReciprocal::log_cos",
+      "functionKey": "positiveExponentCircleCReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "positiveExponentCircleCReciprocal::log_tan",
+      "functionKey": "positiveExponentCircleCReciprocal",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponent::log",
+      "functionKey": "negativeExponent",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponent::log_sin",
+      "functionKey": "negativeExponent",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponent::log_cos",
+      "functionKey": "negativeExponent",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponent::log_tan",
+      "functionKey": "negativeExponent",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentReciprocal::log",
+      "functionKey": "negativeExponentReciprocal",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentReciprocal::log_sin",
+      "functionKey": "negativeExponentReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentReciprocal::log_cos",
+      "functionKey": "negativeExponentReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentReciprocal::log_tan",
+      "functionKey": "negativeExponentReciprocal",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorA::log",
+      "functionKey": "negativeExponentVectorA",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorA::log_sin",
+      "functionKey": "negativeExponentVectorA",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorA::log_cos",
+      "functionKey": "negativeExponentVectorA",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorA::log_tan",
+      "functionKey": "negativeExponentVectorA",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorAReciprocal::log",
+      "functionKey": "negativeExponentVectorAReciprocal",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorAReciprocal::log_sin",
+      "functionKey": "negativeExponentVectorAReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorAReciprocal::log_cos",
+      "functionKey": "negativeExponentVectorAReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorAReciprocal::log_tan",
+      "functionKey": "negativeExponentVectorAReciprocal",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorB::log",
+      "functionKey": "negativeExponentVectorB",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorB::log_sin",
+      "functionKey": "negativeExponentVectorB",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorB::log_cos",
+      "functionKey": "negativeExponentVectorB",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorB::log_tan",
+      "functionKey": "negativeExponentVectorB",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorBReciprocal::log",
+      "functionKey": "negativeExponentVectorBReciprocal",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorBReciprocal::log_sin",
+      "functionKey": "negativeExponentVectorBReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorBReciprocal::log_cos",
+      "functionKey": "negativeExponentVectorBReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorBReciprocal::log_tan",
+      "functionKey": "negativeExponentVectorBReciprocal",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorC::log",
+      "functionKey": "negativeExponentVectorC",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorC::log_sin",
+      "functionKey": "negativeExponentVectorC",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorC::log_cos",
+      "functionKey": "negativeExponentVectorC",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorC::log_tan",
+      "functionKey": "negativeExponentVectorC",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorCReciprocal::log",
+      "functionKey": "negativeExponentVectorCReciprocal",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorCReciprocal::log_sin",
+      "functionKey": "negativeExponentVectorCReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorCReciprocal::log_cos",
+      "functionKey": "negativeExponentVectorCReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentVectorCReciprocal::log_tan",
+      "functionKey": "negativeExponentVectorCReciprocal",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleA::log",
+      "functionKey": "negativeExponentCircleA",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleA::log_sin",
+      "functionKey": "negativeExponentCircleA",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleA::log_cos",
+      "functionKey": "negativeExponentCircleA",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleA::log_tan",
+      "functionKey": "negativeExponentCircleA",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleAReciprocal::log",
+      "functionKey": "negativeExponentCircleAReciprocal",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleAReciprocal::log_sin",
+      "functionKey": "negativeExponentCircleAReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleAReciprocal::log_cos",
+      "functionKey": "negativeExponentCircleAReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleAReciprocal::log_tan",
+      "functionKey": "negativeExponentCircleAReciprocal",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleB::log",
+      "functionKey": "negativeExponentCircleB",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleB::log_sin",
+      "functionKey": "negativeExponentCircleB",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleB::log_cos",
+      "functionKey": "negativeExponentCircleB",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleB::log_tan",
+      "functionKey": "negativeExponentCircleB",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleBReciprocal::log",
+      "functionKey": "negativeExponentCircleBReciprocal",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleBReciprocal::log_sin",
+      "functionKey": "negativeExponentCircleBReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleBReciprocal::log_cos",
+      "functionKey": "negativeExponentCircleBReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleBReciprocal::log_tan",
+      "functionKey": "negativeExponentCircleBReciprocal",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleC::log",
+      "functionKey": "negativeExponentCircleC",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleC::log_sin",
+      "functionKey": "negativeExponentCircleC",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleC::log_cos",
+      "functionKey": "negativeExponentCircleC",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleC::log_tan",
+      "functionKey": "negativeExponentCircleC",
+      "variantKey": "log_tan",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleCReciprocal::log",
+      "functionKey": "negativeExponentCircleCReciprocal",
+      "variantKey": "log",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleCReciprocal::log_sin",
+      "functionKey": "negativeExponentCircleCReciprocal",
+      "variantKey": "log_sin",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleCReciprocal::log_cos",
+      "functionKey": "negativeExponentCircleCReciprocal",
+      "variantKey": "log_cos",
+      "coverageStatus": "app-only",
+      "implemented": true,
+      "inDesmos": false
+    },
+    {
+      "comboId": "negativeExponentCircleCReciprocal::log_tan",
+      "functionKey": "negativeExponentCircleCReciprocal",
+      "variantKey": "log_tan",
       "coverageStatus": "app-only",
       "implemented": true,
       "inDesmos": false
     }
   ],
   "missingImplementation": [],
+  "warnings": [
+    {
+      "kind": "cross_branch_dependency",
+      "expressionId": "439",
+      "functionKey": "negativeExponentVectorA",
+      "canonicalFunctionKey": "negativeExponentVectorA",
+      "message": "Cross-branch dependency in negativeExponentVectorA"
+    },
+    {
+      "kind": "cross_branch_dependency",
+      "expressionId": "440",
+      "functionKey": "negativeExponentVectorB",
+      "canonicalFunctionKey": "negativeExponentVectorB",
+      "message": "Cross-branch dependency in negativeExponentVectorB"
+    },
+    {
+      "kind": "cross_branch_dependency",
+      "expressionId": "441",
+      "functionKey": "negativeExponentVectorC",
+      "canonicalFunctionKey": "negativeExponentVectorC",
+      "message": "Cross-branch dependency in negativeExponentVectorC"
+    },
+    {
+      "kind": "typo",
+      "expressionId": "5656",
+      "functionKey": "negtaitiveExponentCircleC",
+      "message": "Function key typo detected: negtaitiveExponentCircleC"
+    },
+    {
+      "kind": "typo",
+      "expressionId": "5672",
+      "functionKey": "negtaitiveExponentCircleCReciprocal",
+      "message": "Function key typo detected: negtaitiveExponentCircleCReciprocal"
+    }
+  ],
   "namingMismatches": [
     {
       "from": "positive / negative imaginary labels",
       "to": "+ exponent / - exponent",
-      "status": "resolved-in-ui"
+      "status": "canonicalized-in-runtime"
     }
   ]
 }

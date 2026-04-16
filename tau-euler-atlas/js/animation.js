@@ -43,6 +43,10 @@ class ProgressEngine {
     // Scene timeline override: when non-null, this duration is used instead of this.duration
     this._timelineDuration = null;
 
+    // Loop iteration tracking
+    this._loopCount = 0;        // 0 = infinite, N > 0 = stop after N loops
+    this._completedLoops = 0;   // how many full cycles have completed
+
     this._lastFrameTime = 0;
     this._stateChangeCbs = [];
   }
@@ -59,9 +63,24 @@ class ProgressEngine {
     this._timelineDuration = (Number.isFinite(seconds) && seconds > 0) ? seconds : null;
   }
 
-  /** Get the absolute time in seconds based on current progress. */
+  /** Set the maximum number of loops. 0 = infinite. */
+  setLoopCount(count) {
+    this._loopCount = (Number.isFinite(count) && count >= 0) ? Math.floor(count) : 0;
+  }
+
+  /** Reset loop iteration state (call when starting fresh playback). */
+  resetLoopState() {
+    this._completedLoops = 0;
+  }
+
+  /** Get the resolved progress (0 to 1) according to the current loop mode. */
+  getResolvedProgress() {
+    return resolveLoopProgress(this.progress, this.loop);
+  }
+
+  /** Get the absolute time in seconds based on current resolved progress. */
   getAbsoluteTime() {
-    return this.progress * this.getEffectiveDuration();
+    return this.getResolvedProgress() * this.getEffectiveDuration();
   }
 
   /** Seek to an absolute time in seconds. */
@@ -84,6 +103,7 @@ class ProgressEngine {
   stop() {
     this.playing = false;
     this.progress = 0;
+    this._completedLoops = 0;
     this._notify();
   }
 
@@ -119,6 +139,30 @@ class ProgressEngine {
       this.progress = 1;
       this.playing = false;
       this._notify();
+    } else if (this.loop === 'wrap' && this.progress >= 1) {
+      // Crossed a full cycle boundary
+      this._completedLoops++;
+      if (this._loopCount > 0 && this._completedLoops >= this._loopCount) {
+        // Reached the loop limit — clamp and stop
+        this.progress = 1;
+        this.playing = false;
+        this._notify();
+      }
+      // Otherwise resolveLoopProgress will handle the wrap
+    } else if (this.loop === 'bounce') {
+      // A bounce cycle = 2 passes (forward + reverse), so a full cycle = progress crossing each integer
+      const prevCycle = Math.floor(prev);
+      const curCycle = Math.floor(this.progress);
+      if (curCycle > prevCycle) {
+        // Each integer crossing = one half-cycle; two half-cycles = one full loop
+        // For loop count purposes, count every 2 crossings as 1 loop
+        this._completedLoops = Math.floor(curCycle / 2);
+        if (this._loopCount > 0 && this._completedLoops >= this._loopCount) {
+          this.progress = 0; // Return to start after completing all bounces
+          this.playing = false;
+          this._notify();
+        }
+      }
     }
 
     return this.progress !== prev;

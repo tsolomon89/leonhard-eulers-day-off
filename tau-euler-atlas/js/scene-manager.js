@@ -18,7 +18,7 @@ import {
   getActiveScene,
   getInheritedBases,
 } from './scene-data.js';
-import { isInstantLinkPath } from './linked-params.js';
+import { isBooleanLinkPath } from './linked-params.js';
 
 // ── Scene Manager ────────────────────────────────────────────
 
@@ -78,6 +78,44 @@ export function createSceneManager(options) {
     _timeline.activeSceneIndex = sceneIndex;
   }
 
+  // ── Bounds widening during playback ──────────────────────
+
+  /**
+   * Widen derivation-level bounds in state so that buildDerivedState()
+   * won't clamp scene-tracked values back to the accordion slider range.
+   *
+   * Currently only T has derivation-level bounds (T_lowerBound / T_upperBound).
+   * If other params gain similar bounds in the future, add them here.
+   */
+  function _widenBoundsForPlayback(state, timeline) {
+    if (!timeline || !timeline.scenes.length) return;
+
+    let needsTBounds = false;
+    let tMin = Number.isFinite(state.T_lowerBound) ? state.T_lowerBound : 0;
+    let tMax = Number.isFinite(state.T_upperBound) ? state.T_upperBound : 2;
+
+    for (const scene of timeline.scenes) {
+      for (const link of scene.links) {
+        if (link.path === 'T') {
+          needsTBounds = true;
+          if (Number.isFinite(link.baseValue)) {
+            tMin = Math.min(tMin, link.baseValue);
+            tMax = Math.max(tMax, link.baseValue);
+          }
+          if (Number.isFinite(link.endValue)) {
+            tMin = Math.min(tMin, link.endValue);
+            tMax = Math.max(tMax, link.endValue);
+          }
+        }
+      }
+    }
+
+    if (needsTBounds) {
+      state.T_lowerBound = tMin;
+      state.T_upperBound = tMax;
+    }
+  }
+
   // ── Playback ─────────────────────────────────────────────
 
   /**
@@ -99,9 +137,11 @@ export function createSceneManager(options) {
     const total = totalDuration(_timeline);
     anim.setTimelineDuration(total);
 
-    // Set animation loop mode
+    // Set animation loop mode (string: 'none' | 'wrap' | 'bounce')
     _savedLoop = anim.loop;
-    anim.loop = _timeline.loop ? 'wrap' : 'none';
+    anim.loop = _timeline.loop || 'none';
+    anim.setLoopCount(_timeline.loopCount || 0);
+    anim.resetLoopState();
 
     _isPlaying = true;
     _lastSceneIndex = -1;
@@ -181,12 +221,11 @@ export function createSceneManager(options) {
     // Write interpolated values directly to state
     const state = getState();
     for (const link of scene.links) {
-      if (isInstantLinkPath(link.path)) {
-        writePath(state, link.path, link.baseValue);
+      if (isBooleanLinkPath(link.path)) {
+        // Core structural flags always snap instantly to their scene configuration
+        writePath(state, link.path, link.endValue);
       } else {
-        const tf = link.transitionFactor;
-        const effectiveT = (tf > 0 && tf < 1) ? Math.min(1.0, t / tf) : t;
-        const value = link.baseValue + (link.endValue - link.baseValue) * effectiveT;
+        const value = link.baseValue + (link.endValue - link.baseValue) * t;
         writePath(state, link.path, value);
       }
 
@@ -194,6 +233,11 @@ export function createSceneManager(options) {
         options.onTrackUpdate(link.path, readPath(state, link.path));
       }
     }
+
+    // Widen derivation-level bounds so that scene-tracked values are not
+    // clamped back by buildDerivedState().  Bounds revert on stopPlayback
+    // via the _initialSnapshot restore.
+    _widenBoundsForPlayback(state, _timeline);
 
     // Track scene transitions
     const sceneChanged = sceneIndex !== _lastSceneIndex;

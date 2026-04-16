@@ -6,7 +6,6 @@ import {
   computeWindowProgress,
   resolveLoopProgress,
 } from '../js/animation.js';
-import { advanceStepTraversal, shouldAdvanceStep } from '../js/derivation.js';
 
 const EPS = 1e-6;
 
@@ -60,71 +59,4 @@ test('animation.update advances progress and loop=none clamps and stops at end',
   assert.equal(changed, true);
   assert.ok(approx(animation.progress, 1));
   assert.equal(animation.playing, false);
-});
-
-test('step traversal honors clamp and bounce policies', () => {
-  const clampStep = advanceStepTraversal({
-    T: 1.99,
-    T_start: 1.99,
-    T_stop: 2,
-    dtSeconds: 1,
-    s: 0.02,
-    stepLoopMode: 'clamp',
-    bounceDir: 1,
-  });
-  assert.ok(clampStep.T <= 2);
-  assert.equal(clampStep.bounceDir, 1);
-
-  const bounceA = advanceStepTraversal({
-    T: 1.99,
-    T_start: 1.99,
-    T_stop: 2,
-    dtSeconds: 1,
-    s: 0.02,
-    stepLoopMode: 'bounce',
-    bounceDir: 1,
-  });
-  assert.ok(bounceA.T >= 1.99 && bounceA.T <= 2);
-  assert.equal(bounceA.bounceDir, -1);
-
-  const bounceB = advanceStepTraversal({
-    T: bounceA.T,
-    T_start: 1.99,
-    T_stop: 2,
-    dtSeconds: 1,
-    s: 0.02,
-    stepLoopMode: 'bounce',
-    bounceDir: bounceA.bounceDir,
-  });
-  assert.ok(bounceB.T >= 1.99 && bounceB.T <= 2);
-});
-
-test('step traversal ignores legacy stepRate payloads when supplied', () => {
-  const withLegacy = advanceStepTraversal({
-    T: 1.5,
-    T_start: 1,
-    T_stop: 2,
-    dtSeconds: 1,
-    s: 0.02,
-    stepRate: 99,
-    stepLoopMode: 'clamp',
-    bounceDir: 1,
-  });
-  const canonical = advanceStepTraversal({
-    T: 1.5,
-    T_start: 1,
-    T_stop: 2,
-    dtSeconds: 1,
-    s: 0.02,
-    stepLoopMode: 'clamp',
-    bounceDir: 1,
-  });
-  assert.ok(approx(withLegacy.T, canonical.T, 1e-12));
-  assert.equal(withLegacy.bounceDir, canonical.bounceDir);
-});
-
-test('playback stepping is binary and ignores legacy time mode values', () => {
-  assert.equal(shouldAdvanceStep({ timeMode: 'off' }, false), false);
-  assert.equal(shouldAdvanceStep({ timeMode: 'off' }, true), true);
-  assert.equal(shouldAdvanceStep({ timeMode: 'animation' }, true), true);
 });

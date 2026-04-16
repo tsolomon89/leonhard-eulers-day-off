@@ -28,6 +28,7 @@ const md = [
   `- Desmos-only (missing in app): ${report.counts.desmosOnly}`,
   `- App-only (not in Desmos): ${report.counts.appOnly}`,
   `- Missing implementation (exists in Desmos but unimplemented): ${report.counts.missingImplementation}`,
+  `- Warnings: ${report.counts.warnings}`,
   '',
   '## Covered By Variant',
   '',
@@ -46,6 +47,12 @@ const md = [
   ...(report.desmosOnly.length === 0
     ? ['- none']
     : report.desmosOnly.map((combo) => `- ${combo.functionKey} :: ${combo.variantKey}`)),
+  '',
+  '## Warnings',
+  '',
+  ...(report.warnings.length === 0
+    ? ['- none']
+    : report.warnings.map((warning) => `- [${warning.kind}] ${warning.message}`)),
   '',
   '## Naming Alignment',
   '',

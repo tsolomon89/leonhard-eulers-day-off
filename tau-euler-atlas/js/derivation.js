@@ -1,16 +1,7 @@
 import { TAU, clamp } from './complex.js';
-import {
-  resolvePrecomputeBufferFrames,
-  sanitizeBufferPhase,
-} from './playback-buffer.js';
 
 const EPS = 1e-12;
 export const COLOR_BLOCK_SIZE = 710;
-export const STEP_LOOP_MODES = ['clamp', 'bounce'];
-
-function sanitizeStepLoopMode(mode) {
-  return STEP_LOOP_MODES.includes(mode) ? mode : 'clamp';
-}
 
 function sanitizeLogBase(v, fallback) {
   const b = Number.isFinite(v) ? v : fallback;
@@ -47,54 +38,62 @@ export function computeD(T) {
   return Math.abs(2 * Math.cos((TAU / 2) * safeT));
 }
 
-export function computeCorr(qCorrection, dCorrectionFunction) {
-  if (Number(qCorrection) <= 0) return 2;
-  if (!Number.isFinite(dCorrectionFunction)) return 1;
-  return Math.abs(dCorrectionFunction) < EPS ? 1 : dCorrectionFunction;
+export function computeCorr(qCorrectionFloat, dCorrectionFunction) {
+  const qCorr = clamp(Number.isFinite(qCorrectionFloat) ? qCorrectionFloat : 0, 0, 1);
+  const baseCorr = 2;
+  const targetCorr = (!Number.isFinite(dCorrectionFunction) || Math.abs(dCorrectionFunction) < EPS) ? 1 : dCorrectionFunction;
+  return baseCorr + (targetCorr - baseCorr) * qCorr;
 }
 
 export function computeK1({
   qBool,
+  qBoolFloat,
   qScale,
   q,
   qCorrection,
+  qCorrectionFloat,
   dCorrectionFunction,
 }) {
-  if (Number(qBool) <= 0) return qScale;
-  const corr = computeCorr(qCorrection, dCorrectionFunction);
+  // Support canonical keys (qBool/qCorrection) and legacy aliases (qBoolFloat/qCorrectionFloat).
+  const qBlend = clamp(
+    Number.isFinite(qBool) ? qBool : (Number.isFinite(qBoolFloat) ? qBoolFloat : 0),
+    0,
+    1,
+  );
+  const qCorr = Number.isFinite(qCorrection) ? qCorrection : qCorrectionFloat;
+  const corr = computeCorr(qCorr, dCorrectionFunction);
   const denom = (q / 2) * corr;
-  if (!Number.isFinite(denom) || Math.abs(denom) < EPS) return 1;
-  return TAU / denom;
+  const targetK1 = (!Number.isFinite(denom) || Math.abs(denom) < EPS) ? 1 : TAU / denom;
+  return qScale + (targetK1 - qScale) * qBlend;
 }
 
-export function buildNListFromRange(ZMin, ZMaxExclusive) {
-  const lo = Math.floor(Number.isFinite(ZMin) ? ZMin : 0);
-  const hi = Math.floor(Number.isFinite(ZMaxExclusive) ? ZMaxExclusive : lo + 1);
-  if (hi <= lo) return [];
-  return Array.from({ length: hi - lo }, (_, i) => lo + i);
+export function buildNListFromDepths(nNegDepth, nPosDepth) {
+  const negDepth = clamp(
+    Math.floor(Number.isFinite(nNegDepth) ? nNegDepth : 0),
+    0,
+    50000,
+  );
+  const posDepth = clamp(
+    Math.floor(Number.isFinite(nPosDepth) ? nPosDepth : 0),
+    0,
+    50000,
+  );
+  const nList = [];
+  for (let i = negDepth; i >= 1; i--) nList.push(-i);
+  nList.push(0);
+  for (let i = 1; i <= posDepth; i++) nList.push(i);
+  return nList;
 }
 
 
 export function buildDerivedState(input) {
   const base = { ...input };
 
-  const ZMaxInput = Number.isFinite(base.Z_max) ? Math.floor(base.Z_max) : 710;
-  const ZMinInput = Number.isFinite(base.Z_min) ? Math.floor(base.Z_min) : 0;
-  let Z_max = clamp(ZMaxInput, 0, 50000);
-  let Z_min = clamp(ZMinInput, -50000, 0);
-
-  // JSON-literal domain: n = [Z_min + 1 ... Z_max - 1]
-  // Keep deterministic validity by ensuring at least one sample (Z_max - Z_min >= 2).
-  if ((Z_max - Z_min) < 2) {
-    if (ZMaxInput <= ZMinInput) {
-      Z_min = clamp(Z_max - 2, -50000, 0);
-    } else {
-      Z_max = clamp(Z_min + 2, 0, 50000);
-      if ((Z_max - Z_min) < 2) Z_min = clamp(Z_max - 2, -50000, 0);
-    }
-  }
-
-  const nList = buildNListFromRange(Z_min + 1, Z_max);
+  const nNegInput = Number.isFinite(base.n_negDepth) ? Math.floor(base.n_negDepth) : 355;
+  const nPosInput = Number.isFinite(base.n_posDepth) ? Math.floor(base.n_posDepth) : 355;
+  const n_negDepth = clamp(nNegInput, 0, 50000);
+  const n_posDepth = clamp(nPosInput, 0, 50000);
+  const nList = buildNListFromDepths(n_negDepth, n_posDepth);
   const n = nList.length;
 
   let T_lowerBound = Number.isFinite(base.T_lowerBound) ? base.T_lowerBound : 1.99999;
@@ -111,28 +110,31 @@ export function buildDerivedState(input) {
   const l_base = sanitizeLogBase(base.l_base, 10);
   const l_func = sanitizeLogBase(base.l_func, 10);
 
-  const kStepsInAlignmentsBool = Number(base.kStepsInAlignmentsBool) > 0 ? 1 : 0;
+  const kStepsInAlignmentsFloat = clamp(Number.isFinite(base.kStepsInAlignmentsBool) ? base.kStepsInAlignmentsBool : 0, 0, 1);
   const kAligned = computeKAligned(T, l_base);
-  const k = kStepsInAlignmentsBool === 0 ? T : (Number.isFinite(kAligned) ? kAligned : T);
+  const kTarget = Number.isFinite(kAligned) ? kAligned : T;
+  const k = T + (kTarget - T) * kStepsInAlignmentsFloat;
 
   const q_scale = Number.isFinite(base.q_scale) ? base.q_scale : 1;
   const q_tauScale = Number.isFinite(base.q_tauScale) ? base.q_tauScale : 0;
-  const q_bool = Number(base.q_bool) > 0 ? 1 : 0;
-  const q_correction = Number(base.q_correction) > 0 ? 1 : 0;
+  const q_bool_float = Number.isFinite(base.q_bool) ? base.q_bool : 0;
+  const q_correction_float = Number.isFinite(base.q_correction) ? base.q_correction : 0;
   const q = computeQ(q_scale, q_tauScale);
 
   const d_CorrectionFunction = computeD(T);
-  const corr = computeCorr(q_correction, d_CorrectionFunction);
+  const corr = computeCorr(q_correction_float, d_CorrectionFunction);
   const k1 = computeK1({
-    qBool: q_bool,
+    qBool: q_bool_float,
     qScale: q_scale,
     q,
-    qCorrection: q_correction,
+    qCorrection: q_correction_float,
     dCorrectionFunction: d_CorrectionFunction,
   });
 
   const k2 = Number.isFinite(base.k2) ? base.k2 : 1;
   const k3 = Number.isFinite(base.k3) ? Math.max(EPS, base.k3) : 1;
+  const pathBudgetRaw = Number.isFinite(base.pathBudget) ? base.pathBudget : 500;
+  const pathBudget = Math.max(10, Math.min(50000, Math.floor(pathBudgetRaw)));
 
   let b = Number.isFinite(base.b) ? base.b : 36000000;
   if (Math.abs(b) < EPS) b = 1;
@@ -142,28 +144,24 @@ export function buildDerivedState(input) {
   if (q_scale_b < 1) q_scale_b = 1;
   const q_scale_s = 1 / q_scale_b;
 
-  const legacyStepRate = Number.isFinite(base.stepRate) ? base.stepRate : 1;
+  // Read-compat for legacy traversal fields: accept on load, omit from normalized state.
   delete base.stepRate;
-  const legacyTimeMode = base.timeMode === 'off'
-    ? 'off'
-    : (base.timeMode === 'animation' ? 'animation' : 'step');
-  const timeMode = 'step';
-  const stepLoopMode = sanitizeStepLoopMode(base.stepLoopMode);
-  const syncTStepToS = base.syncTStepToS !== false;
-  const tRegion = typeof base.tRegion === 'string' ? base.tRegion : 'full';
-  const precomputeBufferUnit = base.precomputeBufferUnit === 'seconds' ? 'seconds' : 'frames';
-  const rawBufferValue = Number.isFinite(base.precomputeBufferValue) ? base.precomputeBufferValue : 24;
-  const precomputeBufferValue = precomputeBufferUnit === 'seconds'
-    ? clamp(rawBufferValue, 0.1, 10)
-    : clamp(Math.floor(rawBufferValue), 1, 600);
-  const precomputeBufferFrames = resolvePrecomputeBufferFrames(precomputeBufferUnit, precomputeBufferValue);
-  const bufferEnabled = base.bufferEnabled === true;
-  const bufferPhase = sanitizeBufferPhase(base.bufferPhase);
-  const rawBufferProgress = Number.isFinite(base.bufferProgress) ? base.bufferProgress : 0;
-  const bufferProgress = clamp(rawBufferProgress, 0, 1);
-  const bufferTargetFrames = Math.max(1, Math.floor(
-    Number.isFinite(base.bufferTargetFrames) ? base.bufferTargetFrames : precomputeBufferFrames,
-  ));
+  delete base.timeMode;
+  delete base.stepLoopMode;
+  delete base.syncTStepToS;
+  delete base.tRegion;
+  delete base.precomputeBufferUnit;
+  delete base.precomputeBufferValue;
+  delete base.precomputeBufferFrames;
+  delete base.bufferEnabled;
+  delete base.bufferPhase;
+  delete base.bufferProgress;
+  delete base.bufferTargetFrames;
+  delete base.bufferNotice;
+  // Hard break for legacy n-domain fields.
+  delete base.Z;
+  delete base.Z_min;
+  delete base.Z_max;
 
   const P = Number.isFinite(base.P) ? base.P : 1;
   const P1 = P * (1 + TAU / Math.max(1, n));
@@ -176,8 +174,8 @@ export function buildDerivedState(input) {
 
   return {
     ...base,
-    Z_min,
-    Z_max,
+    n_negDepth,
+    n_posDepth,
     n,
     nList,
     T,
@@ -185,36 +183,24 @@ export function buildDerivedState(input) {
     T_upperBound,
     l_base,
     l_func,
-    kStepsInAlignmentsBool,
+    kStepsInAlignmentsBool: kStepsInAlignmentsFloat,
     kAligned,
     k,
     q_scale,
     q_scale_b,
     q_scale_s,
     q_tauScale,
-    q_bool,
-    q_correction,
+    q_bool: q_bool_float,
+    q_correction: q_correction_float,
     q,
     corr,
     d_CorrectionFunction,
     k1,
     k2,
     k3,
+    pathBudget,
     b,
     s,
-    legacyStepRate,
-    timeMode,
-    legacyTimeMode,
-    stepLoopMode,
-    syncTStepToS,
-    tRegion,
-    precomputeBufferUnit,
-    precomputeBufferValue,
-    precomputeBufferFrames,
-    bufferEnabled,
-    bufferPhase,
-    bufferProgress,
-    bufferTargetFrames,
     P,
     P1,
     eProof,
@@ -225,13 +211,16 @@ export function buildDerivedState(input) {
     // Back-compat mirrors retained for utility code/tests now.
     q1: q_scale,
     q2: q_tauScale,
-    q_a: q_bool,
+    q_a: q_bool_float,
     d: d_CorrectionFunction,
     lBase: l_base,
   };
 }
 
 export function applyDerivedState(state) {
+  delete state.Z;
+  delete state.Z_min;
+  delete state.Z_max;
   Object.assign(state, buildDerivedState(state));
   return state;
 }

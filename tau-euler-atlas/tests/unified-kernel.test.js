@@ -7,6 +7,7 @@ import {
   cExp,
   cCos,
   cLogBase,
+  cMul,
   cSin,
   cScl,
   cTauPow,
@@ -38,8 +39,10 @@ import {
   evaluateDirectFamily,
   evaluateBaseChildForMode,
   evaluateTransform,
+  evaluateTransformStages,
   generateAllPoints,
   generateAtlasPaths,
+  generateAtlasPathsWithDiagnostics,
   getActiveExpressionCombos,
 } from '../js/generators.js';
 
@@ -72,8 +75,8 @@ function baseState(overrides = {}) {
     T_lowerBound: 1.99999,
     T_upperBound: 2,
     b: 1000,
-    Z_min: 0,
-    Z_max: 720,
+    n_negDepth: 355,
+    n_posDepth: 355,
     l_base: 10,
     l_func: 10,
     kStepsInAlignmentsBool: 1,
@@ -102,26 +105,35 @@ test('JSON-literal k semantics: bool=0 uses T, bool=1 uses kAligned', () => {
   assert.ok(approx(aligned.k, computeKAligned(2.0, 10), 1e-12));
 });
 
-test('playback mode is normalized to unified stepping with legacy mirror retained', () => {
+test('legacy traversal keys are accepted on input but omitted from canonical derived state', () => {
   const derived = buildDerivedState(baseState({
     timeMode: 'off',
     stepRate: 7,
+    stepLoopMode: 'bounce',
+    syncTStepToS: false,
+    tRegion: 'window',
     precomputeBufferUnit: 'seconds',
     precomputeBufferValue: 0.5,
     bufferEnabled: true,
     bufferPhase: 'prefill',
     bufferProgress: 0.4,
+    bufferTargetFrames: 99,
+    bufferNotice: 'legacy',
   }));
-  assert.equal(derived.timeMode, 'step');
-  assert.equal(derived.legacyTimeMode, 'off');
-  assert.equal(derived.legacyStepRate, 7);
+  assert.equal(derived.timeMode, undefined);
+  assert.equal(derived.legacyTimeMode, undefined);
+  assert.equal(derived.legacyStepRate, undefined);
   assert.equal(derived.stepRate, undefined);
-  assert.equal(derived.precomputeBufferUnit, 'seconds');
-  assert.equal(derived.precomputeBufferFrames, 30);
-  assert.equal(derived.bufferEnabled, true);
-  assert.equal(derived.bufferPhase, 'prefill');
-  assert.equal(derived.bufferTargetFrames, 30);
-  assert.equal(derived.bufferProgress, 0.4);
+  assert.equal(derived.stepLoopMode, undefined);
+  assert.equal(derived.syncTStepToS, undefined);
+  assert.equal(derived.tRegion, undefined);
+  assert.equal(derived.precomputeBufferUnit, undefined);
+  assert.equal(derived.precomputeBufferFrames, undefined);
+  assert.equal(derived.bufferEnabled, undefined);
+  assert.equal(derived.bufferPhase, undefined);
+  assert.equal(derived.bufferTargetFrames, undefined);
+  assert.equal(derived.bufferProgress, undefined);
+  assert.equal(derived.bufferNotice, undefined);
 });
 
 test('JSON-literal q/corr/k1 derivation matches formulas', () => {
@@ -151,21 +163,27 @@ test('JSON-literal q/corr/k1 derivation matches formulas', () => {
   assert.ok(approx(k1derived, TAU / q, 1e-10));
 });
 
-test('n domain follows JSON-literal [Z_min+1 ... Z_max-1] with negative Z_min support', () => {
-  const d = buildDerivedState(baseState({ Z_min: 5, Z_max: 12 }));
-  assert.deepEqual(d.nList, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+test('n domain uses directional depths and always includes zero', () => {
+  const positiveOnly = buildDerivedState(baseState({ n_negDepth: 0, n_posDepth: 5 }));
+  assert.deepEqual(positiveOnly.nList, [0, 1, 2, 3, 4, 5]);
 
-  const neg = buildDerivedState(baseState({ Z_min: -3, Z_max: 3 }));
-  assert.deepEqual(neg.nList, [-2, -1, 0, 1, 2]);
+  const mixed = buildDerivedState(baseState({ n_negDepth: 3, n_posDepth: 2 }));
+  assert.deepEqual(mixed.nList, [-3, -2, -1, 0, 1, 2]);
 
-  const minGap = buildDerivedState(baseState({ Z_min: 0, Z_max: 1 }));
-  assert.deepEqual(minGap.nList, [1]);
+  const zeroOnly = buildDerivedState(baseState({ n_negDepth: 0, n_posDepth: 0 }));
+  assert.deepEqual(zeroOnly.nList, [0]);
+
+  const clamped = buildDerivedState(baseState({ n_negDepth: -7, n_posDepth: 99999 }));
+  assert.equal(clamped.n_negDepth, 0);
+  assert.equal(clamped.n_posDepth, 50000);
+  assert.equal(clamped.nList[0], 0);
+  assert.equal(clamped.nList[clamped.nList.length - 1], 50000);
 });
 
-test('registry contains exact 24 plotted base children (12 positive + 12 negative)', () => {
-  assert.equal(POSITIVE_CHILDREN.length, 12);
-  assert.equal(NEGATIVE_CHILDREN.length, 12);
-  assert.equal(POSITIVE_CHILDREN.length + NEGATIVE_CHILDREN.length, 24);
+test('registry contains exact 28 plotted base children (14 positive + 14 negative)', () => {
+  assert.equal(POSITIVE_CHILDREN.length, 14);
+  assert.equal(NEGATIVE_CHILDREN.length, 14);
+  assert.equal(POSITIVE_CHILDREN.length + NEGATIVE_CHILDREN.length, 28);
 });
 
 test('default tri-state resolves exponents as enabled, functions as mixed', () => {
@@ -174,8 +192,8 @@ test('default tri-state resolves exponents as enabled, functions as mixed', () =
   assert.equal(resolveExponentTriState(model, 'positive'), 'enabled');
   assert.equal(resolveExponentTriState(model, 'negative'), 'enabled');
   // Functions: only base+sin variants ON (2/8) → mixed
-  assert.equal(resolveFunctionTriState(model, 'positiveImaginaryVectorB'), 'mixed');
-  assert.equal(resolveFunctionTriState(model, 'negativeImaginaryVectorB'), 'mixed');
+  assert.equal(resolveFunctionTriState(model, 'positiveExponentVectorC'), 'mixed');
+  assert.equal(resolveFunctionTriState(model, 'negativeExponentVectorC'), 'mixed');
 });
 
 test('transform expansion includes base/sin/cos/tan and log wrappers', () => {
@@ -187,8 +205,8 @@ test('transform expansion includes base/sin/cos/tan and log wrappers', () => {
   assert.equal(transforms.size, 8);
   for (const key of TRANSFORM_KEYS) assert.ok(transforms.has(key));
 
-  // 24 children * 8 variants
-  assert.equal(combos.length, 24 * 8);
+  // 28 children * 8 variants
+  assert.equal(combos.length, 28 * 8);
 });
 
 test('legacy transform-only payload migrates into per-function variants', () => {
@@ -198,9 +216,27 @@ test('legacy transform-only payload migrates into per-function variants', () => 
     },
   });
 
-  assert.equal(model.childVariants.positiveImaginary.log.enabled, true);
-  assert.ok(approx(model.childVariants.positiveImaginary.log.pointSize, 2.5, 1e-12));
-  assert.ok(approx(model.childVariants.negativeImaginaryCircleC.log.lineOpacity, 0.4, 1e-12));
+  assert.equal(model.childVariants.positiveExponent.log.enabled, true);
+  assert.ok(approx(model.childVariants.positiveExponent.log.pointSize, 2.5, 1e-12));
+  assert.ok(approx(model.childVariants.negativeExponentCircleC.log.lineOpacity, 0.4, 1e-12));
+});
+
+test('legacy child key payloads are canonicalized to exponent keys', () => {
+  const model = normalizeExpressionModel({
+    children: {
+      positiveImaginaryVectorB: { enabled: false, pointSize: 2.75 },
+    },
+    childVariants: {
+      positiveImaginaryVectorB: {
+        sin: { enabled: true, pointOpacity: 0.42 },
+      },
+    },
+  });
+
+  assert.equal(model.children.positiveExponentVectorC.enabled, false);
+  assert.ok(approx(model.children.positiveExponentVectorC.pointSize, 2.75, 1e-12));
+  assert.equal(model.childVariants.positiveExponentVectorC.sin.enabled, true);
+  assert.ok(approx(model.childVariants.positiveExponentVectorC.sin.pointOpacity, 0.42, 1e-12));
 });
 
 test('variant-level activation isolates to exact function+variant combo', () => {
@@ -208,11 +244,11 @@ test('variant-level activation isolates to exact function+variant combo', () => 
   for (const child of Object.keys(expressionModel.childVariants)) {
     for (const key of TRANSFORM_KEYS) expressionModel.childVariants[child][key].enabled = false;
   }
-  expressionModel.childVariants.positiveImaginary.log.enabled = true;
+  expressionModel.childVariants.positiveExponent.log.enabled = true;
 
   const combos = getActiveExpressionCombos(baseState({ expressionModel }));
   assert.equal(combos.length, 1);
-  assert.equal(combos[0].childKey, 'positiveImaginary');
+  assert.equal(combos[0].childKey, 'positiveExponent');
   assert.equal(combos[0].variantKey, 'log');
 });
 
@@ -221,7 +257,7 @@ test('parent->set->function->variant visibility gating follows hierarchy', () =>
   for (const child of Object.keys(expressionModel.childVariants)) {
     for (const key of TRANSFORM_KEYS) expressionModel.childVariants[child][key].enabled = false;
   }
-  expressionModel.childVariants.positiveImaginary.sin.enabled = true;
+  expressionModel.childVariants.positiveExponent.sin.enabled = true;
 
   let combos = getActiveExpressionCombos(baseState({ expressionModel }));
   assert.equal(combos.length, 1);
@@ -231,12 +267,12 @@ test('parent->set->function->variant visibility gating follows hierarchy', () =>
   assert.equal(combos.length, 0);
 
   expressionModel.sets.positive.enabled = true;
-  expressionModel.children.positiveImaginary.enabled = false;
+  expressionModel.children.positiveExponent.enabled = false;
   combos = getActiveExpressionCombos(baseState({ expressionModel }));
   assert.equal(combos.length, 0);
 
-  expressionModel.children.positiveImaginary.enabled = true;
-  expressionModel.childVariants.positiveImaginary.sin.enabled = false;
+  expressionModel.children.positiveExponent.enabled = true;
+  expressionModel.childVariants.positiveExponent.sin.enabled = false;
   combos = getActiveExpressionCombos(baseState({ expressionModel }));
   assert.equal(combos.length, 0);
 });
@@ -252,8 +288,8 @@ test('exponent subtree state machine cycles enabled -> disabled -> mixed -> enab
   let combos = getActiveExpressionCombos(baseState({ expressionModel }));
   assert.ok(!combos.some((combo) => combo.setKey === 'positive'));
 
-  expressionModel.children.positiveImaginary.enabled = true;
-  expressionModel.childVariants.positiveImaginary.base.enabled = true;
+  expressionModel.children.positiveExponent.enabled = true;
+  expressionModel.childVariants.positiveExponent.base.enabled = true;
   assert.equal(resolveExponentTriState(expressionModel, 'positive'), 'mixed');
 
   setExponentSubtreeEnabled(expressionModel, 'positive', true);
@@ -293,7 +329,7 @@ test('exponent tri-state is isolated between + and - branches', () => {
   const expressionModel = makeExpressionModel(true);
 
   setExponentSubtreeEnabled(expressionModel, 'positive', false);
-  setFunctionSubtreeEnabled(expressionModel, 'positiveImaginaryVectorB', true);
+  setFunctionSubtreeEnabled(expressionModel, 'positiveExponentVectorC', true);
   const baselinePositive = resolveExponentTriState(expressionModel, 'positive');
   assert.equal(baselinePositive, 'mixed');
 
@@ -308,8 +344,8 @@ test('mixed state under disabled exponent remains renderer-gated by set flag', (
   const expressionModel = makeExpressionModel(true);
 
   setExponentSubtreeEnabled(expressionModel, 'positive', false);
-  expressionModel.children.positiveImaginary.enabled = true;
-  expressionModel.childVariants.positiveImaginary.sin.enabled = true;
+  expressionModel.children.positiveExponent.enabled = true;
+  expressionModel.childVariants.positiveExponent.sin.enabled = true;
 
   assert.equal(resolveExponentTriState(expressionModel, 'positive'), 'mixed');
 
@@ -319,7 +355,7 @@ test('mixed state under disabled exponent remains renderer-gated by set flag', (
 
 test('function subtree state machine cycles enabled -> disabled -> mixed -> enabled', () => {
   const expressionModel = makeExpressionModel(true);
-  const functionKey = 'positiveImaginaryVectorB';
+  const functionKey = 'positiveExponentVectorC';
 
   assert.equal(resolveFunctionTriState(expressionModel, functionKey), 'enabled');
 
@@ -344,8 +380,8 @@ test('function subtree state machine cycles enabled -> disabled -> mixed -> enab
 
 test('function subtree toggle mutates only targeted function and variants', () => {
   const expressionModel = makeExpressionModel(true);
-  const functionKey = 'positiveImaginaryVectorB';
-  const otherFunction = 'positiveImaginaryCircleA';
+  const functionKey = 'positiveExponentVectorC';
+  const otherFunction = 'positiveExponentCircleA';
 
   setFunctionSubtreeEnabled(expressionModel, functionKey, false);
 
@@ -362,7 +398,7 @@ test('function subtree toggle mutates only targeted function and variants', () =
 
 test('enabling function subtree auto-enables exponent ancestor', () => {
   const expressionModel = makeExpressionModel(true);
-  const functionKey = 'positiveImaginaryVectorB';
+  const functionKey = 'positiveExponentVectorC';
 
   setExponentSubtreeEnabled(expressionModel, 'positive', false);
   assert.equal(resolveExponentTriState(expressionModel, 'positive'), 'disabled');
@@ -373,9 +409,44 @@ test('enabling function subtree auto-enables exponent ancestor', () => {
   assert.equal(resolveFunctionTriState(expressionModel, functionKey), 'enabled');
 });
 
+test('function node enable restores full subtree mask', () => {
+  const expressionModel = makeExpressionModel(true);
+  const functionKey = 'positiveExponent';
+
+  setFunctionSubtreeEnabled(expressionModel, functionKey, false);
+  assert.equal(resolveFunctionTriState(expressionModel, functionKey), 'disabled');
+
+  setFunctionNodeEnabledWithAncestors(expressionModel, 'positive', functionKey, true);
+  assert.equal(expressionModel.children[functionKey].enabled, true);
+  assert.equal(resolveFunctionTriState(expressionModel, functionKey), 'enabled');
+
+  for (const variantKey of TRANSFORM_KEYS) {
+    assert.equal(
+      expressionModel.childVariants[functionKey][variantKey].enabled,
+      true,
+      `${functionKey}.${variantKey} full-subtree mismatch`,
+    );
+  }
+});
+
+test('legacy hex color payloads normalize into hue channels', () => {
+  const model = normalizeExpressionModel({
+    parent: { color: '#00ff00' },
+    children: { positiveExponent: { color: '#ff0000' } },
+    childVariants: { positiveExponent: { sin: { color: '#0000ff' } } },
+  });
+
+  assert.ok(Number.isFinite(model.parent.colorHue));
+  assert.ok(Number.isFinite(model.children.positiveExponent.colorHue));
+  assert.ok(Number.isFinite(model.childVariants.positiveExponent.sin.colorHue));
+  assert.ok(approx(model.parent.colorHue, 1 / 3, 1e-6));
+  assert.ok(approx(model.children.positiveExponent.colorHue, 0, 1e-6));
+  assert.ok(approx(model.childVariants.positiveExponent.sin.colorHue, 2 / 3, 1e-6));
+});
+
 test('enabling variant auto-enables function and exponent ancestors', () => {
   const expressionModel = makeExpressionModel(true);
-  const functionKey = 'positiveImaginaryVectorB';
+  const functionKey = 'positiveExponentVectorC';
   const variantKey = 'sin';
 
   setExponentSubtreeEnabled(expressionModel, 'positive', false);
@@ -393,8 +464,8 @@ test('enabling variant auto-enables function and exponent ancestors', () => {
 
 test('default model starts in mixed state at function level, enabled at exponent level', () => {
   const model = defaultExpressionModel();
-  assert.equal(resolveFunctionTriState(model, 'positiveImaginary'), 'mixed');
-  assert.equal(resolveFunctionTriState(model, 'negativeImaginary'), 'mixed');
+  assert.equal(resolveFunctionTriState(model, 'positiveExponent'), 'mixed');
+  assert.equal(resolveFunctionTriState(model, 'negativeExponent'), 'mixed');
   assert.equal(resolveExponentTriState(model, 'positive'), 'enabled');
   assert.equal(resolveExponentTriState(model, 'negative'), 'enabled');
 });
@@ -416,16 +487,16 @@ test('formula mode tau/euler base kernels are both evaluable and deterministic',
     T: 2,
     T_lowerBound: 1.5,
     T_upperBound: 2.5,
-    Z_min: 0,
-    Z_max: 12,
+    n_negDepth: 0,
+    n_posDepth: 11,
   });
-  const tau = evaluateBaseChildForMode(params, 'positive', 'positiveImaginary', 1, 0, 'tau');
-  const euler = evaluateBaseChildForMode(params, 'positive', 'positiveImaginary', 1, 0, 'euler');
+  const tau = evaluateBaseChildForMode(params, 'positive', 'positiveExponent', 1, 0, 'tau');
+  const euler = evaluateBaseChildForMode(params, 'positive', 'positiveExponent', 1, 0, 'euler');
   assert.ok(Number.isFinite(tau[0]) && Number.isFinite(tau[1]));
   assert.ok(Number.isFinite(euler[0]) && Number.isFinite(euler[1]));
 
-  const circleTau = evaluateBaseChildForMode(params, 'positive', 'positiveImaginaryCircleA', 1, 0, 'tau');
-  const circleEuler = evaluateBaseChildForMode(params, 'positive', 'positiveImaginaryCircleA', 1, 0, 'euler');
+  const circleTau = evaluateBaseChildForMode(params, 'positive', 'positiveExponentCircleA', 1, 0, 'tau');
+  const circleEuler = evaluateBaseChildForMode(params, 'positive', 'positiveExponentCircleA', 1, 0, 'euler');
   assert.ok(Number.isFinite(circleTau[0]) && Number.isFinite(circleTau[1]));
   assert.ok(Number.isFinite(circleEuler[0]) && Number.isFinite(circleEuler[1]));
 });
@@ -441,15 +512,15 @@ test('negative exponent branch mirrors positive branch with conjugate symmetry w
   const nOrdinal = 42;
 
   const pairs = [
-    ['positiveImaginary', 'negativeImaginary'],
-    ['positiveImaginaryReciprocal', 'negativeImaginaryReciprocal'],
-    ['positiveImaginaryVectorB', 'negativeImaginaryVectorB'],
-    ['positiveImaginaryVectorBReciprocal', 'negativeImaginaryVectorBReciprocal'],
-    ['positiveImaginaryCircleA', 'negativeImaginaryCircleA'],
-    ['positiveImaginaryCircleB', 'negativeImaginaryCircleB'],
-    ['positiveImaginaryCircleC', 'negativeImaginaryCircleC'],
-    ['positiveImaginaryCircleBReciprocal', 'negativeImaginaryCircleBReciprocal'],
-    ['positiveImaginaryCircleCReciprocal', 'negativeImaginaryCircleCReciprocal'],
+    ['positiveExponent', 'negativeExponent'],
+    ['positiveExponentReciprocal', 'negativeExponentReciprocal'],
+    ['positiveExponentVectorC', 'negativeExponentVectorC'],
+    ['positiveExponentVectorCReciprocal', 'negativeExponentVectorCReciprocal'],
+    ['positiveExponentCircleA', 'negativeExponentCircleA'],
+    ['positiveExponentCircleB', 'negativeExponentCircleB'],
+    ['positiveExponentCircleC', 'negativeExponentCircleC'],
+    ['positiveExponentCircleBReciprocal', 'negativeExponentCircleBReciprocal'],
+    ['positiveExponentCircleCReciprocal', 'negativeExponentCircleCReciprocal'],
   ];
 
   for (const [positiveKey, negativeKey] of pairs) {
@@ -461,6 +532,40 @@ test('negative exponent branch mirrors positive branch with conjugate symmetry w
   }
 });
 
+test('all reciprocal families are true multiplicative inverses', () => {
+  const params = baseState({
+    kStepsInAlignmentsBool: 0,
+    T: 2,
+    T_lowerBound: 1.8,
+    T_upperBound: 2.2,
+  });
+  const nValue = 23;
+  const nOrdinal = 0;
+
+  const reciprocalPairs = [
+    ['Exponent', 'ExponentReciprocal'],
+    ['ExponentVectorA', 'ExponentVectorAReciprocal'],
+    ['ExponentVectorB', 'ExponentVectorBReciprocal'],
+    ['ExponentVectorC', 'ExponentVectorCReciprocal'],
+    ['ExponentCircleA', 'ExponentCircleAReciprocal'],
+    ['ExponentCircleB', 'ExponentCircleBReciprocal'],
+    ['ExponentCircleC', 'ExponentCircleCReciprocal'],
+  ];
+
+  for (const setPrefix of ['positive', 'negative']) {
+    for (const [baseSuffix, reciprocalSuffix] of reciprocalPairs) {
+      const baseKey = `${setPrefix}${baseSuffix}`;
+      const reciprocalKey = `${setPrefix}${reciprocalSuffix}`;
+      const base = evaluateBaseChildForMode(params, setPrefix, baseKey, nValue, nOrdinal, 'tau');
+      const reciprocal = evaluateBaseChildForMode(params, setPrefix, reciprocalKey, nValue, nOrdinal, 'tau');
+      assert.ok(base && reciprocal, `${baseKey}/${reciprocalKey} should evaluate`);
+      const product = cMul(base, reciprocal);
+      assert.ok(approx(product[0], 1, 1e-9), `${baseKey}/${reciprocalKey} product real ≈ 1`);
+      assert.ok(approx(product[1], 0, 1e-9), `${baseKey}/${reciprocalKey} product imag ≈ 0`);
+    }
+  }
+});
+
 test('alignment-locked T≈2 can collapse +/- base and vector families onto the same real-axis path', () => {
   const params = baseState({
     kStepsInAlignmentsBool: 1,
@@ -469,10 +574,10 @@ test('alignment-locked T≈2 can collapse +/- base and vector families onto the 
     T_upperBound: 2,
   });
 
-  const basePositive = evaluateBaseChildForMode(params, 'positive', 'positiveImaginary', 250, 100, 'tau');
-  const baseNegative = evaluateBaseChildForMode(params, 'negative', 'negativeImaginary', 250, 100, 'tau');
-  const vectorPositive = evaluateBaseChildForMode(params, 'positive', 'positiveImaginaryVectorB', 250, 100, 'tau');
-  const vectorNegative = evaluateBaseChildForMode(params, 'negative', 'negativeImaginaryVectorB', 250, 100, 'tau');
+  const basePositive = evaluateBaseChildForMode(params, 'positive', 'positiveExponent', 250, 100, 'tau');
+  const baseNegative = evaluateBaseChildForMode(params, 'negative', 'negativeExponent', 250, 100, 'tau');
+  const vectorPositive = evaluateBaseChildForMode(params, 'positive', 'positiveExponentVectorC', 250, 100, 'tau');
+  const vectorNegative = evaluateBaseChildForMode(params, 'negative', 'negativeExponentVectorC', 250, 100, 'tau');
 
   assert.ok(basePositive && baseNegative);
   assert.ok(vectorPositive && vectorNegative);
@@ -492,10 +597,10 @@ test('CircleA uses shared canonical k so T updates drive both imaginary sets', (
     T: 2.1,
   };
 
-  const tauPosA = evaluateBaseChildForMode(paramsA, 'positive', 'positiveImaginaryCircleA', 2, 0, 'tau');
-  const tauPosB = evaluateBaseChildForMode(paramsB, 'positive', 'positiveImaginaryCircleA', 2, 0, 'tau');
-  const tauNegA = evaluateBaseChildForMode(paramsA, 'negative', 'negativeImaginaryCircleA', 2, 0, 'tau');
-  const tauNegB = evaluateBaseChildForMode(paramsB, 'negative', 'negativeImaginaryCircleA', 2, 0, 'tau');
+  const tauPosA = evaluateBaseChildForMode(paramsA, 'positive', 'positiveExponentCircleA', 2, 0, 'tau');
+  const tauPosB = evaluateBaseChildForMode(paramsB, 'positive', 'positiveExponentCircleA', 2, 0, 'tau');
+  const tauNegA = evaluateBaseChildForMode(paramsA, 'negative', 'negativeExponentCircleA', 2, 0, 'tau');
+  const tauNegB = evaluateBaseChildForMode(paramsB, 'negative', 'negativeExponentCircleA', 2, 0, 'tau');
 
   assert.ok(!approxComplex(tauPosA, tauPosB, 1e-8));
   assert.ok(!approxComplex(tauNegA, tauNegB, 1e-8));
@@ -517,10 +622,37 @@ test('CircleA tau/euler implementations share equivalent angle construction with
   const expectedEulerPositive = cExp([0, theta]);
   const expectedEulerNegative = cExp([0, -theta]);
 
-  const tauPositive = evaluateBaseChildForMode(params, 'positive', 'positiveImaginaryCircleA', nValue, 0, 'tau');
-  const tauNegative = evaluateBaseChildForMode(params, 'negative', 'negativeImaginaryCircleA', nValue, 0, 'tau');
-  const eulerPositive = evaluateBaseChildForMode(params, 'positive', 'positiveImaginaryCircleA', nValue, 0, 'euler');
-  const eulerNegative = evaluateBaseChildForMode(params, 'negative', 'negativeImaginaryCircleA', nValue, 0, 'euler');
+  const tauPositive = evaluateBaseChildForMode(params, 'positive', 'positiveExponentCircleA', nValue, 0, 'tau');
+  const tauNegative = evaluateBaseChildForMode(params, 'negative', 'negativeExponentCircleA', nValue, 0, 'tau');
+  const eulerPositive = evaluateBaseChildForMode(params, 'positive', 'positiveExponentCircleA', nValue, 0, 'euler');
+  const eulerNegative = evaluateBaseChildForMode(params, 'negative', 'negativeExponentCircleA', nValue, 0, 'euler');
+
+  assert.ok(approxComplex(tauPositive, expectedTauPositive, 1e-10));
+  assert.ok(approxComplex(tauNegative, expectedTauNegative, 1e-10));
+  assert.ok(approxComplex(eulerPositive, expectedEulerPositive, 1e-10));
+  assert.ok(approxComplex(eulerNegative, expectedEulerNegative, 1e-10));
+});
+
+test('CircleC uses explicit tau/(k*n) formula (not -CircleB derivation)', () => {
+  const params = baseState({
+    kStepsInAlignmentsBool: 0,
+    T: 2.05,
+    T_lowerBound: 2,
+    T_upperBound: 2.2,
+  });
+  const nValue = 13;
+  const derived = buildDerivedState(params);
+  const theta = TAU / (derived.k * nValue);
+
+  const expectedTauPositive = cScl(cTauPow([0, theta / LN_TAU]), derived.k1);
+  const expectedTauNegative = cScl(cTauPow([0, -theta / LN_TAU]), derived.k1);
+  const expectedEulerPositive = cScl(cExp([0, theta]), derived.k1);
+  const expectedEulerNegative = cScl(cExp([0, -theta]), derived.k1);
+
+  const tauPositive = evaluateBaseChildForMode(params, 'positive', 'positiveExponentCircleC', nValue, 0, 'tau');
+  const tauNegative = evaluateBaseChildForMode(params, 'negative', 'negativeExponentCircleC', nValue, 0, 'tau');
+  const eulerPositive = evaluateBaseChildForMode(params, 'positive', 'positiveExponentCircleC', nValue, 0, 'euler');
+  const eulerNegative = evaluateBaseChildForMode(params, 'negative', 'negativeExponentCircleC', nValue, 0, 'euler');
 
   assert.ok(approxComplex(tauPositive, expectedTauPositive, 1e-10));
   assert.ok(approxComplex(tauNegative, expectedTauNegative, 1e-10));
@@ -530,10 +662,10 @@ test('CircleA tau/euler implementations share equivalent angle construction with
 
 test('equivalence proof rows cover all base children across both sets', () => {
   const proof = computeEquivalenceProofRows(baseState({
-    Z_min: 0,
-    Z_max: 16,
+    n_negDepth: 0,
+    n_posDepth: 15,
   }));
-  assert.equal(proof.rows.length, 24);
+  assert.equal(proof.rows.length, 28);
   assert.ok(proof.rows.every((row) => typeof row.childKey === 'string'));
   assert.ok(Number.isFinite(proof.summary.samples));
 });
@@ -568,6 +700,32 @@ test('log(f)/cos/tan/log(cos)/log(tan) evaluate correctly with l_func base', () 
   );
 });
 
+test('staged transform evaluation matches direct transform evaluation for all variants', () => {
+  const z = [0.31, -0.47];
+  const k2 = 1.25;
+  const lFunc = 7;
+  const staged = evaluateTransformStages(z, k2, lFunc);
+
+  for (const key of TRANSFORM_KEYS) {
+    const direct = evaluateTransform(z, key, k2, lFunc);
+    assert.ok(
+      approxComplex(staged[key], direct, 1e-12),
+      `staged transform mismatch for ${key}`,
+    );
+  }
+});
+
+test('log_* staged transforms reuse their staged trig parents exactly', () => {
+  const z = [0.22, -0.19];
+  const k2 = 0.85;
+  const lFunc = 10;
+  const staged = evaluateTransformStages(z, k2, lFunc);
+
+  assert.ok(approxComplex(staged.log_sin, cLogBase(staged.sin, lFunc), 1e-12));
+  assert.ok(approxComplex(staged.log_cos, cLogBase(staged.cos, lFunc), 1e-12));
+  assert.ok(approxComplex(staged.log_tan, cLogBase(staged.tan, lFunc), 1e-12));
+});
+
 test('direct trig family evaluator still maps base/sin/cos/tan branches', () => {
   const z = [0.2, -0.1];
   const k2 = 1.2;
@@ -591,17 +749,71 @@ test('style composition is multiplicative across parent × set × variant × chi
   const expressionModel = makeExpressionModel(false);
   expressionModel.parent.pointSize = 2;
   expressionModel.sets.positive.pointSize = 3;
-  expressionModel.childVariants.positiveImaginary.sin.enabled = true;
-  expressionModel.childVariants.positiveImaginary.sin.pointSize = 0.5;
-  expressionModel.children.positiveImaginary.pointSize = 4;
+  expressionModel.childVariants.positiveExponent.sin.enabled = true;
+  expressionModel.childVariants.positiveExponent.sin.pointSize = 0.5;
+  expressionModel.children.positiveExponent.pointSize = 4;
 
   const combos = getActiveExpressionCombos(baseState({ expressionModel }));
   const combo = combos.find((c) =>
     c.setKey === 'positive' &&
-    c.childKey === 'positiveImaginary' &&
+    c.childKey === 'positiveExponent' &&
     c.transformKey === 'sin');
   assert.ok(combo);
   assert.ok(approx(combo.style.pointSize, 2 * 3 * 0.5 * 4, 1e-12));
+});
+
+test('generated point payload carries per-point expression size multipliers', () => {
+  const expressionModel = makeExpressionModel(false);
+  for (const child of Object.keys(expressionModel.childVariants)) {
+    for (const key of TRANSFORM_KEYS) expressionModel.childVariants[child][key].enabled = false;
+    expressionModel.children[child].enabled = false;
+  }
+
+  expressionModel.parent.pointSize = 2;
+  expressionModel.sets.positive.pointSize = 5;
+  expressionModel.children.positiveExponent.enabled = true;
+  expressionModel.children.positiveExponent.pointSize = 4;
+  expressionModel.childVariants.positiveExponent.sin.enabled = true;
+  expressionModel.childVariants.positiveExponent.sin.pointSize = 3;
+  expressionModel.sets.negative.enabled = false;
+
+  const points = generateAllPoints(baseState({
+    expressionModel,
+    n_negDepth: 0,
+    n_posDepth: 3,
+    k3: 7,
+  }));
+
+  assert.ok(points.count > 0);
+  assert.ok(points.sizes.length > 0);
+  assert.ok(approx(points.sizes[0], 2 * 5 * 4 * 3, 1e-9));
+});
+
+test('color hue precedence resolves parent -> child -> variant', () => {
+  const expressionModel = makeExpressionModel(false);
+  const targetChild = 'positiveExponent';
+  const targetVariant = 'sin';
+
+  expressionModel.parent.colorHue = 0.1;
+  expressionModel.children[targetChild].colorHue = undefined;
+  expressionModel.childVariants[targetChild][targetVariant].colorHue = undefined;
+
+  let combos = getActiveExpressionCombos(baseState({ expressionModel }));
+  let combo = combos.find((c) => c.childKey === targetChild && c.transformKey === targetVariant && c.setKey === 'positive');
+  assert.ok(combo);
+  assert.ok(approx(combo.style.colorHue, 0.1, 1e-12));
+
+  expressionModel.children[targetChild].colorHue = 0.35;
+  combos = getActiveExpressionCombos(baseState({ expressionModel }));
+  combo = combos.find((c) => c.childKey === targetChild && c.transformKey === targetVariant && c.setKey === 'positive');
+  assert.ok(combo);
+  assert.ok(approx(combo.style.colorHue, 0.35, 1e-12));
+
+  expressionModel.childVariants[targetChild][targetVariant].colorHue = 0.72;
+  combos = getActiveExpressionCombos(baseState({ expressionModel }));
+  combo = combos.find((c) => c.childKey === targetChild && c.transformKey === targetVariant && c.setKey === 'positive');
+  assert.ok(combo);
+  assert.ok(approx(combo.style.colorHue, 0.72, 1e-12));
 });
 
 test('paths split across fixed 710-color boundary blocks when range exceeds 710', () => {
@@ -609,16 +821,16 @@ test('paths split across fixed 710-color boundary blocks when range exceeds 710'
   for (const child of Object.keys(expressionModel.childVariants)) {
     for (const key of TRANSFORM_KEYS) expressionModel.childVariants[child][key].enabled = false;
   }
-  expressionModel.childVariants.positiveImaginary.sin.enabled = true;
+  expressionModel.childVariants.positiveExponent.sin.enabled = true;
   for (const child of [...POSITIVE_CHILDREN, ...NEGATIVE_CHILDREN]) {
     expressionModel.children[child.key].enabled = false;
   }
-  expressionModel.children.positiveImaginary.enabled = true;
+  expressionModel.children.positiveExponent.enabled = true;
   expressionModel.sets.negative.enabled = false;
 
   const paths = generateAtlasPaths(baseState({
-    Z_min: 0,
-    Z_max: 720,
+    n_negDepth: 0,
+    n_posDepth: 719,
     expressionModel,
     pathBudget: 5000,
   }));
@@ -627,6 +839,143 @@ test('paths split across fixed 710-color boundary blocks when range exceeds 710'
   const blocks = new Set(paths.map((p) => p.tag?.block));
   assert.ok(blocks.has(0));
   assert.ok(blocks.has(1));
+});
+
+test('round-robin path scheduling does not starve later function sets under tight budget', () => {
+  const expressionModel = makeExpressionModel(false);
+  for (const child of Object.keys(expressionModel.childVariants)) {
+    for (const key of TRANSFORM_KEYS) expressionModel.childVariants[child][key].enabled = false;
+    expressionModel.childVariants[child].sin.enabled = true;
+  }
+  for (const child of [...POSITIVE_CHILDREN, ...NEGATIVE_CHILDREN]) {
+    expressionModel.children[child.key].enabled = true;
+  }
+  expressionModel.sets.positive.enabled = true;
+  expressionModel.sets.negative.enabled = true;
+
+  const paths = generateAtlasPaths(baseState({
+    n_negDepth: 0,
+    n_posDepth: 219,
+    pathBudget: 10,
+    expressionModel,
+  }));
+
+  assert.equal(paths.length, 10);
+  const sets = new Set(paths.map((p) => p.tag?.set));
+  assert.ok(sets.has('positive'));
+  assert.ok(sets.has('negative'));
+});
+
+test('atlas path diagnostics report budget truncation and combo coverage', () => {
+  const expressionModel = makeExpressionModel(false);
+  for (const child of Object.keys(expressionModel.childVariants)) {
+    for (const key of TRANSFORM_KEYS) expressionModel.childVariants[child][key].enabled = false;
+    expressionModel.childVariants[child].sin.enabled = true;
+  }
+
+  const lowCap = generateAtlasPathsWithDiagnostics(baseState({
+    n_negDepth: 0,
+    n_posDepth: 719,
+    pathBudget: 10,
+    expressionModel,
+  }));
+
+  assert.equal(lowCap.paths.length, 10);
+  assert.equal(lowCap.diagnostics.segmentsEmitted, lowCap.paths.length);
+  assert.equal(lowCap.diagnostics.budgetRequested, 10);
+  assert.equal(lowCap.diagnostics.budgetHit, true);
+  assert.ok(lowCap.diagnostics.segmentsGenerated >= lowCap.diagnostics.segmentsEmitted);
+  assert.ok(lowCap.diagnostics.combosEmitted <= lowCap.diagnostics.comboCount);
+
+  const highCap = generateAtlasPathsWithDiagnostics(baseState({
+    n_negDepth: 0,
+    n_posDepth: 719,
+    pathBudget: 50000,
+    expressionModel,
+  }));
+
+  assert.equal(highCap.diagnostics.budgetRequested, 50000);
+  assert.equal(highCap.diagnostics.budgetHit, false);
+  assert.equal(highCap.diagnostics.segmentsGenerated, highCap.diagnostics.segmentsEmitted);
+});
+
+test('raised line clipping threshold preserves large-n vectorA base paths', () => {
+  const expressionModel = makeExpressionModel(false);
+  for (const child of Object.keys(expressionModel.childVariants)) {
+    expressionModel.children[child].enabled = false;
+    for (const key of TRANSFORM_KEYS) expressionModel.childVariants[child][key].enabled = false;
+  }
+  expressionModel.children.positiveExponentVectorA.enabled = true;
+  expressionModel.childVariants.positiveExponentVectorA.base.enabled = true;
+  expressionModel.sets.negative.enabled = false;
+
+  const { paths, diagnostics } = generateAtlasPathsWithDiagnostics(baseState({
+    n_negDepth: 0,
+    n_posDepth: 21999,
+    pathBudget: 50000,
+    expressionModel,
+  }));
+
+  assert.ok(paths.length > 0);
+  const represented = new Set(paths.map((p) => `${p.tag?.set}|${p.tag?.child}|${p.tag?.variant}`));
+  assert.ok(represented.has('positive|positiveExponentVectorA|base'));
+  assert.equal(diagnostics.combosWithSegments >= 1, true);
+});
+
+test('high n block tint selection is modulo-safe and keeps colors finite', () => {
+  const expressionModel = makeExpressionModel(false);
+  for (const child of Object.keys(expressionModel.childVariants)) {
+    for (const key of TRANSFORM_KEYS) expressionModel.childVariants[child][key].enabled = false;
+    expressionModel.children[child].enabled = false;
+  }
+  expressionModel.childVariants.positiveExponent.sin.enabled = true;
+  expressionModel.children.positiveExponent.enabled = true;
+  expressionModel.sets.negative.enabled = false;
+
+  const paths = generateAtlasPaths(baseState({
+    n_negDepth: 0,
+    n_posDepth: 4999,
+    pathBudget: 1000,
+    expressionModel,
+  }));
+
+  assert.ok(paths.length > 0);
+  for (const path of paths) {
+    assert.ok(Array.isArray(path.color));
+    assert.equal(path.color.length, 3);
+    assert.ok(path.color.every((c) => Number.isFinite(c)));
+  }
+});
+
+test('function toggle restores target line combos without mutating siblings', () => {
+  const expressionModel = makeExpressionModel(true);
+  const params = baseState({
+    n_negDepth: 0,
+    n_posDepth: 709,
+    pathBudget: 50000,
+    expressionModel,
+  });
+  const keyOf = (p) => `${p.tag?.set}|${p.tag?.child}|${p.tag?.variant}`;
+
+  const beforePaths = generateAtlasPaths(params);
+  const before = new Set(beforePaths.map((p) => keyOf(p)));
+  const functionKey = 'positiveExponent';
+  const targetPrefix = `positive|${functionKey}|`;
+  const siblingBefore = new Set([...before].filter((k) => !k.startsWith(targetPrefix)));
+
+  setFunctionNodeEnabledWithAncestors(expressionModel, 'positive', functionKey, false);
+  setFunctionNodeEnabledWithAncestors(expressionModel, 'positive', functionKey, true);
+
+  const afterPaths = generateAtlasPaths(params);
+  const after = new Set(afterPaths.map((p) => keyOf(p)));
+  const siblingAfter = new Set([...after].filter((k) => !k.startsWith(targetPrefix)));
+
+  for (const siblingKey of siblingBefore) {
+    assert.ok(siblingAfter.has(siblingKey), `missing sibling combo ${siblingKey}`);
+  }
+  for (const key of before) {
+    assert.ok(after.has(key), `missing restored combo ${key}`);
+  }
 });
 
 test('legacy numStrands field does not affect canonical outputs', () => {
@@ -649,11 +998,11 @@ test('q_scale materially changes spoke-driving output family', () => {
   for (const child of Object.keys(model.childVariants)) {
     for (const key of TRANSFORM_KEYS) model.childVariants[child][key].enabled = false;
   }
-  model.childVariants.positiveImaginaryVectorB.sin.enabled = true;
+  model.childVariants.positiveExponentVectorC.sin.enabled = true;
   for (const child of [...POSITIVE_CHILDREN, ...NEGATIVE_CHILDREN]) {
     model.children[child.key].enabled = false;
   }
-  model.children.positiveImaginaryVectorB.enabled = true;
+  model.children.positiveExponentVectorC.enabled = true;
   model.sets.negative.enabled = false;
 
   const a = generateAllPoints(baseState({

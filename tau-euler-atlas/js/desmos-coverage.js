@@ -1,4 +1,7 @@
-import { FUNCTION_PLOTTABLES } from './function-registry.js';
+import {
+  FUNCTION_PLOTTABLES,
+  canonicalizeFunctionKey,
+} from './function-registry.js';
 
 export function toComboId(functionKey, variantKey) {
   return `${functionKey}::${variantKey}`;
@@ -8,6 +11,7 @@ function classifyVariantFromLatex(latex) {
   if (/^\\log_\{l_\{func\}\}\\left\(\\sin\\left\(/.test(latex)) return 'log_sin';
   if (/^\\log_\{l_\{func\}\}\\left\(\\cos\\left\(/.test(latex)) return 'log_cos';
   if (/^\\log_\{l_\{func\}\}\\left\(\\tan\\left\(/.test(latex)) return 'log_tan';
+  if (/^\\log_\{l_\{func\}\}\\left\(f_\{/.test(latex)) return 'log';
   if (/^\\sin\\left\(/.test(latex)) return 'sin';
   if (/^\\cos\\left\(/.test(latex)) return 'cos';
   if (/^\\tan\\left\(/.test(latex)) return 'tan';
@@ -30,12 +34,14 @@ function extractPrimaryFunctionKey(latex, variantKey) {
   if (variantKey === 'base') {
     const lhs = keys[0];
     if (lhs.endsWith('Proof')) return null;
-    if (/^(positiveImaginary|negativeImaginary)/.test(lhs)) return lhs;
-    return null;
+    return canonicalizeFunctionKey(lhs);
   }
 
-  const firstKnown = keys.find((key) => /^(positiveImaginary|negativeImaginary)/.test(key));
-  return firstKnown || null;
+  for (const key of keys) {
+    const canonical = canonicalizeFunctionKey(key);
+    if (canonical) return canonical;
+  }
+  return null;
 }
 
 export function extractDesmosCombosFromExpressions(expressions) {
@@ -65,6 +71,60 @@ export function extractDesmosCombosFromExpressions(expressions) {
   return [...combos.values()];
 }
 
+export function extractDesmosWarnings(expressions) {
+  const seen = new Set();
+  const warnings = [];
+
+  for (const expression of (Array.isArray(expressions) ? expressions : [])) {
+    const latex = typeof expression?.latex === 'string' ? expression.latex : '';
+    if (!/^f_\{[^}]+\}=/.test(latex)) continue;
+    const keys = extractFunctionKeys(latex);
+    if (keys.length === 0) continue;
+
+    const lhsRaw = keys[0];
+    const lhsCanonical = canonicalizeFunctionKey(lhsRaw);
+    if (!lhsCanonical || lhsRaw.endsWith('Proof')) continue;
+
+    if (/negtaitive/.test(lhsRaw)) {
+      const warning = {
+        kind: 'typo',
+        expressionId: expression?.id ?? null,
+        functionKey: lhsRaw,
+        message: `Function key typo detected: ${lhsRaw}`,
+      };
+      const dedupe = `${warning.kind}:${warning.functionKey}`;
+      if (!seen.has(dedupe)) {
+        seen.add(dedupe);
+        warnings.push(warning);
+      }
+    }
+
+    const rhsKeys = keys.slice(1).map((key) => canonicalizeFunctionKey(key)).filter(Boolean);
+    const lhsIsPositive = lhsCanonical.startsWith('positiveExponent');
+    const lhsIsNegative = lhsCanonical.startsWith('negativeExponent');
+    if (!lhsIsPositive && !lhsIsNegative) continue;
+
+    const hasPositiveRef = rhsKeys.some((key) => key.startsWith('positiveExponent'));
+    const hasNegativeRef = rhsKeys.some((key) => key.startsWith('negativeExponent'));
+    if ((lhsIsNegative && hasPositiveRef) || (lhsIsPositive && hasNegativeRef)) {
+      const warning = {
+        kind: 'cross_branch_dependency',
+        expressionId: expression?.id ?? null,
+        functionKey: lhsRaw,
+        canonicalFunctionKey: lhsCanonical,
+        message: `Cross-branch dependency in ${lhsRaw}`,
+      };
+      const dedupe = `${warning.kind}:${warning.canonicalFunctionKey}:${expression?.id ?? ''}`;
+      if (!seen.has(dedupe)) {
+        seen.add(dedupe);
+        warnings.push(warning);
+      }
+    }
+  }
+
+  return warnings;
+}
+
 function indexRegistryPlottables(registryPlottables = FUNCTION_PLOTTABLES) {
   const index = new Map();
   for (const node of registryPlottables) {
@@ -81,7 +141,7 @@ function indexRegistryPlottables(registryPlottables = FUNCTION_PLOTTABLES) {
   return index;
 }
 
-export function buildCoverageReportFromCombos(desmosCombos, registryPlottables = FUNCTION_PLOTTABLES) {
+export function buildCoverageReportFromCombos(desmosCombos, registryPlottables = FUNCTION_PLOTTABLES, warnings = []) {
   const desmosIndex = new Map((Array.isArray(desmosCombos) ? desmosCombos : []).map((combo) => [combo.comboId, combo]));
   const registryIndex = indexRegistryPlottables(registryPlottables);
 
@@ -121,17 +181,19 @@ export function buildCoverageReportFromCombos(desmosCombos, registryPlottables =
       desmosOnly: desmosOnly.length,
       appOnly: appOnly.length,
       missingImplementation: missingImplementation.length,
+      warnings: Array.isArray(warnings) ? warnings.length : 0,
     },
     byVariant,
     covered,
     desmosOnly,
     appOnly,
     missingImplementation,
+    warnings: Array.isArray(warnings) ? warnings : [],
     namingMismatches: [
       {
         from: 'positive / negative imaginary labels',
         to: '+ exponent / - exponent',
-        status: 'resolved-in-ui',
+        status: 'canonicalized-in-runtime',
       },
     ],
   };
@@ -140,5 +202,6 @@ export function buildCoverageReportFromCombos(desmosCombos, registryPlottables =
 export function buildCoverageReportFromDesmosJson(desmosJson, registryPlottables = FUNCTION_PLOTTABLES) {
   const expressions = desmosJson?.expressions?.list || [];
   const combos = extractDesmosCombosFromExpressions(expressions);
-  return buildCoverageReportFromCombos(combos, registryPlottables);
+  const warnings = extractDesmosWarnings(expressions);
+  return buildCoverageReportFromCombos(combos, registryPlottables, warnings);
 }
