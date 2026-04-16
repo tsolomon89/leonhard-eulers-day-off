@@ -34,6 +34,11 @@ export function getState() {
   return state;
 }
 
+/** Expose the raw <audio> element for AudioContext capture (video export). */
+export function getAudioElement() {
+  return _audio;
+}
+
 export function onChange(fn) {
   _listeners.add(fn);
   return () => _listeners.delete(fn);

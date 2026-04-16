@@ -1680,3 +1680,297 @@ body[data-render="performance"] .cinematic-only {
   background: rgba(248, 113, 113, 0.12);
 }
 
+/* ══════════════════════════════════════════════════════════════
+   Video Export — Modal, Progress Overlay, Chrome Hiding
+   ══════════════════════════════════════════════════════════════ */
+
+/* Hide all UI chrome during export */
+body.export-active #left-column,
+body.export-active #controls-panel,
+body.export-active #transport-bar,
+body.export-active #timeline-panel,
+body.export-active #info-bar,
+body.export-active #buffer-overlay {
+  display: none !important;
+}
+
+/* ── Export overlay container ──────────────────────────────── */
+
+#export-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+
+#export-overlay.active {
+  display: flex;
+}
+
+/* ── Backdrop ─────────────────────────────────────────────── */
+
+.export-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+}
+
+/* ── Settings modal card ──────────────────────────────────── */
+
+.export-modal {
+  position: relative;
+  z-index: 1;
+  min-width: 380px;
+  max-width: 480px;
+  padding: 24px 28px;
+  border-radius: 18px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.5);
+  animation: export-modal-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes export-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ── Modal header ─────────────────────────────────────────── */
+
+.export-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.export-modal-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.export-modal-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: var(--trans);
+}
+
+.export-modal-close:hover {
+  color: var(--text-primary);
+  border-color: var(--interact-border);
+  background: var(--interact-bg);
+}
+
+/* ── Option rows ──────────────────────────────────────────── */
+
+.export-option-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.export-option-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  width: 76px;
+  flex-shrink: 0;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.export-option-group {
+  display: flex;
+  gap: 5px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.export-option-group .mode-pill {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  padding: 5px 8px;
+  font-size: 10px;
+}
+
+/* ── Separator ────────────────────────────────────────────── */
+
+.export-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 16px 0;
+}
+
+/* ── Summary row ──────────────────────────────────────────── */
+
+.export-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  padding: 4px 0 16px;
+}
+
+.export-summary-dot {
+  color: var(--text-dim);
+}
+
+/* ── Action buttons ───────────────────────────────────────── */
+
+.export-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.export-btn {
+  padding: 8px 20px;
+  border-radius: 50px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: var(--trans);
+}
+
+.export-btn-cancel {
+  background: var(--interact-bg);
+  border: 1px solid var(--interact-border);
+  color: var(--text-secondary);
+}
+
+.export-btn-cancel:hover {
+  background: var(--interact-hover-bg);
+  border-color: var(--interact-hover-border);
+  color: var(--text-primary);
+}
+
+.export-btn-start {
+  background: rgba(165, 243, 192, 0.12);
+  border: 1px solid rgba(165, 243, 192, 0.4);
+  color: var(--accent-green);
+}
+
+.export-btn-start:hover {
+  background: rgba(165, 243, 192, 0.2);
+  border-color: rgba(165, 243, 192, 0.6);
+  box-shadow: 0 0 12px rgba(165, 243, 192, 0.15);
+}
+
+/* ── Progress overlay card ────────────────────────────────── */
+
+.export-progress-card {
+  position: relative;
+  z-index: 1;
+  min-width: 300px;
+  max-width: 420px;
+  padding: 28px 32px;
+  border-radius: 18px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.5);
+  text-align: center;
+  animation: export-modal-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.export-progress-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.export-complete-title {
+  color: var(--accent-green);
+}
+
+.export-error-title {
+  color: var(--accent-red-solid, #f87171);
+}
+
+.export-progress-frames {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+/* ── Progress bar ─────────────────────────────────────────── */
+
+.export-progress-bar-wrap {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.export-progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent-green), rgba(137, 196, 244, 0.9));
+  transition: width 0.15s linear;
+  box-shadow: 0 0 8px rgba(165, 243, 192, 0.3);
+}
+
+.export-progress-percent {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 18px;
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .export-modal {
+    min-width: 0;
+    width: calc(100vw - 32px);
+    padding: 18px 20px;
+  }
+
+  .export-option-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .export-option-label {
+    width: auto;
+  }
+}
+

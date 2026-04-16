@@ -58,6 +58,12 @@ const BLOCK_TINTS = [
 ];
 
 let _pointBudget = 200_000;
+
+// When true, round-robin always starts at index 0 for deterministic
+// frame-to-frame path ordering during video export.
+let _stableRoundRobin = false;
+export function setStableRoundRobin(stable) { _stableRoundRobin = !!stable; }
+
 export function setPointBudget(n) {
   const next = Math.max(1, Math.floor(Number.isFinite(n) ? n : 200_000));
   if (next !== _pointBudget) {
@@ -151,6 +157,7 @@ function blockTintForN(n) {
 }
 
 function roundRobinStartForDerived(derived, itemCount) {
+  if (_stableRoundRobin) return 0;
   if (!Number.isFinite(itemCount) || itemCount <= 0) return 0;
   const tSeed = Number.isFinite(derived.T) ? Math.abs(Math.trunc(derived.T * 1e6)) : 0;
   const negSeed = Number.isFinite(derived.n_negDepth) ? Math.abs(Math.trunc(derived.n_negDepth)) : 0;

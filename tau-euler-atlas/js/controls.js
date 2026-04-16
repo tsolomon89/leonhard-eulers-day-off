@@ -61,6 +61,7 @@ import {
 import { createLinkEngine } from './link-engine.js';
 import * as audioPlayer from './audio-player.js';
 import { createSceneManager } from './scene-manager.js';
+import { openExportModal } from './export-modal.js';
 import {
   createTimeline,
   totalDuration as timelineTotalDuration,
@@ -473,11 +474,11 @@ function normalizeVisualHelpers() {
   }
 }
 
-function computePointBudget() {
+export function computePointBudget() {
   return isPerformance() ? 50_000 : 200_000;
 }
 
-function getEffectiveFx() {
+export function getEffectiveFx() {
   return resolveEffectiveCinematicFx(state.cinematicFx, {
     renderMode: getRenderMode(),
     theme: getTheme(),
@@ -493,7 +494,7 @@ function applyVisualHelpers() {
   updateOrbitCircle(masterOn && state.visualHelpers.orbitRing ? state.k : NaN);
 }
 
-function computeMathSignature(derived, budget) {
+export function computeMathSignature(derived, budget) {
   const renderMode = getRenderMode();
   const theme = getTheme();
   const fx = getEffectiveFx();
@@ -520,7 +521,7 @@ function computeMathSignature(derived, budget) {
   ].join('|');
 }
 
-function buildRenderPayload(derived, budget, signature, fx) {
+export function buildRenderPayload(derived, budget, signature, fx) {
   const styleBloomGain = resolveStyleBloomGain({
     renderMode: getRenderMode(),
     theme: getTheme(),
@@ -571,7 +572,7 @@ function buildRenderPayload(derived, budget, signature, fx) {
   };
 }
 
-function applyRenderPayload(payload, fx) {
+export function applyRenderPayload(payload, fx) {
   Object.assign(state, payload.derived);
   normalizeVisualHelpers();
 
@@ -2643,10 +2644,17 @@ function buildTransportBar() {
   gearBtn.title = 'Toggle panels (Tab)';
   gearBtn.addEventListener('click', toggleCollapse);
 
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'transport-btn-mini ctrl-interactive';
+  exportBtn.innerHTML = '📹';
+  exportBtn.title = 'Export Video';
+  exportBtn.addEventListener('click', () => openExportModal());
+
   bar.appendChild(playBtn);
   bar.appendChild(stopBtn);
   bar.appendChild(scrub);
   bar.appendChild(timelineBtn);
+  bar.appendChild(exportBtn);
   bar.appendChild(gearBtn);
 }
 

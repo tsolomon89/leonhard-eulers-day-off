@@ -657,7 +657,7 @@ export function updateStrandPaths(paths, lineWidth, lineOpacity, showLines) {
     return;
   }
 
-  const w = window.innerWidth, h = window.innerHeight;
+  const [w, h] = getLineResolution();
   let poolIdx = 0;
 
   for (const path of paths) {
@@ -715,7 +715,7 @@ export function updateAtlasPaths(paths, globalWidth, lineOpacity) {
     return;
   }
 
-  const w = window.innerWidth, h = window.innerHeight;
+  const [w, h] = getLineResolution();
   let poolIdx = 0;
 
   for (const path of paths) {
@@ -790,7 +790,7 @@ const _ghostAlphaPos = new Float32Array(GHOST_MAX_PTS * 3);
 const _ghostAlphaCol = new Float32Array(GHOST_MAX_PTS * 3);
 
 export function updateGhostTraces(tauPts, alphaPts, showAlpha) {
-  const w = window.innerWidth, h = window.innerHeight;
+  const [w, h] = getLineResolution();
 
   // τ trace — always shown (cyan, bright)
   if (tauPts && tauPts.length >= 2) {
@@ -1079,11 +1079,26 @@ export function captureScreenshot() {
 // ── Animation loop ───────────────────────────────────────────
 
 let _externalUpdate = null;
+let _renderLoopSuspended = false;
+let _overrideResolution = null;
+
 export function setExternalUpdate(fn) { _externalUpdate = fn; }
+export function getRendererSize() { return _overrideResolution || [window.innerWidth, window.innerHeight]; }
+
+/** Get the current Line2 material resolution (export override or window size). */
+function getLineResolution() { return _overrideResolution || [window.innerWidth, window.innerHeight]; }
+
+/** Pause the live render loop (used during video export). */
+export function suspendRenderLoop() { _renderLoopSuspended = true; }
+/** Resume the live render loop after export. */
+export function resumeRenderLoop() { _renderLoopSuspended = false; }
 
 export function startRenderLoop() {
   function animate() {
     requestAnimationFrame(animate);
+
+    // Skip all rendering when suspended (video export in progress)
+    if (_renderLoopSuspended) return;
 
     // Idle throttle: drop to 10fps when idle for 2s
     if (!_userInteracted) {
@@ -1119,7 +1134,54 @@ export function startRenderLoop() {
   animate();
 }
 
-// ── Renderer access (for screenshot) ─────────────────────────
+// ── Renderer access ──────────────────────────────────────────
 
 export function getRenderer() { return renderer; }
 export function getCurrentFps() { return fps; }
+
+/** Return the EffectComposer for external rendering. */
+export function getComposer() { return composer; }
+
+/** Alias avoiding name collision with getRenderer in controls.js. */
+export function getSceneRenderer() { return renderer; }
+
+/**
+ * Resize the renderer and composer to arbitrary dimensions.
+ * Used by video export to render at target resolution.
+ */
+export function setRendererSize(w, h) {
+  _overrideResolution = [w, h];
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+  perspCam.aspect = w / h;
+  perspCam.updateProjectionMatrix();
+  const f = 4;
+  orthoCam.left = -f * (w / h);
+  orthoCam.right = f * (w / h);
+  orthoCam.top = f;
+  orthoCam.bottom = -f;
+  orthoCam.updateProjectionMatrix();
+  // Update Line2 material resolutions
+  for (const line of strandLines) {
+    if (line.material && line.material.resolution) line.material.resolution.set(w, h);
+  }
+  for (const line of atlasLines) {
+    if (line.material && line.material.resolution) line.material.resolution.set(w, h);
+  }
+  if (ghostTauLine?.material.resolution) ghostTauLine.material.resolution.set(w, h);
+  if (ghostAlphaLine?.material.resolution) ghostAlphaLine.material.resolution.set(w, h);
+}
+
+/** Clear the resolution override (restores window.innerWidth/innerHeight usage). */
+export function clearRendererSizeOverride() {
+  _overrideResolution = null;
+}
+
+/**
+ * Render a single frame synchronously (no rAF).
+ * Used by video export pipeline.
+ */
+export function renderFrame() {
+  controls.update();
+  composer.render();
+}
