@@ -113,7 +113,8 @@ class ProgressEngine {
   }
 
   seek(p) {
-    this.progress = clamp(p, 0, 1);
+    this.progress = Math.max(0, p);
+    this._completedLoops = Math.floor(this.progress);
     this._notify();
   }
 

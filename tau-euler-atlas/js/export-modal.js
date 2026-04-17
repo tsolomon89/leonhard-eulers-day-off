@@ -216,9 +216,26 @@ function _updateSummaryEl(el, duration) {
 
 // ── Start Export ─────────────────────────────────────────────
 
-function _startExport(duration) {
+async function _startExport(duration) {
   const res = RESOLUTION_PRESETS[_settings.resolutionIndex];
   const totalFrames = computeTotalFrames(_settings.fps, duration);
+
+  // Prompt user to choose save location (if browser supports it)
+  let fileHandle = null;
+  if (window.showSaveFilePicker) {
+    try {
+      fileHandle = await window.showSaveFilePicker({
+        suggestedName: `tau-euler-atlas-${Date.now()}.mp4`,
+        types: [
+          { description: 'MP4 Video', accept: { 'video/mp4': ['.mp4'] } },
+          { description: 'WebM Video', accept: { 'video/webm': ['.webm'] } },
+        ],
+      });
+    } catch (e) {
+      if (e.name === 'AbortError') return; // User cancelled
+      console.warn('File picker unavailable, will use browser download:', e);
+    }
+  }
 
   // Switch to progress UI
   _showProgressOverlay(totalFrames);
@@ -230,8 +247,8 @@ function _startExport(duration) {
     _updateProgressUI(frame, total, percent);
   });
 
-  _exporter.onComplete((blob, filename) => {
-    _showCompleteUI(filename, blob.size);
+  _exporter.onComplete((blob, filename, sizeBytes) => {
+    _showCompleteUI(filename, sizeBytes);
   });
 
   _exporter.onError((err) => {
@@ -244,6 +261,7 @@ function _startExport(duration) {
     height: res.height,
     quality: _settings.quality,
     includeAudio: _settings.includeAudio,
+    fileHandle,
   });
 }
 
@@ -284,13 +302,13 @@ function _updateProgressUI(frame, totalFrames, percent) {
 
 function _showCompleteUI(filename, sizeBytes) {
   if (!_overlayEl) return;
-  const sizeMB = (sizeBytes / (1024 * 1024)).toFixed(1);
+  const sizeMB = sizeBytes ? (sizeBytes / (1024 * 1024)).toFixed(1) : null;
 
   _overlayEl.innerHTML = `
     <div class="export-progress-card glass">
       <div class="export-progress-title export-complete-title">Export Complete ✓</div>
       <div class="export-progress-frames">${filename}</div>
-      <div class="export-progress-percent">${sizeMB} MB</div>
+      ${sizeMB ? `<div class="export-progress-percent">${sizeMB} MB</div>` : ''}
       <button class="export-btn export-btn-start ctrl-interactive" id="export-done-btn">Done</button>
     </div>
   `;

@@ -79,14 +79,16 @@ export function isExportSupported() {
  *
  * Priority: H.264 (.mp4) → VP9 (.webm) → VP8 (.webm)
  */
-async function detectBestCodec(width, height) {
+export async function detectBestCodec(width, height, targetBitrate) {
   // ── H.264 candidates (for MP4) ──
   const h264Profiles = [
-    'avc1.640028', // High profile, level 4.0
+    'avc1.640034', // High profile, level 5.2 (up to 240 Mbps)
+    'avc1.640033', // High profile, level 5.1 (up to 240 Mbps)
+    'avc1.64002A', // High profile, level 4.2 (up to 50 Mbps)
+    'avc1.640028', // High profile, level 4.0 (up to 25 Mbps)
     'avc1.4D0028', // Main profile, level 4.0
     'avc1.42E028', // Baseline, level 4.0
     'avc1.42001E', // Constrained baseline, level 3.0
-    'avc1.420034', // Baseline, level 5.2
   ];
 
   for (const codec of h264Profiles) {
@@ -95,7 +97,7 @@ async function detectBestCodec(width, height) {
         codec,
         width,
         height,
-        bitrate: 8_000_000,
+        bitrate: targetBitrate,
         hardwareAcceleration: 'prefer-hardware',
       });
       if (support.supported) {
@@ -109,7 +111,7 @@ async function detectBestCodec(width, height) {
         codec,
         width,
         height,
-        bitrate: 8_000_000,
+        bitrate: targetBitrate,
         hardwareAcceleration: 'prefer-software',
       });
       if (support.supported) {
@@ -129,7 +131,7 @@ async function detectBestCodec(width, height) {
         codec,
         width,
         height,
-        bitrate: 8_000_000,
+        bitrate: targetBitrate,
         hardwareAcceleration: 'prefer-software',
       });
       if (support.supported) {
@@ -144,7 +146,7 @@ async function detectBestCodec(width, height) {
       codec: 'vp8',
       width,
       height,
-      bitrate: 8_000_000,
+      bitrate: targetBitrate,
       hardwareAcceleration: 'prefer-software',
     });
     if (support.supported) {
@@ -155,12 +157,14 @@ async function detectBestCodec(width, height) {
   return null;
 }
 
+// getExportFileExt removed — codec detection runs once inside start()
+
 // ── Quality / Bitrate Presets ────────────────────────────────
 
 const BITRATE_PRESETS = {
-  low:    2_000_000,   // 2 Mbps
-  medium: 8_000_000,   // 8 Mbps
-  high:  16_000_000,   // 16 Mbps
+  low:     4_000_000,  // Baseline 4 Mbps  (for 1080p30)
+  medium: 10_000_000,  // Baseline 10 Mbps (for 1080p30)
+  high:   24_000_000,  // Baseline 24 Mbps (for 1080p30)
 };
 
 // ── Export Pipeline ──────────────────────────────────────────
@@ -420,6 +424,7 @@ export function createVideoExporter() {
       height = 1080,
       quality = 'medium',
       includeAudio = true,
+      fileHandle = null,
     } = settings;
 
     // Check browser support
@@ -447,11 +452,18 @@ export function createVideoExporter() {
       return;
     }
 
-    // Detect best codec (H.264 → VP9 → VP8)
-    const codecInfo = await detectBestCodec(width, height);
+    // Calculate dynamic bitrate early so we can test if the codec supports it
+    const bitratePreset = BITRATE_PRESETS[quality] || BITRATE_PRESETS.medium;
+    const targetPixelRate = width * height * fps;
+    const baselinePixelRate = 1920 * 1080 * 30;
+    const multiplier = targetPixelRate / baselinePixelRate;
+    const bitrate = Math.round(bitratePreset * multiplier);
+
+    // Detect best codec (H.264 → VP9 → VP8) testing against our target bitrate
+    const codecInfo = await detectBestCodec(width, height, bitrate);
     if (!codecInfo) {
       _emitError(new Error(
-        'No supported video codec found. Try Chrome or Edge with a smaller resolution.'
+        'No supported video codec found for this resolution/bitrate. Try a lower quality or resolution.'
       ));
       return;
     }
@@ -476,14 +488,13 @@ export function createVideoExporter() {
 
     _running = true;
     _cancelled = false;
-
-    const bitrate = BITRATE_PRESETS[quality] || BITRATE_PRESETS.medium;
+    
     const frameDurationMicros = Math.round(1_000_000 / fps);
 
     console.log(
       `[video-export] Starting: ${width}×${height} @ ${fps}fps, ` +
       `${totalFrames} frames, codec=${codecInfo.codec}, ` +
-      `container=${codecInfo.container}, bitrate=${bitrate}`
+      `container=${codecInfo.container}, bitrate=${Math.round(bitrate/1000000)}Mbps`
     );
 
     // 1. Snapshot state
@@ -501,17 +512,40 @@ export function createVideoExporter() {
     // 5. Start scene-manager playback (builds snapshots, enables resolve)
     sm.startPlayback();
     animation.pause();
+    
+    // Resolve contradictory settings: If the user requested >1 loop for the export,
+    // but the timeline loop mode is 'none', the animation engine will rigidly clamp 
+    // progress to 1.0 (causing the video to freeze exactly halfway through if loops=2).
+    // We must force the engine to 'wrap' during export to satisfy the loop count.
+    if (loops > 1 && animation.loop === 'none') {
+      animation.loop = 'wrap';
+    }
 
     try {
-      // 6. Set up muxer
+      let fileStream = null;
+      if (fileHandle) {
+        try {
+          fileStream = await fileHandle.createWritable();
+        } catch (err) {
+          console.warn('[video-export] Could not create file stream, falling back to ArrayBuffer', err);
+          fileHandle = null;
+        }
+      }
+
+      // 6. Set up muxer — prefer streaming directly to disk (FileSystemWritableFileStreamTarget)
+      // to avoid OOM crashes on large 1440p exports (e.g., 400MB+ ArrayBuffers).
+      const target = fileStream
+        ? new muxerLib.FileSystemWritableFileStreamTarget(fileStream)
+        : new muxerLib.ArrayBufferTarget();
+
       const muxerConfig = {
-        target: new muxerLib.ArrayBufferTarget(),
+        target,
         video: {
           codec: codecInfo.muxerCodec,
           width,
           height,
         },
-        fastStart: codecInfo.container === 'mp4' ? 'in-memory' : undefined,
+        fastStart: (!fileStream && codecInfo.container === 'mp4') ? 'in-memory' : false,
       };
 
       // Add audio config if requested
@@ -651,26 +685,36 @@ export function createVideoExporter() {
       // 11. Finalize muxer
       _muxer.finalize();
 
-      // 11. Create blob and download
-      const buffer = _muxer.target.buffer;
-      const mimeType = codecInfo.container === 'mp4' ? 'video/mp4' : 'video/webm';
-      const blob = new Blob([buffer], { type: mimeType });
-      const filename = `tau-euler-atlas-${Date.now()}${codecInfo.ext}`;
+      let filename = `tau-euler-atlas-${Date.now()}${codecInfo.ext}`;
+      let blob = null;
+      let sizeBytes = null;
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-
-      console.log(`[video-export] Complete: ${filename} (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
+      if (fileStream) {
+        await fileStream.close();
+        filename = fileHandle.name;
+        
+        try {
+          const file = await fileHandle.getFile();
+          sizeBytes = file.size;
+          console.log(`[video-export] Complete: ${filename} (${(sizeBytes / 1024 / 1024).toFixed(1)} MB, streamed to disk)`);
+        } catch (e) {
+          console.warn('[video-export] Could not get final file size', e);
+        }
+      } else {
+        // 12. Build blob from the in-memory buffer
+        const buffer = _muxer.target.buffer;
+        const mimeType = codecInfo.container === 'mp4' ? 'video/mp4' : 'video/webm';
+        blob = new Blob([buffer], { type: mimeType });
+        sizeBytes = blob.size;
+        
+        // Fallback: trigger browser download
+        _triggerDownload(blob, filename);
+        console.log(`[video-export] Complete: ${filename} (${(sizeBytes / 1024 / 1024).toFixed(1)} MB)`);
+      }
 
       _cleanup();
 
-      if (_completeCb) _completeCb(blob, filename);
+      if (_completeCb) _completeCb(blob, filename, sizeBytes);
 
     } catch (err) {
       _cleanup();
@@ -694,6 +738,17 @@ export function createVideoExporter() {
     _muxer = null;
 
     _restoreState();
+  }
+
+  function _triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
 
   function cancel() {
