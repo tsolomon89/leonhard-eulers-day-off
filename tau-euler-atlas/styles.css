@@ -110,6 +110,7 @@ body.tl-open #info-bar { bottom: calc(var(--timeline-h) + 10px); }
 /* â”€â”€ Controls panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 #controls-panel,
+#left-column,
 #camera-panel,
 #audio-panel,
 #proofs-panel {
@@ -1974,3 +1975,71 @@ body.export-active #buffer-overlay {
   }
 }
 
+/* -- Joyride Tooltip Mode -------------------------------------- */
+
+.joyride-tooltip {
+  position: absolute;
+  width: 320px;
+  max-width: 90vw;
+  margin: 0;
+  transition: top 0.4s var(--ease), left 0.4s var(--ease), opacity 0.3s ease;
+  z-index: 302;
+}
+
+/* Caret/Pointers */
+.joyride-tooltip::before {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  transition: opacity 0.3s ease;
+  opacity: 0;
+}
+
+.joyride-tooltip[data-pointer="bottom"]::before {
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 12px 12px 12px;
+  border-color: transparent transparent rgba(255, 255, 255, 0.14) transparent;
+  opacity: 1;
+}
+
+.joyride-tooltip[data-pointer="top"]::before {
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 12px 12px 0 12px;
+  border-color: rgba(255, 255, 255, 0.14) transparent transparent transparent;
+  opacity: 1;
+}
+
+.joyride-tooltip[data-pointer="right"]::before {
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 12px 12px 12px 0;
+  border-color: transparent rgba(255, 255, 255, 0.14) transparent transparent;
+  opacity: 1;
+}
+
+.joyride-tooltip[data-pointer="left"]::before {
+  right: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 12px 0 12px 12px;
+  border-color: transparent transparent transparent rgba(255, 255, 255, 0.14);
+  opacity: 1;
+}
+
+/* Dynamic Spotlight Highlight */
+.onboarding-target-highlight {
+  z-index: 301 !important;
+  box-shadow: 0 0 0 3px var(--accent-green), 0 0 25px var(--accent-green-glow) !important;
+  border-radius: 8px; /* Safe default */
+}
+
+.onboarding-stack-elevate {
+  z-index: 301 !important;
+}
