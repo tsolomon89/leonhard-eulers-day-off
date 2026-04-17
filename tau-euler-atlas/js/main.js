@@ -5,11 +5,13 @@
 
 import { initScene, startRenderLoop } from './scene.js';
 import { initControls } from './controls.js';
+import { initOnboarding } from './onboarding.js';
 
 // Boot sequence
 initScene();
 initControls();
 startRenderLoop();
+initOnboarding();
 
 console.log('τ-Euler Atlas v5 — Leonhard Euler\'s Day Off');
 console.log('  f = k₁ · τ^{i·τ^k/ln(τ)}  ≡  k₁ · e^{iτ^k}');

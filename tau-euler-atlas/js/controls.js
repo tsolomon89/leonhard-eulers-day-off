@@ -2874,6 +2874,12 @@ export function initControls() {
   // Init audio player (async — doesn't block render)
   audioPlayer.init().then(() => {
     console.log(`[audio-player] ${audioPlayer.getState().tracks.length} track(s) discovered`);
+    // Restore the active timeline's custom playlist (if any) so the background
+    // track discovery doesn't blindly overwrite the user's selected tracks.
+    const tl = sceneManager.getTimeline();
+    if (tl && tl.audioPlaylist && tl.audioPlaylist.length > 0) {
+      audioPlayer.setTimelinePlaylist(tl.audioPlaylist);
+    }
   });
 }
 

@@ -274,19 +274,51 @@ export function createVideoExporter() {
     const audioState = audioPlayer.getState();
     if (!audioState.tracks || audioState.tracks.length === 0) return;
 
-    const trackFile = audioState.tracks[0]?.file;
-    if (!trackFile) return;
-
     try {
-      const resp = await fetch('audio/' + encodeURIComponent(trackFile));
-      if (!resp.ok) {
-        console.warn('[video-export] Could not fetch audio track:', trackFile);
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const decodedBuffers = [];
+
+      // Fetch and decode all tracks in the sequence
+      for (const track of audioState.tracks) {
+        if (!track.file) continue;
+        const resp = await fetch('audio/' + encodeURIComponent(track.file));
+        if (!resp.ok) {
+          console.warn('[video-export] Could not fetch audio track:', track.file);
+          continue;
+        }
+        const arrayBuffer = await resp.arrayBuffer();
+        const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+        decodedBuffers.push(buffer);
+      }
+
+      if (decodedBuffers.length === 0) {
+        audioCtx.close();
         return;
       }
-      const arrayBuffer = await resp.arrayBuffer();
 
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      // Stitch all decoded buffers into a single seamlessly looping master buffer
+      let totalLength = 0;
+      let numberOfChannels = 1;
+      let sampleRate = decodedBuffers[0].sampleRate;
+      
+      for (const b of decodedBuffers) {
+        totalLength += b.length;
+        numberOfChannels = Math.max(numberOfChannels, b.numberOfChannels);
+      }
+
+      const masterBuffer = audioCtx.createBuffer(numberOfChannels, totalLength, sampleRate);
+      let offset = 0;
+      for (const b of decodedBuffers) {
+        for (let ch = 0; ch < numberOfChannels; ch++) {
+          const dest = masterBuffer.getChannelData(ch);
+          // Upmix mono to stereo if necessary
+          const srcChannel = Math.min(ch, b.numberOfChannels - 1);
+          const src = b.getChannelData(srcChannel);
+          dest.set(src, offset);
+        }
+        offset += b.length;
+      }
+      
       audioCtx.close();
 
       // Find a supported audio codec
@@ -299,8 +331,8 @@ export function createVideoExporter() {
         try {
           const support = await AudioEncoder.isConfigSupported({
             codec: ac,
-            sampleRate: audioBuffer.sampleRate,
-            numberOfChannels: audioBuffer.numberOfChannels,
+            sampleRate: masterBuffer.sampleRate,
+            numberOfChannels: masterBuffer.numberOfChannels,
           });
           if (support.supported) {
             selectedAudioCodec = ac;
@@ -314,7 +346,7 @@ export function createVideoExporter() {
         return;
       }
 
-      await _encodeAudioWithCodec(muxer, audioBuffer, selectedAudioCodec, durationSeconds);
+      await _encodeAudioWithCodec(muxer, masterBuffer, selectedAudioCodec, durationSeconds);
     } catch (err) {
       console.warn('[video-export] Audio encoding failed:', err);
     }
@@ -323,10 +355,7 @@ export function createVideoExporter() {
   async function _encodeAudioWithCodec(muxer, audioBuffer, codec, maxDurationSeconds) {
     const sampleRate = audioBuffer.sampleRate;
     const numberOfChannels = audioBuffer.numberOfChannels;
-    const totalSamples = Math.min(
-      audioBuffer.length,
-      Math.ceil(maxDurationSeconds * sampleRate)
-    );
+    const totalSamples = Math.ceil(maxDurationSeconds * sampleRate);
 
     return new Promise((resolve, reject) => {
       _audioEncoder = new AudioEncoder({
@@ -352,10 +381,15 @@ export function createVideoExporter() {
         const remaining = Math.min(chunkSize, totalSamples - offset);
         const planarData = new Float32Array(remaining * numberOfChannels);
         for (let ch = 0; ch < numberOfChannels; ch++) {
-          planarData.set(
-            audioBuffer.getChannelData(ch).slice(offset, offset + remaining),
-            ch * remaining,
-          );
+          const channelData = audioBuffer.getChannelData(ch);
+          const bufLength = channelData.length;
+          const destOffset = ch * remaining;
+          
+          for (let s = 0; s < remaining; s++) {
+            // Wrap the sample index so audio seamlessly loops
+            const srcIdx = (offset + s) % bufLength;
+            planarData[destOffset + s] = channelData[srcIdx];
+          }
         }
 
         const audioData = new AudioData({
@@ -404,7 +438,9 @@ export function createVideoExporter() {
       return;
     }
 
-    const duration = totalDuration(timeline);
+    const baseDuration = totalDuration(timeline);
+    const loops = (timeline.loopCount > 0) ? timeline.loopCount : 1;
+    const duration = baseDuration * loops;
     const totalFrames = Math.ceil(duration * fps);
     if (totalFrames <= 0) {
       _emitError(new Error('Timeline duration is zero.'));
@@ -550,8 +586,8 @@ export function createVideoExporter() {
           }
         }
 
-        // Seek to exact frame position
-        const progress = totalFrames > 1 ? i / (totalFrames - 1) : 0;
+        // Seek to exact frame position (progress is relative to a single pass, so we multiply by loops)
+        const progress = totalFrames > 1 ? (i / (totalFrames - 1)) * loops : 0;
         animation.seek(progress);
 
         // Run the full rendering pipeline

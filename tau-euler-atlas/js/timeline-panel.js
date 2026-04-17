@@ -74,7 +74,21 @@ export function initTimelinePanel() {
   window.renderTimelinePanel = renderTimelinePanel;
 
   // Listen to audio player state changes (e.g. tracks finished loading)
-  audioPlayer.onChange(() => renderTimelinePanel());
+  let lastAudioState = null;
+  audioPlayer.onChange((state) => {
+    // Only re-render if structural state changes (e.g. tracks loaded).
+    // DO NOT re-render on every playback time-tick, as it causes massive DOM thrashing
+    // and destroys the playhead scrubber 60x a second.
+    if (!lastAudioState || 
+        lastAudioState.allTracksLength !== state.allTracks.length ||
+        lastAudioState.error !== state.error) {
+      renderTimelinePanel();
+    }
+    lastAudioState = { 
+      allTracksLength: state.allTracks.length,
+      error: state.error 
+    };
+  });
 
   // Initial render
   renderTimelinePanel();

@@ -61,7 +61,9 @@ export function closeExportModal() {
 function _showSettingsModal() {
   const sm = getSceneManager();
   const timeline = sm?.getTimeline();
-  const duration = timeline ? totalDuration(timeline) : 0;
+  const baseDuration = timeline ? totalDuration(timeline) : 0;
+  const loops = (timeline && timeline.loopCount > 0) ? timeline.loopCount : 1;
+  const duration = baseDuration * loops;
 
   _overlayEl.innerHTML = '';
   _overlayEl.setAttribute('aria-hidden', 'false');
