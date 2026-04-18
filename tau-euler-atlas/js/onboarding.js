@@ -62,14 +62,13 @@ const ONBOARDING_SCREENS = [
   },
   {
     title: "Visibility Toggles",
-    target: ".panel-visibility-btn", // Will match the first one (Visual Helpers)
-    position: "right",
+    target: ".function-node-visibility", 
+    position: "left",
     action: () => {
-      const header = document.querySelector('#left-column .accordion-header'); // Visual helpers usually
-      if (header && header.classList.contains('collapsed')) header.click();
+      // Function Control is in the right panel
     },
     content: `
-      <p>You can toggle the visibility of specific components (like reference circles or the 3D grid) using these eye icons.</p>
+      <p>You can toggle the visibility of specific mathematical branches using these eye icons in the Function Control panel.</p>
     `
   },
   {
@@ -88,6 +87,15 @@ const ONBOARDING_SCREENS = [
     title: "Linking Feature",
     target: ".slider-link-btn",
     position: "left",
+    action: () => {
+      const headers = document.querySelectorAll('#controls-panel .accordion-header');
+      for (const h of headers) {
+        if (h.textContent.includes('Traversal') && h.classList.contains('collapsed')) {
+          h.click();
+          break;
+        }
+      }
+    },
     content: `
       <p>You create scenes by <em>linking</em> parameters. Click this link icon (🔗) to add a parameter as a track in the Scene Director.</p>
       <p style="margin-top: 8px;">Once linked, the parameter will animate smoothly between your authored scenes.</p>

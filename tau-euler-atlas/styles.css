@@ -1710,6 +1710,26 @@ body.export-active #buffer-overlay {
   display: flex;
 }
 
+/* ── Onboarding overlay container ──────────────────────────────── */
+
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  z-index: 305;
+}
+
+.onboarding-overlay.active {
+  display: block; /* Use block so absolute positioning works normally */
+}
+
+#onboarding-container:not(.joyride-tooltip) {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
 /* ── Backdrop ─────────────────────────────────────────────── */
 
 .export-backdrop {
